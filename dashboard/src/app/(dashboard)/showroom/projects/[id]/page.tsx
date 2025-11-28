@@ -4,8 +4,9 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FloorPlanViewer } from '@/components/floor-plan/FloorPlanViewer'
+import { ModelViewer } from '@/components/3d-viewer/ModelViewer'
 import {
   ArrowLeft,
   User,
@@ -17,6 +18,8 @@ import {
   DoorOpen,
   Square,
   Download,
+  Layers,
+  Rotate3d,
 } from 'lucide-react'
 
 interface ProjectDetailPageProps {
@@ -92,6 +95,12 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
       .eq('id', id)
   }
 
+  // Extract scan data
+  const measurement = measurements && measurements.length > 0 ? measurements[0] : null
+  const hasUsdzFile = measurement?.usdz_file_url
+  const hasFloorPlan = measurement?.measurements?.room
+  const hasScanData = hasUsdzFile || hasFloorPlan
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -131,9 +140,69 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         </form>
       </div>
 
-      {/* 2D Floor Plan */}
-      {measurements && measurements.length > 0 && measurements[0]?.measurements && (
-        <FloorPlanViewer measurements={measurements[0].measurements} />
+      {/* HERO: 3D/2D Scan Visualization */}
+      {hasScanData ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-lg font-semibold">
+            <Rotate3d className="h-5 w-5 text-blue-600" />
+            Room Scan
+          </div>
+
+          {hasUsdzFile && hasFloorPlan ? (
+            // Both 3D and 2D available - show tabs
+            <Tabs defaultValue="3d" className="w-full">
+              <TabsList className="mb-4">
+                <TabsTrigger value="3d" className="flex items-center gap-2">
+                  <Rotate3d className="h-4 w-4" />
+                  3D Model
+                </TabsTrigger>
+                <TabsTrigger value="2d" className="flex items-center gap-2">
+                  <Layers className="h-4 w-4" />
+                  2D Floor Plan
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="3d" className="mt-0">
+                <ModelViewer
+                  usdzUrl={measurement.usdz_file_url}
+                  previewImageUrl={measurement.preview_image_url}
+                  title="3D Room Scan"
+                  description="Interactive 3D model captured with LiDAR - drag to rotate, scroll to zoom"
+                />
+              </TabsContent>
+
+              <TabsContent value="2d" className="mt-0">
+                <FloorPlanViewer measurements={measurement.measurements} />
+              </TabsContent>
+            </Tabs>
+          ) : hasUsdzFile ? (
+            // Only 3D available
+            <ModelViewer
+              usdzUrl={measurement.usdz_file_url}
+              previewImageUrl={measurement.preview_image_url}
+              title="3D Room Scan"
+              description="Interactive 3D model captured with LiDAR - drag to rotate, scroll to zoom"
+            />
+          ) : hasFloorPlan ? (
+            // Only 2D available
+            <FloorPlanViewer measurements={measurement.measurements} />
+          ) : null}
+        </div>
+      ) : (
+        // No scan data available
+        <Card>
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center justify-center text-center">
+              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                <Rotate3d className="h-8 w-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Scan Data Available</h3>
+              <p className="text-gray-500 max-w-md">
+                This project does not include a room scan. The customer may have submitted selections without scanning.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -143,7 +212,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
           <Card>
             <CardHeader>
               <CardTitle>Room Measurements</CardTitle>
-              <CardDescription>Captured with RoomPlan</CardDescription>
+              <CardDescription>Key dimensions captured with RoomPlan</CardDescription>
             </CardHeader>
             <CardContent>
               {measurements && measurements.length > 0 ? (
@@ -206,15 +275,24 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                       </div>
 
                       {measurement.usdz_file_url && (
-                        <div className="mt-4">
-                          <a
-                            href={measurement.usdz_file_url}
-                            download
-                            className="inline-flex items-center gap-2 text-blue-600 hover:underline"
-                          >
-                            <Download className="h-4 w-4" />
-                            Download 3D Model (USDZ)
-                          </a>
+                        <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Rotate3d className="h-5 w-5 text-blue-600" />
+                              <span className="text-sm font-medium text-blue-900">3D Model Available</span>
+                            </div>
+                            <a
+                              href={measurement.usdz_file_url}
+                              download
+                              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                              <Download className="h-4 w-4" />
+                              Download USDZ
+                            </a>
+                          </div>
+                          <p className="text-xs text-blue-600 mt-2">
+                            Open in Apple AR Quick Look, Reality Composer, or any USDZ-compatible viewer
+                          </p>
                         </div>
                       )}
                     </div>
@@ -238,7 +316,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                   {selections.map((selection: any) => (
                     <div
                       key={selection.id}
-                      className="flex items-center gap-4 p-4 border rounded-lg"
+                      className="flex items-center gap-4 p-4 border rounded-lg hover:border-gray-300 transition-colors"
                     >
                       {selection.products?.image_url ? (
                         <img
