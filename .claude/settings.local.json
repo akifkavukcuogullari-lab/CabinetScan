@@ -28,7 +28,20 @@
       "Bash(git init:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(curl:*)",
+      "Bash(supabase projects:*)",
+      "Bash(cat:*)",
+      "Bash(supabase secrets:*)",
+      "Bash(supabase functions:*)",
+      "Bash(git push:*)",
+      "Bash(npm run lint)",
+      "Bash(npx tsc:*)",
+      "Bash(npm ls:*)",
+      "Bash(npx vercel list --token=1ExnXgS5xxeSrQMSSLfa7ro1 cabinet-scan)",
+      "Bash(npx vercel inspect cabinet-scan --token=1ExnXgS5xxeSrQMSSLfa7ro1)",
+      "Bash(npx vercel project ls --token=1ExnXgS5xxeSrQMSSLfa7ro1)",
+      "Bash(npx vercel deploy --prod --token=1ExnXgS5xxeSrQMSSLfa7ro1 --yes)"
     ],
     "deny": [],
     "ask": []

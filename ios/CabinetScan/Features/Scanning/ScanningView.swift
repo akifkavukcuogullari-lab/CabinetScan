@@ -6,10 +6,12 @@ struct ScanningView: View {
     @State private var isScanning = false
     @State private var scanComplete = false
     @State private var capturedRoom: CapturedRoom?
+    @State private var isProcessingScan = false
+    @State private var processingMessage = "Processing scan..."
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            ZStack {
                 if isScanning {
                     RoomCaptureViewRepresentable(
                         isScanning: $isScanning,
@@ -61,6 +63,26 @@ struct ScanningView: View {
                         .padding(.bottom, 32)
                     }
                 }
+
+                // Processing overlay
+                if isProcessingScan {
+                    Color.black.opacity(0.6)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 20) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.white)
+
+                        Text(processingMessage)
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(40)
+                    .background(Color(.systemGray5).opacity(0.9))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
             }
             .navigationTitle(isScanning ? "Scanning" : "Room Scan")
             .navigationBarTitleDisplayMode(.inline)
@@ -87,13 +109,80 @@ struct ScanningView: View {
     private func handleScanComplete(room: CapturedRoom) {
         capturedRoom = room
 
-        // Extract measurements from RoomPlan data
-        let measurements = extractMeasurements(from: room)
+        // Process scan asynchronously to handle USDZ export and upload
+        Task {
+            await processScanData(room: room)
+        }
+    }
 
+    private func processScanData(room: CapturedRoom) async {
+        isProcessingScan = true
+        processingMessage = "Processing scan..."
+
+        // Export and upload USDZ file
+        processingMessage = "Exporting 3D model..."
+        let usdzUrl = await exportAndUploadUSDZ(room)
+
+        // Extract measurements with the USDZ URL
+        processingMessage = "Extracting measurements..."
+        let measurements = extractMeasurements(from: room, usdzUrl: usdzUrl)
+
+        isProcessingScan = false
         appState.setMeasurementData(measurements)
     }
 
-    private func extractMeasurements(from room: CapturedRoom) -> MeasurementData {
+    // MARK: - USDZ Export and Upload
+
+    private func exportAndUploadUSDZ(_ room: CapturedRoom) async -> String? {
+        guard let showroomCode = appState.showroomConfig?.showroomCode else {
+            print("No showroom code available for USDZ upload")
+            return nil
+        }
+
+        // Create temp file URL for USDZ export
+        let tempDir = FileManager.default.temporaryDirectory
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let randomId = UUID().uuidString.prefix(8)
+        let usdzFilename = "scan_\(timestamp)_\(randomId).usdz"
+        let tempFileURL = tempDir.appendingPathComponent(usdzFilename)
+
+        do {
+            // Export room to USDZ file
+            processingMessage = "Exporting 3D model..."
+            try await room.export(to: tempFileURL)
+
+            // Read the exported file data
+            let fileData = try Data(contentsOf: tempFileURL)
+            let fileSizeMB = Double(fileData.count) / (1024 * 1024)
+            print("USDZ file exported: \(String(format: "%.2f", fileSizeMB)) MB")
+
+            // Upload to Supabase storage
+            processingMessage = "Uploading 3D model..."
+            let storagePath = "\(showroomCode.lowercased())/\(usdzFilename)"
+            let uploadedUrl = try await APIService.shared.uploadFile(
+                bucket: "scans",
+                path: storagePath,
+                data: fileData,
+                contentType: "model/vnd.usdz+zip"
+            )
+
+            print("USDZ uploaded successfully: \(uploadedUrl)")
+
+            // Clean up temp file
+            try? FileManager.default.removeItem(at: tempFileURL)
+
+            return uploadedUrl
+        } catch {
+            print("Error exporting/uploading USDZ: \(error.localizedDescription)")
+
+            // Clean up temp file on error
+            try? FileManager.default.removeItem(at: tempFileURL)
+
+            return nil
+        }
+    }
+
+    private func extractMeasurements(from room: CapturedRoom, usdzUrl: String? = nil) -> MeasurementData {
         // Calculate total linear feet from walls
         var totalLinearFt: Double = 0
         var wallCount = 0
@@ -127,7 +216,7 @@ struct ScanningView: View {
             windowCount: room.windows.count,
             doorCount: room.doors.count,
             measurements: detailedMeasurements,
-            usdzFileUrl: nil,
+            usdzFileUrl: usdzUrl,
             previewImageUrl: nil
         )
     }
@@ -153,9 +242,9 @@ struct ScanningView: View {
         var minZ: Float = .infinity, maxZ: Float = -.infinity
         var ceilingHeight: Float = 0
 
-        // Extract ceiling height
-        if let ceiling = room.surfaces.first(where: { $0.category == .ceiling }) {
-            ceilingHeight = ceiling.transform.columns.3.y
+        // Extract ceiling height from wall height (walls go from floor to ceiling)
+        if let firstWall = room.walls.first {
+            ceilingHeight = firstWall.dimensions.y
         }
 
         // WALLS - Extract detailed wall data
@@ -318,18 +407,19 @@ struct ScanningView: View {
             "ceiling_height_ft": Double(ceilingHeight) * 3.28084
         ]
 
-        // COUNTERTOPS - Calculate based on lower cabinets and surfaces
+        // COUNTERTOPS - Calculate based on lower cabinets and objects
         var countertopsData: [[String: Any]] = []
         var totalCountertopArea: Double = 0
 
-        // Method 1: Use detected surfaces at countertop height (2.5-3 feet)
-        for surface in room.surfaces {
-            let heightFromFloor = Double(surface.transform.columns.3.y) * 3.28084 // Convert to feet
+        // Method 1: Look for table-like objects at countertop height (2.5-3 feet)
+        for object in room.objects {
+            let heightFromFloor = Double(object.transform.columns.3.y) * 3.28084 // Convert to feet
 
             // Countertop height range: 2.5-3 feet (30-36 inches)
-            if heightFromFloor > 2.5 && heightFromFloor < 3.5 && surface.category == .table {
-                let position = surface.transform.columns.3
-                let dimensions = surface.dimensions
+            // Check for table category or flat surfaces at appropriate height
+            if heightFromFloor > 2.5 && heightFromFloor < 3.5 && object.category == .table {
+                let position = object.transform.columns.3
+                let dimensions = object.dimensions
 
                 let widthFt = Double(dimensions.x) * 3.28084
                 let depthFt = Double(dimensions.z) * 3.28084
@@ -353,7 +443,7 @@ struct ScanningView: View {
             }
         }
 
-        // Method 2: If no surfaces detected, infer from lower cabinets
+        // Method 2: If no table objects detected at countertop height, infer from lower cabinets
         if countertopsData.isEmpty && !lowerCabinets.isEmpty {
             // Group adjacent lower cabinets to form countertop runs
             var processedCabinets = Set<Int>()
