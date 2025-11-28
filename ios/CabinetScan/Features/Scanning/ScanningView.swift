@@ -318,6 +318,82 @@ struct ScanningView: View {
             "ceiling_height_ft": Double(ceilingHeight) * 3.28084
         ]
 
+        // COUNTERTOPS - Calculate based on lower cabinets and surfaces
+        var countertopsData: [[String: Any]] = []
+        var totalCountertopArea: Double = 0
+
+        // Method 1: Use detected surfaces at countertop height (2.5-3 feet)
+        for surface in room.surfaces {
+            let heightFromFloor = Double(surface.transform.columns.3.y) * 3.28084 // Convert to feet
+
+            // Countertop height range: 2.5-3 feet (30-36 inches)
+            if heightFromFloor > 2.5 && heightFromFloor < 3.5 && surface.category == .table {
+                let position = surface.transform.columns.3
+                let dimensions = surface.dimensions
+
+                let widthFt = Double(dimensions.x) * 3.28084
+                let depthFt = Double(dimensions.z) * 3.28084
+                let areaSqFt = widthFt * depthFt
+
+                let countertopData: [String: Any] = [
+                    "id": "countertop_\(countertopsData.count + 1)",
+                    "position": [
+                        "x": Double(position.x) * 3.28084,
+                        "z": Double(position.z) * 3.28084,
+                        "y": heightFromFloor
+                    ],
+                    "width_ft": widthFt,
+                    "depth_ft": depthFt,
+                    "area_sqft": areaSqFt,
+                    "linear_ft": widthFt
+                ]
+
+                countertopsData.append(countertopData)
+                totalCountertopArea += areaSqFt
+            }
+        }
+
+        // Method 2: If no surfaces detected, infer from lower cabinets
+        if countertopsData.isEmpty && !lowerCabinets.isEmpty {
+            // Group adjacent lower cabinets to form countertop runs
+            var processedCabinets = Set<Int>()
+
+            for (index, cabinet) in lowerCabinets.enumerated() {
+                guard !processedCabinets.contains(index) else { continue }
+
+                // Find all cabinets in the same run (same Z position, adjacent X positions)
+                var cabinetRun = [cabinet]
+                processedCabinets.insert(index)
+
+                // Simple approach: assume each lower cabinet has a countertop
+                if let position = cabinet["position"] as? [String: Any],
+                   let posX = position["x"] as? Double,
+                   let posZ = position["z"] as? Double,
+                   let widthFt = cabinet["width_ft"] as? Double,
+                   let depthFt = cabinet["depth_ft"] as? Double {
+
+                    let areaSqFt = widthFt * depthFt
+
+                    let countertopData: [String: Any] = [
+                        "id": "countertop_\(countertopsData.count + 1)",
+                        "position": [
+                            "x": posX,
+                            "z": posZ - depthFt / 2, // Align to front of cabinet
+                            "y": 3.0 // Standard 36" height
+                        ],
+                        "width_ft": widthFt,
+                        "depth_ft": depthFt,
+                        "area_sqft": areaSqFt,
+                        "linear_ft": widthFt,
+                        "inferred_from_cabinet": true
+                    ]
+
+                    countertopsData.append(countertopData)
+                    totalCountertopArea += areaSqFt
+                }
+            }
+        }
+
         // Assemble complete measurements
         measurements["room"] = roomBounds
         measurements["walls"] = wallsData
@@ -328,6 +404,14 @@ struct ScanningView: View {
             "lower": lowerCabinets
         ]
         measurements["appliances"] = appliances
+        measurements["countertops"] = countertopsData
+        measurements["countertop_summary"] = [
+            "total_area_sqft": totalCountertopArea,
+            "total_linear_ft": countertopsData.reduce(0.0) { sum, ct in
+                sum + ((ct["linear_ft"] as? Double) ?? 0)
+            },
+            "count": countertopsData.count
+        ]
 
         // Convert to AnyCodable
         return measurements.mapValues { AnyCodable($0) }

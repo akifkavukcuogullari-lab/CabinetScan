@@ -34,7 +34,16 @@ export function FloorPlanViewer({ measurements }: FloorPlanViewerProps) {
     )
   }
 
-  const { room, walls = [], doors = [], windows = [], cabinets = { upper: [], lower: [] }, appliances = [] } = measurements
+  const {
+    room,
+    walls = [],
+    doors = [],
+    windows = [],
+    cabinets = { upper: [], lower: [] },
+    appliances = [],
+    countertops = [],
+    countertop_summary = { total_area_sqft: 0, total_linear_ft: 0, count: 0 }
+  } = measurements
 
   // Calculate scale factor to fit room in viewport
   const roomWidth = room.max_x - room.min_x
@@ -112,6 +121,9 @@ export function FloorPlanViewer({ measurements }: FloorPlanViewerProps) {
         <div className="flex items-center gap-2">
           <div className="text-sm text-gray-500">
             Room: {roomWidth.toFixed(1)}' × {roomDepth.toFixed(1)}' | Ceiling: {room.ceiling_height_ft?.toFixed(1)}'
+            {countertop_summary.total_area_sqft > 0 && (
+              <> | Countertop: {countertop_summary.total_area_sqft.toFixed(1)} sq ft</>
+            )}
           </div>
           <Separator orientation="vertical" className="h-6" />
           <Button variant="outline" size="sm" onClick={handleExportDXF}>
@@ -381,6 +393,42 @@ export function FloorPlanViewer({ measurements }: FloorPlanViewerProps) {
                   </g>
                 )
               })}
+
+              {/* Countertops */}
+              {countertops.map((countertop: any) => {
+                const pos = toSVG(countertop.position.x, countertop.position.z)
+                const width = countertop.width_ft * scale
+                const depth = countertop.depth_ft * scale
+
+                return (
+                  <g
+                    key={countertop.id}
+                    className="countertop-group cursor-pointer"
+                    onClick={() => setSelectedObject(countertop)}
+                  >
+                    <rect
+                      x={pos.x - width / 2}
+                      y={pos.y - depth / 2}
+                      width={width}
+                      height={depth}
+                      fill={selectedObject?.id === countertop.id ? '#A7F3D0' : '#6EE7B7'}
+                      stroke="#10B981"
+                      strokeWidth="2"
+                      className="hover:fill-green-200 transition-colors"
+                      opacity="0.6"
+                    />
+                    <text
+                      x={pos.x}
+                      y={pos.y + 4}
+                      textAnchor="middle"
+                      className="text-xs fill-green-900 font-medium"
+                      style={{ fontSize: '10px' }}
+                    >
+                      CT
+                    </text>
+                  </g>
+                )
+              })}
             </svg>
 
             {/* Legend */}
@@ -404,6 +452,10 @@ export function FloorPlanViewer({ measurements }: FloorPlanViewerProps) {
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 border-2 border-gray-400 border-dashed"></div>
                 <span>Upper Cabinet (U)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-green-300 border-2 border-green-600" style={{ opacity: 0.6 }}></div>
+                <span>Countertop (CT)</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-red-300 border-2 border-red-600"></div>

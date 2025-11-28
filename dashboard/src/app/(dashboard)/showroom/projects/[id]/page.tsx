@@ -191,6 +191,18 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                             <p className="text-2xl font-bold">{measurement.door_count}</p>
                           </div>
                         )}
+                        {measurement.measurements?.countertop_summary?.total_area_sqft > 0 && (
+                          <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                            <div className="flex items-center gap-2 text-green-700 mb-1">
+                              <Square className="h-4 w-4" />
+                              <span className="text-sm font-medium">Countertop</span>
+                            </div>
+                            <p className="text-2xl font-bold text-green-900">
+                              {measurement.measurements.countertop_summary.total_area_sqft.toFixed(1)}
+                            </p>
+                            <p className="text-xs text-green-600 mt-1">sq ft</p>
+                          </div>
+                        )}
                       </div>
 
                       {measurement.usdz_file_url && (

@@ -47,6 +47,14 @@ interface Appliance {
   type?: string
 }
 
+interface Countertop {
+  id: string
+  position: { x: number; z: number; y: number }
+  width_ft: number
+  depth_ft: number
+  area_sqft?: number
+}
+
 interface FloorPlanMeasurements {
   room: {
     min_x: number
@@ -63,6 +71,7 @@ interface FloorPlanMeasurements {
     lower: Cabinet[]
   }
   appliances: Appliance[]
+  countertops?: Countertop[]
 }
 
 export class DXFGenerator {
@@ -112,7 +121,7 @@ export class DXFGenerator {
     this.dxf.push('2')
     this.dxf.push('LAYER')
     this.dxf.push('70')
-    this.dxf.push('7') // Number of layers
+    this.dxf.push('8') // Number of layers
 
     // Walls Layer
     this.addLayer('WALLS', 7, 'Continuous')
@@ -124,6 +133,8 @@ export class DXFGenerator {
     this.addLayer('CABINETS_LOWER', 8, 'Continuous')
     // Cabinets Upper Layer
     this.addLayer('CABINETS_UPPER', 9, 'DASHED')
+    // Countertops Layer
+    this.addLayer('COUNTERTOPS', 3, 'Continuous')
     // Appliances Layer
     this.addLayer('APPLIANCES', 1, 'Continuous')
     // Dimensions Layer
@@ -305,6 +316,34 @@ export class DXFGenerator {
       // Add label
       this.addText(appliance.position.x, appliance.position.z, appliance.type || 'Appliance', 0.25, 'DIMENSIONS')
     })
+
+    // Add Countertops
+    if (measurements.countertops) {
+      measurements.countertops.forEach((countertop) => {
+        const halfWidth = countertop.width_ft / 2
+        const halfDepth = countertop.depth_ft / 2
+        const points = [
+          { x: countertop.position.x - halfWidth, y: countertop.position.z - halfDepth },
+          { x: countertop.position.x + halfWidth, y: countertop.position.z - halfDepth },
+          { x: countertop.position.x + halfWidth, y: countertop.position.z + halfDepth },
+          { x: countertop.position.x - halfWidth, y: countertop.position.z + halfDepth },
+        ]
+        this.addPolyline(points, 'COUNTERTOPS')
+
+        // Add label
+        if (countertop.area_sqft) {
+          this.addText(
+            countertop.position.x,
+            countertop.position.z,
+            `CT: ${countertop.area_sqft.toFixed(1)} sq ft`,
+            0.25,
+            'DIMENSIONS'
+          )
+        } else {
+          this.addText(countertop.position.x, countertop.position.z, 'Countertop', 0.25, 'DIMENSIONS')
+        }
+      })
+    }
 
     // Close Entities Section
     this.dxf.push('0')
