@@ -3,7 +3,16 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import {
+  formatError,
+  logError,
+  isUniqueViolation,
+  isPermissionError,
+  createContextualErrorFormatter,
+  FormattedError,
+} from '@/lib/errors'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,7 +24,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { ArrowLeft, Loader2, Mail, CheckCircle2, AlertCircle } from 'lucide-react'
+import {
+  ArrowLeft,
+  Loader2,
+  Mail,
+  AlertCircle,
+  HelpCircle,
+  RefreshCw,
+} from 'lucide-react'
 
 function generateShowroomCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -33,6 +49,14 @@ function generateSlug(name: string): string {
     .replace(/(^-|-$)/g, '')
 }
 
+// Create a contextual error formatter for showroom-specific fields
+const formatShowroomError = createContextualErrorFormatter({
+  showroom_code: 'showroom code',
+  slug: 'showroom URL',
+  email: 'email address',
+  name: 'showroom name',
+})
+
 interface InvitationResult {
   sent: boolean
   error?: string
@@ -43,7 +67,7 @@ export default function NewShowroomPage() {
   const supabase = createClient()
 
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<FormattedError | null>(null)
   const [invitationResult, setInvitationResult] = useState<InvitationResult | null>(null)
   const [createdShowroomId, setCreatedShowroomId] = useState<string | null>(null)
 
@@ -66,6 +90,8 @@ export default function NewShowroomPage() {
       ...prev,
       [e.target.name]: e.target.value,
     }))
+    // Clear error when user starts typing
+    if (error) setError(null)
   }
 
   const handleSwitchChange = (checked: boolean) => {
@@ -84,7 +110,7 @@ export default function NewShowroomPage() {
       const { data: { session } } = await supabase.auth.getSession()
 
       if (!session) {
-        return { sent: false, error: 'Not authenticated' }
+        return { sent: false, error: 'Your session has expired. Please sign in again.' }
       }
 
       const response = await fetch(
@@ -107,13 +133,15 @@ export default function NewShowroomPage() {
       const data = await response.json()
 
       if (!response.ok || !data.success) {
-        return { sent: false, error: data.error || 'Failed to send invitation' }
+        const errorMessage = data.error || 'Failed to send invitation email'
+        return { sent: false, error: errorMessage }
       }
 
       return { sent: true }
     } catch (err) {
-      console.error('Failed to send invitation:', err)
-      return { sent: false, error: 'Failed to send invitation' }
+      logError(err, { context: 'sendInvitation', showroomId, ownerEmail })
+      const formatted = formatError(err)
+      return { sent: false, error: formatted.message }
     }
   }
 
@@ -122,6 +150,11 @@ export default function NewShowroomPage() {
     setLoading(true)
     setError(null)
     setInvitationResult(null)
+
+    // Show loading toast
+    const loadingToast = toast.loading('Creating showroom...', {
+      description: 'Setting up your new showroom configuration',
+    })
 
     try {
       const showroomCode = generateShowroomCode()
@@ -147,23 +180,71 @@ export default function NewShowroomPage() {
         .select()
         .single()
 
-      if (showroomError) throw showroomError
+      if (showroomError) {
+        // Dismiss loading toast
+        toast.dismiss(loadingToast)
+
+        // Format the error with context
+        const formatted = formatShowroomError(showroomError)
+        logError(showroomError, { context: 'createShowroom', formData: { name: formData.name, email: formData.email } })
+
+        // Show specific error toasts based on error type
+        if (isPermissionError(showroomError)) {
+          toast.error('Permission Denied', {
+            description: 'You do not have permission to create showrooms. Please contact your administrator.',
+            action: {
+              label: 'Contact Support',
+              onClick: () => window.location.href = 'mailto:support@nextleanscan.com',
+            },
+          })
+        } else if (isUniqueViolation(showroomError)) {
+          toast.error('Duplicate Entry', {
+            description: formatted.message,
+          })
+        } else {
+          toast.error(formatted.title, {
+            description: formatted.message,
+          })
+        }
+
+        setError(formatted)
+        setLoading(false)
+        return
+      }
 
       setCreatedShowroomId(showroom.id)
 
+      // Update loading toast
+      toast.loading('Creating showroom...', {
+        id: loadingToast,
+        description: 'Setting up branding and categories',
+      })
+
       // Create default branding
-      await supabase.from('showroom_branding').insert({
+      const { error: brandingError } = await supabase.from('showroom_branding').insert({
         showroom_id: showroom.id,
       })
 
+      if (brandingError) {
+        logError(brandingError, { context: 'createShowroomBranding', showroomId: showroom.id })
+        // Non-critical error, continue but warn
+        toast.warning('Branding Setup', {
+          description: 'Default branding could not be created. You can set it up later in settings.',
+        })
+      }
+
       // Enable all categories by default
-      const { data: categories } = await supabase
+      const { data: categories, error: categoriesError } = await supabase
         .from('categories')
         .select('id, display_order')
         .eq('is_active', true)
 
+      if (categoriesError) {
+        logError(categoriesError, { context: 'fetchCategories', showroomId: showroom.id })
+      }
+
       if (categories && categories.length > 0) {
-        await supabase.from('showroom_categories').insert(
+        const { error: categoryLinkError } = await supabase.from('showroom_categories').insert(
           categories.map((cat: { id: string; display_order: number }) => ({
             showroom_id: showroom.id,
             category_id: cat.id,
@@ -171,10 +252,21 @@ export default function NewShowroomPage() {
             display_order: cat.display_order,
           }))
         )
+
+        if (categoryLinkError) {
+          logError(categoryLinkError, { context: 'createShowroomCategories', showroomId: showroom.id })
+        }
       }
+
+      // Dismiss loading toast
+      toast.dismiss(loadingToast)
 
       // Send invitation if owner email is provided and option is checked
       if (formData.ownerEmail && formData.sendInvitation) {
+        toast.loading('Sending invitation...', {
+          description: `Sending invitation to ${formData.ownerEmail}`,
+        })
+
         const result = await sendInvitation(
           showroom.id,
           formData.ownerEmail,
@@ -182,18 +274,43 @@ export default function NewShowroomPage() {
         )
         setInvitationResult(result)
 
-        // Even if invitation fails, showroom is created - just show warning
         if (!result.sent) {
+          // Show warning but don't block - showroom is created
+          toast.warning('Invitation Not Sent', {
+            description: result.error || 'The invitation could not be sent. You can retry from the showroom page.',
+          })
           setLoading(false)
           // Don't navigate away, let user see the result and retry
           return
         }
+
+        // Success - show success toast
+        toast.success('Showroom Created', {
+          description: `${formData.name} has been created and invitation sent to ${formData.ownerEmail}`,
+        })
+      } else {
+        // Success without invitation
+        toast.success('Showroom Created', {
+          description: `${formData.name} has been created successfully.`,
+        })
       }
 
       // Navigate to the showroom detail page
       router.push(`/admin/showrooms/${showroom.id}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create showroom')
+      toast.dismiss(loadingToast)
+      logError(err, { context: 'handleSubmit', formData: { name: formData.name, email: formData.email } })
+
+      const formatted = formatError(err)
+      setError(formatted)
+
+      toast.error(formatted.title, {
+        description: formatted.message,
+        action: formatted.isRetryable
+          ? { label: 'Retry', onClick: () => handleSubmit(e) }
+          : undefined,
+      })
+
       setLoading(false)
     }
   }
@@ -202,6 +319,10 @@ export default function NewShowroomPage() {
     if (!createdShowroomId || !formData.ownerEmail) return
 
     setLoading(true)
+    toast.loading('Retrying invitation...', {
+      description: `Sending to ${formData.ownerEmail}`,
+    })
+
     const result = await sendInvitation(
       createdShowroomId,
       formData.ownerEmail,
@@ -211,12 +332,22 @@ export default function NewShowroomPage() {
     setLoading(false)
 
     if (result.sent) {
+      toast.success('Invitation Sent', {
+        description: `Invitation successfully sent to ${formData.ownerEmail}`,
+      })
       router.push(`/admin/showrooms/${createdShowroomId}`)
+    } else {
+      toast.error('Invitation Failed', {
+        description: result.error || 'Unable to send invitation. Please try again.',
+      })
     }
   }
 
   const handleSkipInvitation = () => {
     if (createdShowroomId) {
+      toast.info('Invitation Skipped', {
+        description: 'You can send the invitation later from the showroom settings.',
+      })
       router.push(`/admin/showrooms/${createdShowroomId}`)
     }
   }
@@ -228,7 +359,7 @@ export default function NewShowroomPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-yellow-500" />
+              <AlertCircle className="h-5 w-5 text-yellow-500" aria-hidden="true" />
               Showroom Created - Invitation Issue
             </CardTitle>
             <CardDescription>
@@ -236,37 +367,53 @@ export default function NewShowroomPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div
+              className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg"
+              role="alert"
+              aria-live="polite"
+            >
               <p className="text-sm text-yellow-800">
-                <strong>Error:</strong> {invitationResult.error}
+                <strong>Issue:</strong> {invitationResult.error}
               </p>
             </div>
 
             <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-600 mb-1">Invitation would be sent to:</p>
+              <p className="text-sm text-gray-600 mb-1">Invitation will be sent to:</p>
               <p className="font-medium">{formData.ownerEmail}</p>
+              {formData.ownerName && (
+                <p className="text-sm text-gray-500">{formData.ownerName}</p>
+              )}
             </div>
 
             <div className="flex gap-4">
-              <Button onClick={handleRetryInvitation} disabled={loading}>
+              <Button
+                onClick={handleRetryInvitation}
+                disabled={loading}
+                aria-label="Retry sending invitation"
+              >
                 {loading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                     Retrying...
                   </>
                 ) : (
                   <>
-                    <Mail className="mr-2 h-4 w-4" />
+                    <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
                     Retry Invitation
                   </>
                 )}
               </Button>
-              <Button variant="outline" onClick={handleSkipInvitation}>
+              <Button
+                variant="outline"
+                onClick={handleSkipInvitation}
+                disabled={loading}
+              >
                 Skip for Now
               </Button>
             </div>
 
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-500 flex items-center gap-1">
+              <HelpCircle className="h-3 w-3" aria-hidden="true" />
               You can also send the invitation later from the showroom management page.
             </p>
           </CardContent>
@@ -279,8 +426,12 @@ export default function NewShowroomPage() {
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
         <Link href="/admin/showrooms">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-5 w-5" />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Go back to showrooms list"
+          >
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           </Button>
         </Link>
         <div>
@@ -289,7 +440,7 @@ export default function NewShowroomPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} aria-label="Create showroom form">
         <Card>
           <CardHeader>
             <CardTitle>Showroom Details</CardTitle>
@@ -297,13 +448,42 @@ export default function NewShowroomPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {error && (
-              <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md">
-                {error}
+              <div
+                className="p-4 rounded-lg bg-red-50 border border-red-200"
+                role="alert"
+                aria-live="assertive"
+              >
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                  <div className="flex-1">
+                    <p className="font-medium text-red-800">{error.title}</p>
+                    <p className="text-sm text-red-700 mt-1">{error.message}</p>
+                    {error.suggestion && (
+                      <p className="text-sm text-red-600 mt-2">{error.suggestion}</p>
+                    )}
+                    {error.isRetryable && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 text-red-700 border-red-300 hover:bg-red-100"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          setError(null)
+                        }}
+                      >
+                        <RefreshCw className="h-3 w-3 mr-2" aria-hidden="true" />
+                        Dismiss and Retry
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="name">Showroom Name *</Label>
+              <Label htmlFor="name">
+                Showroom Name <span className="text-red-500">*</span>
+              </Label>
               <Input
                 id="name"
                 name="name"
@@ -311,11 +491,15 @@ export default function NewShowroomPage() {
                 onChange={handleChange}
                 placeholder="ABC Cabinets"
                 required
+                aria-required="true"
+                disabled={loading}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">Business Email *</Label>
+              <Label htmlFor="email">
+                Business Email <span className="text-red-500">*</span>
+              </Label>
               <Input
                 id="email"
                 name="email"
@@ -324,6 +508,8 @@ export default function NewShowroomPage() {
                 onChange={handleChange}
                 placeholder="info@abccabinets.com"
                 required
+                aria-required="true"
+                disabled={loading}
               />
             </div>
 
@@ -336,6 +522,7 @@ export default function NewShowroomPage() {
                 value={formData.phone}
                 onChange={handleChange}
                 placeholder="(555) 123-4567"
+                disabled={loading}
               />
             </div>
           </CardContent>
@@ -355,6 +542,7 @@ export default function NewShowroomPage() {
                 value={formData.addressLine1}
                 onChange={handleChange}
                 placeholder="123 Main Street"
+                disabled={loading}
               />
             </div>
 
@@ -366,6 +554,7 @@ export default function NewShowroomPage() {
                 value={formData.addressLine2}
                 onChange={handleChange}
                 placeholder="Suite 100"
+                disabled={loading}
               />
             </div>
 
@@ -378,6 +567,7 @@ export default function NewShowroomPage() {
                   value={formData.city}
                   onChange={handleChange}
                   placeholder="New York"
+                  disabled={loading}
                 />
               </div>
               <div className="space-y-2">
@@ -388,6 +578,7 @@ export default function NewShowroomPage() {
                   value={formData.state}
                   onChange={handleChange}
                   placeholder="NY"
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -400,6 +591,7 @@ export default function NewShowroomPage() {
                 value={formData.postalCode}
                 onChange={handleChange}
                 placeholder="10001"
+                disabled={loading}
               />
             </div>
           </CardContent>
@@ -421,11 +613,14 @@ export default function NewShowroomPage() {
                 value={formData.ownerName}
                 onChange={handleChange}
                 placeholder="John Smith"
+                disabled={loading}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="ownerEmail">Owner Email *</Label>
+              <Label htmlFor="ownerEmail">
+                Owner Email <span className="text-red-500">*</span>
+              </Label>
               <Input
                 id="ownerEmail"
                 name="ownerEmail"
@@ -434,6 +629,8 @@ export default function NewShowroomPage() {
                 onChange={handleChange}
                 placeholder="john@abccabinets.com"
                 required
+                aria-required="true"
+                disabled={loading}
               />
             </div>
 
@@ -450,11 +647,16 @@ export default function NewShowroomPage() {
                 id="sendInvitation"
                 checked={formData.sendInvitation}
                 onCheckedChange={handleSwitchChange}
+                disabled={loading}
+                aria-label="Toggle invitation email"
               />
             </div>
 
             {!formData.sendInvitation && formData.ownerEmail && (
-              <div className="p-3 text-sm text-yellow-800 bg-yellow-50 rounded-md border border-yellow-200">
+              <div
+                className="p-3 text-sm text-yellow-800 bg-yellow-50 rounded-md border border-yellow-200"
+                role="status"
+              >
                 <strong>Note:</strong> The owner won&apos;t receive an invitation email.
                 You&apos;ll need to send it manually later from the showroom settings.
               </div>
@@ -464,14 +666,18 @@ export default function NewShowroomPage() {
 
         <div className="flex justify-end gap-4 mt-6">
           <Link href="/admin/showrooms">
-            <Button variant="outline" type="button">
+            <Button variant="outline" type="button" disabled={loading}>
               Cancel
             </Button>
           </Link>
-          <Button type="submit" disabled={loading}>
+          <Button
+            type="submit"
+            disabled={loading}
+            aria-label={loading ? 'Creating showroom...' : 'Create showroom'}
+          >
             {loading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                 Creating...
               </>
             ) : (

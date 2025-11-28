@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import { formatError, logError, isUniqueViolation, FormattedError } from '@/lib/errors'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -67,7 +69,7 @@ export function InvitationList({ showroomId }: InvitationListProps) {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [users, setUsers] = useState<ShowroomUser[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<FormattedError | null>(null)
 
   // New invitation dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -75,7 +77,7 @@ export function InvitationList({ showroomId }: InvitationListProps) {
     email: '',
     fullName: '',
   })
-  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [inviteError, setInviteError] = useState<FormattedError | null>(null)
   const [inviting, setInviting] = useState(false)
 
   const fetchData = async () => {
@@ -104,8 +106,12 @@ export function InvitationList({ showroomId }: InvitationListProps) {
       if (userError) throw userError
       setUsers(userData || [])
     } catch (err) {
-      console.error('Failed to fetch data:', err)
-      setError('Failed to load invitation data')
+      logError(err, { context: 'fetchInvitationData', showroomId })
+      const formatted = formatError(err)
+      setError(formatted)
+      toast.error('Failed to Load Data', {
+        description: formatted.message,
+      })
     } finally {
       setLoading(false)
     }
@@ -121,11 +127,22 @@ export function InvitationList({ showroomId }: InvitationListProps) {
     setInviting(true)
     setInviteError(null)
 
+    const loadingToast = toast.loading('Sending invitation...', {
+      description: `Sending to ${newInvitation.email}`,
+    })
+
     try {
       const { data: { session } } = await supabase.auth.getSession()
 
       if (!session) {
-        setInviteError('Not authenticated')
+        toast.dismiss(loadingToast)
+        const err: FormattedError = {
+          title: 'Session Expired',
+          message: 'Your session has expired. Please sign in again.',
+          isRetryable: false,
+        }
+        setInviteError(err)
+        toast.error(err.title, { description: err.message })
         return
       }
 
@@ -147,19 +164,50 @@ export function InvitationList({ showroomId }: InvitationListProps) {
       )
 
       const data = await response.json()
+      toast.dismiss(loadingToast)
 
       if (!response.ok || !data.success) {
-        setInviteError(data.error || 'Failed to send invitation')
+        const errorMessage = data.error || 'Failed to send invitation'
+
+        // Check for duplicate email
+        if (errorMessage.toLowerCase().includes('already') ||
+            errorMessage.toLowerCase().includes('exists') ||
+            errorMessage.toLowerCase().includes('duplicate')) {
+          const err: FormattedError = {
+            title: 'Already Invited',
+            message: 'This email address has already been invited to this showroom.',
+            suggestion: 'Check the invitation list below or use a different email.',
+            isRetryable: false,
+          }
+          setInviteError(err)
+          toast.error(err.title, { description: err.message })
+        } else {
+          const err: FormattedError = {
+            title: 'Invitation Failed',
+            message: errorMessage,
+            isRetryable: true,
+          }
+          setInviteError(err)
+          toast.error(err.title, { description: err.message })
+        }
         return
       }
 
       // Success - close dialog and refresh
+      toast.success('Invitation Sent', {
+        description: `Invitation sent to ${newInvitation.email}`,
+      })
       setDialogOpen(false)
       setNewInvitation({ email: '', fullName: '' })
       fetchData()
     } catch (err) {
-      console.error('Failed to send invitation:', err)
-      setInviteError('Failed to send invitation')
+      toast.dismiss(loadingToast)
+      logError(err, { context: 'sendInvitation', showroomId, email: newInvitation.email })
+      const formatted = formatError(err)
+      setInviteError(formatted)
+      toast.error(formatted.title, {
+        description: formatted.message,
+      })
     } finally {
       setInviting(false)
     }
@@ -168,18 +216,30 @@ export function InvitationList({ showroomId }: InvitationListProps) {
   const resendInvitation = async (invitationId: string, email: string) => {
     setActionLoading(invitationId)
 
+    const loadingToast = toast.loading('Resending invitation...', {
+      description: `Sending to ${email}`,
+    })
+
     try {
       // First revoke the old invitation
-      await supabase
+      const { error: revokeError } = await supabase
         .from('showroom_invitations')
         .update({ status: 'revoked' })
         .eq('id', invitationId)
+
+      if (revokeError) {
+        logError(revokeError, { context: 'revokeOldInvitation', invitationId })
+        // Continue anyway - we'll try to send a new one
+      }
 
       // Then send a new one
       const { data: { session } } = await supabase.auth.getSession()
 
       if (!session) {
-        setError('Not authenticated')
+        toast.dismiss(loadingToast)
+        toast.error('Session Expired', {
+          description: 'Your session has expired. Please sign in again.',
+        })
         return
       }
 
@@ -200,22 +260,33 @@ export function InvitationList({ showroomId }: InvitationListProps) {
       )
 
       const data = await response.json()
+      toast.dismiss(loadingToast)
 
       if (!response.ok || !data.success) {
-        setError(data.error || 'Failed to resend invitation')
+        const errorMessage = data.error || 'Failed to resend invitation'
+        toast.error('Resend Failed', {
+          description: errorMessage,
+        })
         return
       }
 
+      toast.success('Invitation Resent', {
+        description: `New invitation sent to ${email}`,
+      })
       fetchData()
     } catch (err) {
-      console.error('Failed to resend invitation:', err)
-      setError('Failed to resend invitation')
+      toast.dismiss(loadingToast)
+      logError(err, { context: 'resendInvitation', invitationId, email })
+      const formatted = formatError(err)
+      toast.error(formatted.title, {
+        description: formatted.message,
+      })
     } finally {
       setActionLoading(null)
     }
   }
 
-  const revokeInvitation = async (invitationId: string) => {
+  const revokeInvitation = async (invitationId: string, email: string) => {
     setActionLoading(invitationId)
 
     try {
@@ -226,10 +297,16 @@ export function InvitationList({ showroomId }: InvitationListProps) {
 
       if (revokeError) throw revokeError
 
+      toast.success('Invitation Revoked', {
+        description: `The invitation for ${email} has been revoked.`,
+      })
       fetchData()
     } catch (err) {
-      console.error('Failed to revoke invitation:', err)
-      setError('Failed to revoke invitation')
+      logError(err, { context: 'revokeInvitation', invitationId })
+      const formatted = formatError(err)
+      toast.error('Revoke Failed', {
+        description: formatted.message,
+      })
     } finally {
       setActionLoading(null)
     }
@@ -241,7 +318,7 @@ export function InvitationList({ showroomId }: InvitationListProps) {
     if (isExpired) {
       return (
         <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-          <Clock className="h-3 w-3 mr-1" />
+          <Clock className="h-3 w-3 mr-1" aria-hidden="true" />
           Expired
         </Badge>
       )
@@ -251,28 +328,28 @@ export function InvitationList({ showroomId }: InvitationListProps) {
       case 'pending':
         return (
           <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-            <Mail className="h-3 w-3 mr-1" />
+            <Mail className="h-3 w-3 mr-1" aria-hidden="true" />
             Pending
           </Badge>
         )
       case 'accepted':
         return (
           <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-            <CheckCircle2 className="h-3 w-3 mr-1" />
+            <CheckCircle2 className="h-3 w-3 mr-1" aria-hidden="true" />
             Accepted
           </Badge>
         )
       case 'expired':
         return (
           <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-            <Clock className="h-3 w-3 mr-1" />
+            <Clock className="h-3 w-3 mr-1" aria-hidden="true" />
             Expired
           </Badge>
         )
       case 'revoked':
         return (
           <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
-            <XCircle className="h-3 w-3 mr-1" />
+            <XCircle className="h-3 w-3 mr-1" aria-hidden="true" />
             Revoked
           </Badge>
         )
@@ -283,8 +360,36 @@ export function InvitationList({ showroomId }: InvitationListProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+      <div className="flex items-center justify-center py-8" role="status" aria-label="Loading invitations">
+        <Loader2 className="h-6 w-6 animate-spin text-gray-400" aria-hidden="true" />
+        <span className="sr-only">Loading invitations...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div
+        className="p-4 rounded-lg bg-red-50 border border-red-200"
+        role="alert"
+        aria-live="polite"
+      >
+        <div className="flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" aria-hidden="true" />
+          <div className="flex-1">
+            <p className="font-medium text-red-800">{error.title}</p>
+            <p className="text-sm text-red-700 mt-1">{error.message}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3 text-red-700 border-red-300 hover:bg-red-100"
+              onClick={fetchData}
+            >
+              <RefreshCw className="h-3 w-3 mr-2" aria-hidden="true" />
+              Try Again
+            </Button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -321,10 +426,17 @@ export function InvitationList({ showroomId }: InvitationListProps) {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium text-gray-700">Invitations</h3>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog open={dialogOpen} onOpenChange={(open) => {
+            setDialogOpen(open)
+            if (!open) {
+              // Clear form and errors when closing
+              setNewInvitation({ email: '', fullName: '' })
+              setInviteError(null)
+            }
+          }}>
             <DialogTrigger asChild>
               <Button size="sm">
-                <UserPlus className="h-4 w-4 mr-2" />
+                <UserPlus className="h-4 w-4 mr-2" aria-hidden="true" />
                 Invite User
               </Button>
             </DialogTrigger>
@@ -337,24 +449,42 @@ export function InvitationList({ showroomId }: InvitationListProps) {
               </DialogHeader>
               <div className="space-y-4 py-4">
                 {inviteError && (
-                  <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4" />
-                    {inviteError}
+                  <div
+                    className="p-3 rounded-md bg-red-50 border border-red-200"
+                    role="alert"
+                    aria-live="polite"
+                  >
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                      <div>
+                        <p className="text-sm font-medium text-red-800">{inviteError.title}</p>
+                        <p className="text-sm text-red-700">{inviteError.message}</p>
+                        {inviteError.suggestion && (
+                          <p className="text-xs text-red-600 mt-1">{inviteError.suggestion}</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label htmlFor="invite-email">Email Address *</Label>
+                  <Label htmlFor="invite-email">
+                    Email Address <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="invite-email"
                     type="email"
                     placeholder="name@company.com"
                     value={newInvitation.email}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setNewInvitation((prev) => ({
                         ...prev,
                         email: e.target.value,
                       }))
-                    }
+                      // Clear error when user starts typing
+                      if (inviteError) setInviteError(null)
+                    }}
+                    disabled={inviting}
+                    aria-required="true"
                   />
                 </div>
                 <div className="space-y-2">
@@ -370,6 +500,7 @@ export function InvitationList({ showroomId }: InvitationListProps) {
                         fullName: e.target.value,
                       }))
                     }
+                    disabled={inviting}
                   />
                 </div>
               </div>
@@ -384,15 +515,16 @@ export function InvitationList({ showroomId }: InvitationListProps) {
                 <Button
                   onClick={sendInvitation}
                   disabled={inviting || !newInvitation.email}
+                  aria-label={inviting ? 'Sending invitation...' : 'Send invitation'}
                 >
                   {inviting ? (
                     <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
                       Sending...
                     </>
                   ) : (
                     <>
-                      <Mail className="h-4 w-4 mr-2" />
+                      <Mail className="h-4 w-4 mr-2" aria-hidden="true" />
                       Send Invitation
                     </>
                   )}
@@ -402,16 +534,11 @@ export function InvitationList({ showroomId }: InvitationListProps) {
           </Dialog>
         </div>
 
-        {error && (
-          <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md mb-4">
-            {error}
-          </div>
-        )}
-
         {invitations.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
-            <MailX className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <MailX className="h-8 w-8 mx-auto mb-2 opacity-50" aria-hidden="true" />
             <p>No invitations sent yet</p>
+            <p className="text-sm mt-1">Click &quot;Invite User&quot; to send your first invitation.</p>
           </div>
         ) : (
           <Table>
@@ -455,12 +582,13 @@ export function InvitationList({ showroomId }: InvitationListProps) {
                               resendInvitation(invitation.id, invitation.email)
                             }
                             disabled={actionLoading === invitation.id}
+                            aria-label={`Resend invitation to ${invitation.email}`}
                           >
                             {actionLoading === invitation.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                             ) : (
                               <>
-                                <RefreshCw className="h-4 w-4 mr-1" />
+                                <RefreshCw className="h-4 w-4 mr-1" aria-hidden="true" />
                                 Resend
                               </>
                             )}
@@ -470,15 +598,16 @@ export function InvitationList({ showroomId }: InvitationListProps) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => revokeInvitation(invitation.id)}
+                            onClick={() => revokeInvitation(invitation.id, invitation.email)}
                             disabled={actionLoading === invitation.id}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            aria-label={`Revoke invitation for ${invitation.email}`}
                           >
                             {actionLoading === invitation.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                             ) : (
                               <>
-                                <XCircle className="h-4 w-4 mr-1" />
+                                <XCircle className="h-4 w-4 mr-1" aria-hidden="true" />
                                 Revoke
                               </>
                             )}
