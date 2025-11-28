@@ -1,0 +1,261 @@
+import { createClient } from '@/lib/supabase/server'
+import { notFound } from 'next/navigation'
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban } from 'lucide-react'
+
+interface ShowroomDetailPageProps {
+  params: Promise<{ id: string }>
+}
+
+export default async function ShowroomDetailPage({ params }: ShowroomDetailPageProps) {
+  const { id } = await params
+  const supabase = await createClient()
+
+  const { data: showroom, error } = await supabase
+    .from('showrooms')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (error || !showroom) {
+    notFound()
+  }
+
+  // Get stats
+  const { count: productCount } = await supabase
+    .from('products')
+    .select('*', { count: 'exact', head: true })
+    .eq('showroom_id', id)
+
+  const { count: projectCount } = await supabase
+    .from('projects')
+    .select('*', { count: 'exact', head: true })
+    .eq('showroom_id', id)
+
+  const { count: userCount } = await supabase
+    .from('showroom_users')
+    .select('*', { count: 'exact', head: true })
+    .eq('showroom_id', id)
+
+  const statusColors: Record<string, string> = {
+    trial: 'bg-yellow-100 text-yellow-800',
+    active: 'bg-green-100 text-green-800',
+    past_due: 'bg-red-100 text-red-800',
+    canceled: 'bg-gray-100 text-gray-800',
+    suspended: 'bg-red-100 text-red-800',
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <Link href="/admin/showrooms">
+          <Button variant="ghost" size="icon">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">{showroom.name}</h1>
+            <Badge className={statusColors[showroom.subscription_status]}>
+              {showroom.subscription_status}
+            </Badge>
+          </div>
+          <p className="text-gray-500">{showroom.email}</p>
+        </div>
+        <Button variant="outline">Edit Showroom</Button>
+      </div>
+
+      {/* Showroom Code Card */}
+      <Card className="bg-blue-50 border-blue-200">
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-blue-600 font-medium">Showroom Code</p>
+              <p className="text-3xl font-mono font-bold text-blue-900">
+                {showroom.showroom_code}
+              </p>
+              <p className="text-sm text-blue-600 mt-1">
+                Customers enter this code in the iOS app
+              </p>
+            </div>
+            <Button variant="outline" size="sm" className="gap-2">
+              <Copy className="h-4 w-4" />
+              Copy Code
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="py-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <Package className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{productCount || 0}</p>
+                <p className="text-sm text-gray-500">Products</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="py-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-green-100 rounded-lg">
+                <FolderKanban className="h-6 w-6 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{projectCount || 0}</p>
+                <p className="text-sm text-gray-500">Projects</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="py-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-purple-100 rounded-lg">
+                <Users className="h-6 w-6 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{userCount || 0}</p>
+                <p className="text-sm text-gray-500">Team Members</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Details Tabs */}
+      <Tabs defaultValue="details">
+        <TabsList>
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="subscription">Subscription</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="details" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Business Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">Slug</p>
+                  <p className="font-mono">{showroom.slug}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Phone</p>
+                  <p>{showroom.phone || '-'}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500">Address</p>
+                <p>
+                  {[
+                    showroom.address_line1,
+                    showroom.address_line2,
+                    showroom.city,
+                    showroom.state,
+                    showroom.postal_code,
+                  ]
+                    .filter(Boolean)
+                    .join(', ') || '-'}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">Timezone</p>
+                  <p>{showroom.timezone}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Currency</p>
+                  <p>{showroom.currency}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500">Created</p>
+                <p>{new Date(showroom.created_at).toLocaleString()}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="users" className="mt-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Team Members</CardTitle>
+                <CardDescription>
+                  Users who can access this showroom
+                </CardDescription>
+              </div>
+              <Button size="sm">Invite User</Button>
+            </CardHeader>
+            <CardContent>
+              {userCount === 0 ? (
+                <p className="text-gray-500 text-center py-8">
+                  No users yet. Invite the showroom owner to get started.
+                </p>
+              ) : (
+                <p className="text-gray-500">User list will appear here</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="subscription" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Subscription</CardTitle>
+              <CardDescription>
+                Billing and subscription details
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">Status</p>
+                  <Badge className={statusColors[showroom.subscription_status]}>
+                    {showroom.subscription_status}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Plan</p>
+                  <p>{showroom.subscription_plan || 'None'}</p>
+                </div>
+              </div>
+
+              {showroom.trial_ends_at && (
+                <div>
+                  <p className="text-sm text-gray-500">Trial Ends</p>
+                  <p>{new Date(showroom.trial_ends_at).toLocaleDateString()}</p>
+                </div>
+              )}
+
+              {showroom.stripe_customer_id && (
+                <div>
+                  <p className="text-sm text-gray-500">Stripe Customer</p>
+                  <p className="font-mono text-sm">{showroom.stripe_customer_id}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
