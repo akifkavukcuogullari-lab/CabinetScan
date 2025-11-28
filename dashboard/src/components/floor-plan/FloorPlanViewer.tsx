@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { ZoomIn, ZoomOut, Maximize2, Layers } from 'lucide-react'
+import { ZoomIn, ZoomOut, Maximize2, Layers, Download } from 'lucide-react'
+import { exportFloorPlanToDXF } from '@/lib/export/dxf-generator'
 
 interface FloorPlanViewerProps {
   measurements: any
@@ -59,6 +60,16 @@ export function FloorPlanViewer({ measurements }: FloorPlanViewerProps) {
   const handleZoomOut = () => setZoom(Math.max(zoom / 1.2, 0.5))
   const handleFit = () => setZoom(1)
 
+  // Handle export to DXF
+  const handleExportDXF = () => {
+    try {
+      exportFloorPlanToDXF(measurements, 'Floor_Plan')
+    } catch (error) {
+      console.error('Error exporting DXF:', error)
+      alert('Failed to export DXF file. Please try again.')
+    }
+  }
+
   // Format dimensions
   const formatDimension = (ft: number) => {
     const wholeFeet = Math.floor(ft)
@@ -98,8 +109,15 @@ export function FloorPlanViewer({ measurements }: FloorPlanViewerProps) {
             Labels
           </Button>
         </div>
-        <div className="text-sm text-gray-500">
-          Room: {roomWidth.toFixed(1)}' × {roomDepth.toFixed(1)}' | Ceiling: {room.ceiling_height_ft?.toFixed(1)}'
+        <div className="flex items-center gap-2">
+          <div className="text-sm text-gray-500">
+            Room: {roomWidth.toFixed(1)}' × {roomDepth.toFixed(1)}' | Ceiling: {room.ceiling_height_ft?.toFixed(1)}'
+          </div>
+          <Separator orientation="vertical" className="h-6" />
+          <Button variant="outline" size="sm" onClick={handleExportDXF}>
+            <Download className="h-4 w-4" />
+            <span className="ml-2">Export DXF</span>
+          </Button>
         </div>
       </div>
 
