@@ -72,3 +72,9 @@ verify_jwt = false
 
 [functions.submit-project]
 verify_jwt = false
+
+[functions.send-invitation]
+verify_jwt = true
+
+[functions.accept-invitation]
+verify_jwt = false

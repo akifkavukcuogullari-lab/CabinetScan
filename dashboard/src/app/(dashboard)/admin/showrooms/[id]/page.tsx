@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban } from 'lucide-react'
+import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban, Mail } from 'lucide-react'
+import { InvitationList } from '@/components/invitations/invitation-list'
 
 interface ShowroomDetailPageProps {
   params: Promise<{ id: string }>
@@ -40,6 +41,14 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
     .from('showroom_users')
     .select('*', { count: 'exact', head: true })
     .eq('showroom_id', id)
+    .eq('is_active', true)
+
+  // Get pending invitation count
+  const { count: pendingInvitations } = await supabase
+    .from('showroom_invitations')
+    .select('*', { count: 'exact', head: true })
+    .eq('showroom_id', id)
+    .eq('status', 'pending')
 
   const statusColors: Record<string, string> = {
     trial: 'bg-yellow-100 text-yellow-800',
@@ -91,7 +100,7 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
       </Card>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="py-6">
             <div className="flex items-center gap-4">
@@ -133,13 +142,34 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardContent className="py-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-yellow-100 rounded-lg">
+                <Mail className="h-6 w-6 text-yellow-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{pendingInvitations || 0}</p>
+                <p className="text-sm text-gray-500">Pending Invites</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Details Tabs */}
       <Tabs defaultValue="details">
         <TabsList>
           <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="users">
+            Users & Invitations
+            {(pendingInvitations || 0) > 0 && (
+              <Badge variant="secondary" className="ml-2 h-5 w-5 rounded-full p-0 text-xs">
+                {pendingInvitations}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="subscription">Subscription</TabsTrigger>
         </TabsList>
 
@@ -196,23 +226,14 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
 
         <TabsContent value="users" className="mt-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Team Members</CardTitle>
-                <CardDescription>
-                  Users who can access this showroom
-                </CardDescription>
-              </div>
-              <Button size="sm">Invite User</Button>
+            <CardHeader>
+              <CardTitle>Team Members & Invitations</CardTitle>
+              <CardDescription>
+                Manage users who can access this showroom and pending invitations
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              {userCount === 0 ? (
-                <p className="text-gray-500 text-center py-8">
-                  No users yet. Invite the showroom owner to get started.
-                </p>
-              ) : (
-                <p className="text-gray-500">User list will appear here</p>
-              )}
+              <InvitationList showroomId={id} />
             </CardContent>
           </Card>
         </TabsContent>
