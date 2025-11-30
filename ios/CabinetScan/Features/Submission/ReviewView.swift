@@ -10,6 +10,23 @@ struct ReviewView: View {
     var body: some View {
         NavigationStack {
             List {
+                // Showroom branding header
+                if let config = appState.showroomConfig {
+                    Section {
+                        HStack {
+                            Spacer()
+                            ShowroomLogo(
+                                logoUrl: config.branding.logoUrl,
+                                logoDarkUrl: config.branding.logoDarkUrl,
+                                maxHeight: 50,
+                                maxWidth: 180
+                            )
+                            Spacer()
+                        }
+                        .listRowBackground(Color.clear)
+                    }
+                }
+
                 // Customer info section
                 Section("Your Information") {
                     if let customer = appState.customerInfo {

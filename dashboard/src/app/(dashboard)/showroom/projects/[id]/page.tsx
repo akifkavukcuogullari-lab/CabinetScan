@@ -5,9 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { FloorPlanViewer } from '@/components/floor-plan/FloorPlanViewer'
-import { PremiumModelViewer } from '@/components/3d-viewer/PremiumModelViewer'
 import { ModelViewer } from '@/components/3d-viewer/ModelViewer'
+import { InteractiveFloorPlan } from '@/components/floor-plan/InteractiveFloorPlan'
 import {
   ArrowLeft,
   User,
@@ -100,9 +99,9 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   const measurement = measurements && measurements.length > 0 ? measurements[0] : null
   const hasGlbFile = measurement?.glb_file_url
   const hasUsdzFile = measurement?.usdz_file_url
-  const hasFloorPlan = measurement?.measurements?.room
+  const hasFloorPlanData = measurement?.measurements?.walls?.length > 0 || measurement?.measurements?.room
   const has3DModel = hasGlbFile || hasUsdzFile
-  const hasScanData = has3DModel || hasFloorPlan
+  const hasScanData = has3DModel || hasFloorPlanData
 
   return (
     <div className="space-y-6">
@@ -151,86 +150,46 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             Room Scan
           </div>
 
-          {has3DModel && hasFloorPlan ? (
+          {has3DModel && hasFloorPlanData ? (
             // Both 3D and 2D available - show tabs
-            <Tabs defaultValue="3d" className="w-full">
+            <Tabs defaultValue="2d" className="w-full">
               <TabsList className="mb-4">
-                <TabsTrigger value="3d" className="flex items-center gap-2">
-                  <Rotate3d className="h-4 w-4" />
-                  3D Model
-                </TabsTrigger>
                 <TabsTrigger value="2d" className="flex items-center gap-2">
                   <Layers className="h-4 w-4" />
                   2D Floor Plan
                 </TabsTrigger>
+                <TabsTrigger value="3d" className="flex items-center gap-2">
+                  <Rotate3d className="h-4 w-4" />
+                  3D Model
+                </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="3d" className="mt-0">
-                {/* Use PremiumModelViewer for GLB files, fallback to legacy ModelViewer for USDZ-only */}
-                {hasGlbFile ? (
-                  <PremiumModelViewer
-                    glbUrl={measurement.glb_file_url}
-                    usdzUrl={measurement.usdz_file_url}
-                    title="3D Room Scan"
-                    description="Interactive 3D model captured with LiDAR - drag to rotate, scroll to zoom"
-                  />
-                ) : (
-                  <ModelViewer
-                    usdzUrl={measurement.usdz_file_url}
-                    previewImageUrl={measurement.preview_image_url}
-                    title="3D Room Scan"
-                    description="Interactive 3D model captured with LiDAR - drag to rotate, scroll to zoom"
-                  />
-                )}
+              <TabsContent value="2d" className="mt-0">
+                <InteractiveFloorPlan measurements={measurement.measurements} />
               </TabsContent>
 
-              <TabsContent value="2d" className="mt-0">
-                <FloorPlanViewer measurements={measurement.measurements} />
-              </TabsContent>
-            </Tabs>
-          ) : has3DModel ? (
-            // Only 3D available
-            <>
-              {hasGlbFile ? (
-                <PremiumModelViewer
-                  glbUrl={measurement.glb_file_url}
-                  usdzUrl={measurement.usdz_file_url}
-                  title="3D Room Scan"
-                  description="Interactive 3D model captured with LiDAR - drag to rotate, scroll to zoom"
-                />
-              ) : (
+              <TabsContent value="3d" className="mt-0">
                 <ModelViewer
+                  glbUrl={measurement.glb_file_url}
                   usdzUrl={measurement.usdz_file_url}
                   previewImageUrl={measurement.preview_image_url}
                   title="3D Room Scan"
                   description="Interactive 3D model captured with LiDAR - drag to rotate, scroll to zoom"
                 />
-              )}
-            </>
-          ) : hasFloorPlan ? (
-            // Only 2D available - show floor plan with 3D not available notice
-            <div className="space-y-4">
-              {/* 3D Model Not Available Notice */}
-              <Card className="border-amber-200 bg-amber-50">
-                <CardContent className="py-4">
-                  <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
-                      <Rotate3d className="h-5 w-5 text-amber-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-semibold text-amber-900">3D Model Not Available</h4>
-                      <p className="text-sm text-amber-700 mt-1">
-                        This project was scanned before 3D capture was enabled, or the 3D model was not uploaded.
-                        Only the 2D floor plan with measurements is available for this scan.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 2D Floor Plan */}
-              <FloorPlanViewer measurements={measurement.measurements} />
-            </div>
+              </TabsContent>
+            </Tabs>
+          ) : has3DModel ? (
+            // Only 3D model file available
+            <ModelViewer
+              glbUrl={measurement.glb_file_url}
+              usdzUrl={measurement.usdz_file_url}
+              previewImageUrl={measurement.preview_image_url}
+              title="3D Room Scan"
+              description="Interactive 3D model captured with LiDAR - drag to rotate, scroll to zoom"
+            />
+          ) : hasFloorPlanData ? (
+            // Only 2D floor plan data available
+            <InteractiveFloorPlan measurements={measurement.measurements} />
           ) : null}
         </div>
       ) : (

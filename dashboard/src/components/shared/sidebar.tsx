@@ -15,6 +15,7 @@ import {
   LogOut,
   Menu,
   X,
+  CreditCard,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
@@ -42,6 +43,7 @@ const showroomLinks = [
   { href: '/showroom/projects', label: 'Projects', icon: FolderKanban },
   { href: '/showroom/products', label: 'Products', icon: Package },
   { href: '/showroom/branding', label: 'Branding', icon: Palette },
+  { href: '/showroom/billing', label: 'Billing', icon: CreditCard },
   { href: '/showroom/settings', label: 'Settings', icon: Settings },
 ]
 
@@ -61,7 +63,7 @@ export function Sidebar({ userInfo }: SidebarProps) {
   const NavContent = () => (
     <div className="flex flex-col h-full">
       <div className="p-6 border-b">
-        <h1 className="text-xl font-bold">NextLean Scan</h1>
+        <h1 className="text-xl font-bold">Nextlyn Scan</h1>
         {userInfo.type === 'showroom' && (
           <p className="text-sm text-gray-500 mt-1">{userInfo.showroomName}</p>
         )}
@@ -123,7 +125,7 @@ export function Sidebar({ userInfo }: SidebarProps) {
             <NavContent />
           </SheetContent>
         </Sheet>
-        <h1 className="ml-4 text-lg font-bold">NextLean Scan</h1>
+        <h1 className="ml-4 text-lg font-bold">Nextlyn Scan</h1>
       </div>
 
       {/* Desktop sidebar */}

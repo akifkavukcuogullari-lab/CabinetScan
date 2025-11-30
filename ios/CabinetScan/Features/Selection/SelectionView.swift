@@ -21,6 +21,17 @@ struct SelectionView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // Showroom logo
+                if let config = appState.showroomConfig {
+                    ShowroomLogo(
+                        logoUrl: config.branding.logoUrl,
+                        logoDarkUrl: config.branding.logoDarkUrl,
+                        maxHeight: 36,
+                        maxWidth: 140
+                    )
+                    .padding(.vertical, 8)
+                }
+
                 // Progress bar
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)

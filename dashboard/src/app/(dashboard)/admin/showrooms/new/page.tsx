@@ -113,31 +113,51 @@ export default function NewShowroomPage() {
         return { sent: false, error: 'Your session has expired. Please sign in again.' }
       }
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-invitation`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-          },
-          body: JSON.stringify({
-            showroom_id: showroomId,
-            email: ownerEmail,
-            full_name: ownerName || undefined,
-          }),
+      // Add timeout to prevent hanging forever
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-invitation`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+              'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+            },
+            body: JSON.stringify({
+              showroom_id: showroomId,
+              email: ownerEmail,
+              full_name: ownerName || undefined,
+            }),
+            signal: controller.signal,
+          }
+        )
+
+        clearTimeout(timeoutId)
+
+        const data = await response.json()
+
+        if (!response.ok || !data.success) {
+          const errorMessage = data.error || 'Failed to send invitation email'
+          return { sent: false, error: errorMessage }
         }
-      )
 
-      const data = await response.json()
+        // Check for warning (success but with error - email might have failed)
+        if (data.error) {
+          return { sent: true, error: data.error }
+        }
 
-      if (!response.ok || !data.success) {
-        const errorMessage = data.error || 'Failed to send invitation email'
-        return { sent: false, error: errorMessage }
+        return { sent: true }
+      } catch (fetchErr) {
+        clearTimeout(timeoutId)
+        if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
+          return { sent: false, error: 'Request timed out. Please try again.' }
+        }
+        throw fetchErr
       }
-
-      return { sent: true }
     } catch (err) {
       logError(err, { context: 'sendInvitation', showroomId, ownerEmail })
       const formatted = formatError(err)
@@ -263,7 +283,7 @@ export default function NewShowroomPage() {
 
       // Send invitation if owner email is provided and option is checked
       if (formData.ownerEmail && formData.sendInvitation) {
-        toast.loading('Sending invitation...', {
+        const invitationToast = toast.loading('Sending invitation...', {
           description: `Sending invitation to ${formData.ownerEmail}`,
         })
 
@@ -273,6 +293,9 @@ export default function NewShowroomPage() {
           formData.ownerName
         )
         setInvitationResult(result)
+
+        // Always dismiss the invitation loading toast
+        toast.dismiss(invitationToast)
 
         if (!result.sent) {
           // Show warning but don't block - showroom is created
@@ -284,10 +307,17 @@ export default function NewShowroomPage() {
           return
         }
 
-        // Success - show success toast
-        toast.success('Showroom Created', {
-          description: `${formData.name} has been created and invitation sent to ${formData.ownerEmail}`,
-        })
+        // Check if there's a warning (invitation created but email may have failed)
+        if (result.error) {
+          toast.warning('Showroom Created', {
+            description: result.error,
+          })
+        } else {
+          // Full success - show success toast
+          toast.success('Showroom Created', {
+            description: `${formData.name} has been created and invitation sent to ${formData.ownerEmail}`,
+          })
+        }
       } else {
         // Success without invitation
         toast.success('Showroom Created', {

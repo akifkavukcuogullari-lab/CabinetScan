@@ -11,12 +11,14 @@ import {
   Download,
   Smartphone,
   Loader2,
-  AlertCircle,
-  Eye
+  Eye,
+  Monitor,
+  ExternalLink
 } from 'lucide-react'
 
 interface ModelViewerProps {
-  usdzUrl: string
+  glbUrl?: string        // GLB for web 3D viewing
+  usdzUrl?: string       // USDZ for iOS AR Quick Look
   previewImageUrl?: string
   alt?: string
   className?: string
@@ -28,6 +30,7 @@ interface ModelViewerProps {
 }
 
 export function ModelViewer({
+  glbUrl,
   usdzUrl,
   previewImageUrl,
   alt = '3D Room Scan',
@@ -44,10 +47,23 @@ export function ModelViewer({
   const [hasError, setHasError] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isScriptLoaded, setIsScriptLoaded] = useState(false)
-  const [supportsAR, setSupportsAR] = useState(false)
+  const [isIOS, setIsIOS] = useState(false)
 
-  // Load model-viewer script
+  // Detect iOS device
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+      setIsIOS(iOS)
+    }
+  }, [])
+
+  // Load model-viewer script when we have GLB
+  useEffect(() => {
+    if (!glbUrl) {
+      setIsLoading(false)
+      return
+    }
+
     const existingScript = document.querySelector('script[src*="model-viewer"]')
     if (existingScript) {
       setIsScriptLoaded(true)
@@ -63,21 +79,7 @@ export function ModelViewer({
       setHasError(true)
     }
     document.head.appendChild(script)
-
-    return () => {
-      // Keep script loaded for future use
-    }
-  }, [])
-
-  // Check AR support
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // Check for WebXR or iOS AR Quick Look support
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-      const hasWebXR = 'xr' in navigator
-      setSupportsAR(isIOS || hasWebXR)
-    }
-  }, [])
+  }, [glbUrl])
 
   // Handle model-viewer events
   useEffect(() => {
@@ -96,14 +98,22 @@ export function ModelViewer({
       onError?.()
     }
 
+    // Set a timeout to detect if model fails to load
+    const timeoutId = setTimeout(() => {
+      if (isLoading) {
+        setIsLoading(false)
+      }
+    }, 15000) // 15 second timeout
+
     viewer.addEventListener('load', handleLoad)
     viewer.addEventListener('error', handleError)
 
     return () => {
+      clearTimeout(timeoutId)
       viewer.removeEventListener('load', handleLoad)
       viewer.removeEventListener('error', handleError)
     }
-  }, [isScriptLoaded, onError])
+  }, [isScriptLoaded, isLoading, onError])
 
   // Handle fullscreen toggle
   const toggleFullscreen = async () => {
@@ -145,47 +155,95 @@ export function ModelViewer({
     }
   }
 
-  // Render error state
-  if (hasError && !isLoading) {
+  const viewerHeight = compact ? 'h-64' : 'h-[400px]'
+
+  // If no GLB available, show fallback with preview image and download
+  if (!glbUrl) {
     return (
-      <Card className={className}>
+      <Card className={className} ref={containerRef}>
         {showTitle && (
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Box className="h-5 w-5" />
-              {title}
-            </CardTitle>
-            <CardDescription>{description}</CardDescription>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Box className="h-5 w-5 text-blue-600" />
+                  {title}
+                </CardTitle>
+                <CardDescription>{description}</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                {usdzUrl && (
+                  <a href={usdzUrl} download>
+                    <Button variant="outline" size="sm" title="Download USDZ file">
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </a>
+                )}
+              </div>
+            </div>
           </CardHeader>
         )}
-        <CardContent>
-          <div className={`flex flex-col items-center justify-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-200 ${compact ? 'py-8' : 'py-16'}`}>
-            <AlertCircle className="h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-700 mb-2">Unable to Load 3D Model</h3>
-            <p className="text-gray-500 text-sm text-center max-w-sm mb-4">
-              The 3D model could not be displayed. You can download the file to view it in a compatible viewer.
-            </p>
-            <a
-              href={usdzUrl}
-              download
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Download className="h-4 w-4" />
-              Download USDZ File
-            </a>
+        <CardContent className={showTitle ? 'pt-2' : ''}>
+          <div className={`relative ${viewerHeight} w-full rounded-lg overflow-hidden bg-gradient-to-b from-gray-100 to-gray-200`}>
+            {/* Preview image */}
+            {previewImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={previewImageUrl}
+                alt={alt}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+                <Box className="h-20 w-20 text-blue-300" />
+              </div>
+            )}
+
+            {/* Overlay with info and actions */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent flex flex-col justify-end p-6">
+              <div className="text-white space-y-4">
+                <div className="flex items-center gap-2 text-sm opacity-90">
+                  <Monitor className="h-4 w-4" />
+                  <span>3D model will be available after next scan</span>
+                </div>
+
+                {usdzUrl && (
+                  <div className="flex flex-wrap gap-3">
+                    <a href={usdzUrl} download className="inline-block">
+                      <Button
+                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+                        size="sm"
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download USDZ
+                      </Button>
+                    </a>
+
+                    <a href={usdzUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
+                      <Button
+                        variant="outline"
+                        className="bg-white/10 hover:bg-white/20 text-white border-white/30"
+                        size="sm"
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Open in AR (iOS)
+                      </Button>
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
     )
   }
 
-  const viewerHeight = compact ? 'h-64' : 'h-[500px]'
-
-  // Create model-viewer element using dangerouslySetInnerHTML since it's a custom element
+  // GLB is available - show full 3D viewer
   const modelViewerHTML = isScriptLoaded ? `
     <model-viewer
-      src="${usdzUrl}"
-      ios-src="${usdzUrl}"
+      src="${glbUrl}"
+      ${usdzUrl ? `ios-src="${usdzUrl}"` : ''}
       ${previewImageUrl ? `poster="${previewImageUrl}"` : ''}
       alt="${alt}"
       camera-controls
@@ -194,7 +252,7 @@ export function ModelViewer({
       shadow-intensity="1"
       shadow-softness="0.5"
       exposure="1"
-      ${supportsAR ? 'ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed"' : ''}
+      ${isIOS && usdzUrl ? 'ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed"' : ''}
       environment-image="neutral"
       loading="eager"
       interaction-prompt="auto"
@@ -243,11 +301,13 @@ export function ModelViewer({
                   <Maximize2 className="h-4 w-4" />
                 )}
               </Button>
-              <a href={usdzUrl} download>
-                <Button variant="outline" size="sm" title="Download USDZ file">
-                  <Download className="h-4 w-4" />
-                </Button>
-              </a>
+              {usdzUrl && (
+                <a href={usdzUrl} download>
+                  <Button variant="outline" size="sm" title="Download USDZ file">
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </a>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -276,8 +336,8 @@ export function ModelViewer({
             />
           )}
 
-          {/* AR button overlay */}
-          {supportsAR && !isLoading && !hasError && (
+          {/* AR button overlay (iOS only) */}
+          {isIOS && usdzUrl && !isLoading && !hasError && (
             <div className="absolute bottom-4 right-4 z-20">
               <Button
                 size="sm"
@@ -310,13 +370,15 @@ export function ModelViewer({
 
 // Compact viewer for list/card contexts
 export function ModelViewerCompact({
+  glbUrl,
   usdzUrl,
   previewImageUrl,
   alt = '3D Room Scan',
   className = '',
   onClick
 }: {
-  usdzUrl: string
+  glbUrl?: string
+  usdzUrl?: string
   previewImageUrl?: string
   alt?: string
   className?: string
@@ -325,7 +387,9 @@ export function ModelViewerCompact({
   const [isHovered, setIsHovered] = useState(false)
   const [hasError, setHasError] = useState(false)
 
-  if (hasError || !usdzUrl) {
+  const hasModel = glbUrl || usdzUrl
+
+  if (hasError || !hasModel) {
     return (
       <div
         className={`relative h-32 w-full rounded-lg bg-gray-100 flex items-center justify-center ${className}`}

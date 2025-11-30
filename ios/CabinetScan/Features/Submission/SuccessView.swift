@@ -6,6 +6,17 @@ struct SuccessView: View {
 
     var body: some View {
         VStack(spacing: 32) {
+            // Showroom logo at top
+            if let config = appState.showroomConfig {
+                ShowroomLogo(
+                    logoUrl: config.branding.logoUrl,
+                    logoDarkUrl: config.branding.logoDarkUrl,
+                    maxHeight: 50,
+                    maxWidth: 160
+                )
+                .padding(.top, 20)
+            }
+
             Spacer()
 
             // Success animation

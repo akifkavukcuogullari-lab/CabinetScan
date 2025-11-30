@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button'
 import { FolderKanban, Rotate3d, Layers, Ruler, User, Calendar, ChevronRight, Box } from 'lucide-react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { FloorPlanThumbnail } from '@/components/floor-plan/FloorPlanThumbnail'
 
 export default async function ProjectsPage() {
   const supabase = await createClient()
@@ -68,8 +67,8 @@ export default async function ProjectsPage() {
             // Extract measurement data for preview
             const measurement = project.project_measurements?.[0]
             const hasUsdzFile = measurement?.usdz_file_url
-            const hasFloorPlan = measurement?.measurements?.room
-            const hasScanData = hasUsdzFile || hasFloorPlan
+            const hasFloorPlanImage = measurement?.preview_image_url
+            const hasScanData = hasUsdzFile || hasFloorPlanImage
 
             return (
               <Link
@@ -80,14 +79,20 @@ export default async function ProjectsPage() {
                 <Card className="h-full overflow-hidden hover:shadow-lg transition-all duration-200 hover:border-blue-400">
                   {/* Visual Preview Section */}
                   <div className="relative h-40 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
-                    {hasUsdzFile && measurement.preview_image_url ? (
-                      // 3D model preview image
+                    {hasUsdzFile ? (
+                      // 3D model preview - use floor plan image as preview
                       <div className="relative w-full h-full">
-                        <img
-                          src={measurement.preview_image_url}
-                          alt={`${project.project_name} scan preview`}
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
+                        {hasFloorPlanImage ? (
+                          <img
+                            src={measurement.preview_image_url}
+                            alt={`${project.project_name} scan preview`}
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center h-full bg-blue-50">
+                            <Rotate3d className="h-12 w-12 text-blue-300" />
+                          </div>
+                        )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                         {/* 3D badge */}
                         <div className="absolute top-3 right-3 bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1">
@@ -95,14 +100,15 @@ export default async function ProjectsPage() {
                           3D Scan
                         </div>
                       </div>
-                    ) : hasFloorPlan ? (
-                      // Floor plan thumbnail
-                      <div className="relative w-full h-full p-2">
-                        <FloorPlanThumbnail
-                          measurements={measurement.measurements}
-                          className="h-full"
-                          showStats={false}
+                    ) : hasFloorPlanImage ? (
+                      // 2D floor plan image
+                      <div className="relative w-full h-full">
+                        <img
+                          src={measurement.preview_image_url}
+                          alt={`${project.project_name} floor plan`}
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                         />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                         {/* 2D badge */}
                         <div className="absolute top-3 right-3 bg-gray-700 text-white text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1">
                           <Layers className="h-3 w-3" />

@@ -25,6 +25,8 @@ export async function sendEmail(options: EmailOptions): Promise<{ success: boole
 
   const fromEmail = options.from || Deno.env.get('EMAIL_FROM') || 'NextLean Scan <noreply@nextleanscan.com>'
 
+  console.log('Sending email via Resend:', { to: options.to, from: fromEmail, subject: options.subject })
+
   try {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -42,15 +44,18 @@ export async function sendEmail(options: EmailOptions): Promise<{ success: boole
 
     const data: ResendResponse = await response.json()
 
+    console.log('Resend API response:', { status: response.status, data })
+
     if (!response.ok || data.error) {
-      console.error('Resend error:', data.error)
-      return { success: false, error: data.error?.message || 'Failed to send email' }
+      console.error('Resend error:', JSON.stringify(data))
+      return { success: false, error: data.error?.message || `Resend API error (${response.status})` }
     }
 
+    console.log('Email sent successfully, ID:', data.id)
     return { success: true }
   } catch (error) {
     console.error('Email send error:', error)
-    return { success: false, error: 'Failed to send email' }
+    return { success: false, error: `Failed to send email: ${error}` }
   }
 }
 

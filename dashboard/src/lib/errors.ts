@@ -1,5 +1,5 @@
 /**
- * Comprehensive error handling utilities for NextLean Scan Dashboard
+ * Comprehensive error handling utilities for Nextlyn Scan Dashboard
  * Transforms technical database/API errors into user-friendly messages
  */
 

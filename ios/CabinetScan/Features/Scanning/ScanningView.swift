@@ -1,17 +1,18 @@
 import SwiftUI
 import RoomPlan
+import simd
 
 struct ScanningView: View {
     @EnvironmentObject var appState: AppState
     @State private var isScanning = false
-    @State private var scanComplete = false
+    @State private var isProcessing = false
+    @State private var processingStatus = "Processing scan..."
     @State private var capturedRoom: CapturedRoom?
-    @State private var isProcessingScan = false
-    @State private var processingMessage = "Processing scan..."
+    @State private var rotationAngle: Double = 0
 
     var body: some View {
         NavigationStack {
-            ZStack {
+            VStack(spacing: 24) {
                 if isScanning {
                     RoomCaptureViewRepresentable(
                         isScanning: $isScanning,
@@ -19,6 +20,51 @@ struct ScanningView: View {
                         onComplete: handleScanComplete
                     )
                     .ignoresSafeArea()
+                } else if isProcessing {
+                    // Processing view - shown after scan, before navigation
+                    VStack(spacing: 32) {
+                        Spacer()
+
+                        ZStack {
+                            Circle()
+                                .stroke(Color.blue.opacity(0.2), lineWidth: 8)
+                                .frame(width: 120, height: 120)
+
+                            Circle()
+                                .trim(from: 0, to: 0.7)
+                                .stroke(Color.blue, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                                .frame(width: 120, height: 120)
+                                .rotationEffect(.degrees(rotationAngle))
+
+                            Image(systemName: "cube.transparent")
+                                .font(.system(size: 40))
+                                .foregroundStyle(.blue)
+                        }
+                        .onAppear {
+                            withAnimation(.linear(duration: 1).repeatForever(autoreverses: false)) {
+                                rotationAngle = 360
+                            }
+                        }
+
+                        VStack(spacing: 12) {
+                            Text("Processing Your Scan")
+                                .font(.title2)
+                                .fontWeight(.bold)
+
+                            Text(processingStatus)
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                                .animation(.easeInOut(duration: 0.3), value: processingStatus)
+                        }
+
+                        Text("This may take a moment...")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+
+                        Spacer()
+                    }
                 } else {
                     // Pre-scan instructions
                     VStack(spacing: 32) {
@@ -63,32 +109,12 @@ struct ScanningView: View {
                         .padding(.bottom, 32)
                     }
                 }
-
-                // Processing overlay
-                if isProcessingScan {
-                    Color.black.opacity(0.6)
-                        .ignoresSafeArea()
-
-                    VStack(spacing: 20) {
-                        ProgressView()
-                            .scaleEffect(1.5)
-                            .tint(.white)
-
-                        Text(processingMessage)
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(40)
-                    .background(Color(.systemGray5).opacity(0.9))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                }
             }
-            .navigationTitle(isScanning ? "Scanning" : "Room Scan")
+            .navigationTitle(isScanning ? "Scanning" : (isProcessing ? "Processing" : "Room Scan"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    if !isScanning {
+                    if !isScanning && !isProcessing {
                         Button("Back") {
                             appState.currentScreen = .customerInfo
                         }
@@ -108,38 +134,96 @@ struct ScanningView: View {
 
     private func handleScanComplete(room: CapturedRoom) {
         capturedRoom = room
+        isProcessing = true
+        processingStatus = "Analyzing room data..."
 
-        // Process scan asynchronously to handle USDZ export and upload
+        // Process scan data asynchronously
         Task {
             await processScanData(room: room)
         }
     }
 
     private func processScanData(room: CapturedRoom) async {
-        isProcessingScan = true
-        processingMessage = "Processing scan..."
+        guard let showroomCode = appState.showroomConfig?.showroomCode else {
+            print("No showroom code available")
+            let measurements = extractMeasurements(from: room, floorPlanUrl: nil, usdzUrl: nil, glbUrl: nil)
+            await MainActor.run {
+                isProcessing = false
+            }
+            appState.setMeasurementData(measurements)
+            return
+        }
 
-        // Export and upload USDZ file
-        processingMessage = "Exporting 3D model..."
-        let usdzUrl = await exportAndUploadUSDZ(room)
+        // Generate floor plan image
+        await MainActor.run {
+            processingStatus = "Generating floor plan..."
+        }
+        print("Generating floor plan image...")
+        var floorPlanUrl: String? = nil
+        if let floorPlanImage = FloorPlanRenderer.renderFloorPlan(from: room, size: CGSize(width: 1200, height: 1200)) {
+            floorPlanUrl = await uploadFloorPlanImage(floorPlanImage, showroomCode: showroomCode)
+        }
 
-        // Extract measurements with the USDZ URL
-        processingMessage = "Extracting measurements..."
-        let measurements = extractMeasurements(from: room, usdzUrl: usdzUrl)
+        // Export and upload USDZ
+        await MainActor.run {
+            processingStatus = "Creating 3D model..."
+        }
+        print("Exporting USDZ model...")
+        let (usdzUrl, localUsdzUrl) = await exportAndUploadUSDZ(room, showroomCode: showroomCode)
 
-        isProcessingScan = false
+        // Convert USDZ to GLB and upload
+        var glbUrl: String? = nil
+        if let localUsdzUrl = localUsdzUrl {
+            await MainActor.run {
+                processingStatus = "Optimizing for web viewing..."
+            }
+            print("Converting to GLB for web viewing...")
+            glbUrl = await convertAndUploadGLB(usdzUrl: localUsdzUrl, showroomCode: showroomCode)
+        }
+
+        // Extract measurements with URLs
+        await MainActor.run {
+            processingStatus = "Finalizing measurements..."
+        }
+        let measurements = extractMeasurements(from: room, floorPlanUrl: floorPlanUrl, usdzUrl: usdzUrl, glbUrl: glbUrl)
+
+        await MainActor.run {
+            isProcessing = false
+        }
         appState.setMeasurementData(measurements)
+    }
+
+    // MARK: - Floor Plan Image Upload
+
+    private func uploadFloorPlanImage(_ image: UIImage, showroomCode: String) async -> String? {
+        guard let imageData = image.pngData() else {
+            print("Failed to convert floor plan image to PNG data")
+            return nil
+        }
+
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let randomId = UUID().uuidString.prefix(8)
+        let filename = "floor_plan_\(timestamp)_\(randomId).png"
+        let storagePath = "\(showroomCode.lowercased())/\(filename)"
+
+        do {
+            let uploadedUrl = try await APIService.shared.uploadFile(
+                bucket: "scans",
+                path: storagePath,
+                data: imageData,
+                contentType: "image/png"
+            )
+            print("Floor plan image uploaded: \(uploadedUrl)")
+            return uploadedUrl
+        } catch {
+            print("Failed to upload floor plan image: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     // MARK: - USDZ Export and Upload
 
-    private func exportAndUploadUSDZ(_ room: CapturedRoom) async -> String? {
-        guard let showroomCode = appState.showroomConfig?.showroomCode else {
-            print("No showroom code available for USDZ upload")
-            return nil
-        }
-
-        // Create temp file URL for USDZ export
+    private func exportAndUploadUSDZ(_ room: CapturedRoom, showroomCode: String) async -> (uploadedUrl: String?, localUrl: URL?) {
         let tempDir = FileManager.default.temporaryDirectory
         let timestamp = Int(Date().timeIntervalSince1970)
         let randomId = UUID().uuidString.prefix(8)
@@ -147,17 +231,11 @@ struct ScanningView: View {
         let tempFileURL = tempDir.appendingPathComponent(usdzFilename)
 
         do {
-            // Export room to USDZ file
-            processingMessage = "Exporting 3D model..."
             try await room.export(to: tempFileURL)
-
-            // Read the exported file data
             let fileData = try Data(contentsOf: tempFileURL)
             let fileSizeMB = Double(fileData.count) / (1024 * 1024)
             print("USDZ file exported: \(String(format: "%.2f", fileSizeMB)) MB")
 
-            // Upload to Supabase storage
-            processingMessage = "Uploading 3D model..."
             let storagePath = "\(showroomCode.lowercased())/\(usdzFilename)"
             let uploadedUrl = try await APIService.shared.uploadFile(
                 bucket: "scans",
@@ -166,23 +244,60 @@ struct ScanningView: View {
                 contentType: "model/vnd.usdz+zip"
             )
 
-            print("USDZ uploaded successfully: \(uploadedUrl)")
-
-            // Clean up temp file
+            print("USDZ uploaded: \(uploadedUrl)")
+            // Return both the uploaded URL and local file URL (for GLB conversion)
+            return (uploadedUrl, tempFileURL)
+        } catch {
+            print("Error exporting/uploading USDZ: \(error.localizedDescription)")
             try? FileManager.default.removeItem(at: tempFileURL)
+            return (nil, nil)
+        }
+    }
+
+    // MARK: - GLB Conversion and Upload
+
+    private func convertAndUploadGLB(usdzUrl: URL, showroomCode: String) async -> String? {
+        // Convert USDZ to GLB using GLBExporter
+        guard let glbUrl = await GLBExporter.convertUSDZToGLB(usdzURL: usdzUrl) else {
+            print("Failed to convert USDZ to GLB")
+            // Clean up USDZ temp file
+            try? FileManager.default.removeItem(at: usdzUrl)
+            return nil
+        }
+
+        do {
+            let fileData = try Data(contentsOf: glbUrl)
+            let fileSizeMB = Double(fileData.count) / (1024 * 1024)
+            print("GLB file created: \(String(format: "%.2f", fileSizeMB)) MB")
+
+            let glbFilename = glbUrl.lastPathComponent
+            let storagePath = "\(showroomCode.lowercased())/\(glbFilename)"
+            let contentType = GLBExporter.contentType(for: glbUrl)
+
+            let uploadedUrl = try await APIService.shared.uploadFile(
+                bucket: "scans",
+                path: storagePath,
+                data: fileData,
+                contentType: contentType
+            )
+
+            print("GLB uploaded: \(uploadedUrl)")
+
+            // Clean up temp files
+            try? FileManager.default.removeItem(at: glbUrl)
+            try? FileManager.default.removeItem(at: usdzUrl)
 
             return uploadedUrl
         } catch {
-            print("Error exporting/uploading USDZ: \(error.localizedDescription)")
-
-            // Clean up temp file on error
-            try? FileManager.default.removeItem(at: tempFileURL)
-
+            print("Error uploading GLB: \(error.localizedDescription)")
+            // Clean up temp files
+            try? FileManager.default.removeItem(at: glbUrl)
+            try? FileManager.default.removeItem(at: usdzUrl)
             return nil
         }
     }
 
-    private func extractMeasurements(from room: CapturedRoom, usdzUrl: String? = nil) -> MeasurementData {
+    private func extractMeasurements(from room: CapturedRoom, floorPlanUrl: String?, usdzUrl: String?, glbUrl: String?) -> MeasurementData {
         // Calculate total linear feet from walls
         var totalLinearFt: Double = 0
         var wallCount = 0
@@ -217,7 +332,8 @@ struct ScanningView: View {
             doorCount: room.doors.count,
             measurements: detailedMeasurements,
             usdzFileUrl: usdzUrl,
-            previewImageUrl: nil
+            glbFileUrl: glbUrl,
+            previewImageUrl: floorPlanUrl
         )
     }
 
@@ -247,10 +363,10 @@ struct ScanningView: View {
             ceilingHeight = firstWall.dimensions.y
         }
 
-        // WALLS - Extract detailed wall data
+        // WALLS - Extract detailed wall data with proper rotation
         var wallsData: [[String: Any]] = []
         for (index, wall) in room.walls.enumerated() {
-            let position = wall.transform.columns.3
+            let transform = wall.transform
             let dimensions = wall.dimensions
 
             // Convert meters to feet
@@ -258,16 +374,27 @@ struct ScanningView: View {
             let heightFt = Double(dimensions.y) * 3.28084
             let thicknessFt = Double(dimensions.z) * 3.28084
 
-            // Calculate wall endpoints for 2D view
-            let centerX = Double(position.x)
-            let centerZ = Double(position.z)
-            let halfWidth = Double(dimensions.x) / 2.0
+            // Calculate wall endpoints using the full transform matrix
+            // Wall extends along local X axis, so endpoints are at +/- width/2 in local coords
+            let halfWidth = dimensions.x / 2.0
 
-            // Update room bounds
-            minX = min(minX, position.x - dimensions.x / 2)
-            maxX = max(maxX, position.x + dimensions.x / 2)
-            minZ = min(minZ, position.z - dimensions.z / 2)
-            maxZ = max(maxZ, position.z + dimensions.z / 2)
+            // Local start point (-halfWidth, 0, 0) transformed to world coords
+            let startLocal = SIMD4<Float>(-halfWidth, 0, 0, 1)
+            let startWorld = simd_mul(transform, startLocal)
+
+            // Local end point (+halfWidth, 0, 0) transformed to world coords
+            let endLocal = SIMD4<Float>(halfWidth, 0, 0, 1)
+            let endWorld = simd_mul(transform, endLocal)
+
+            // Center position
+            let centerX = Double(transform.columns.3.x)
+            let centerZ = Double(transform.columns.3.z)
+
+            // Update room bounds using actual wall endpoints
+            minX = min(minX, min(startWorld.x, endWorld.x))
+            maxX = max(maxX, max(startWorld.x, endWorld.x))
+            minZ = min(minZ, min(startWorld.z, endWorld.z))
+            maxZ = max(maxZ, max(startWorld.z, endWorld.z))
 
             let wallData: [String: Any] = [
                 "id": "wall_\(index + 1)",
@@ -276,12 +403,12 @@ struct ScanningView: View {
                     "z": centerZ * 3.28084
                 ],
                 "start": [
-                    "x": (centerX - halfWidth) * 3.28084,
-                    "z": centerZ * 3.28084
+                    "x": Double(startWorld.x) * 3.28084,
+                    "z": Double(startWorld.z) * 3.28084
                 ],
                 "end": [
-                    "x": (centerX + halfWidth) * 3.28084,
-                    "z": centerZ * 3.28084
+                    "x": Double(endWorld.x) * 3.28084,
+                    "z": Double(endWorld.z) * 3.28084
                 ],
                 "width_ft": widthFt,
                 "height_ft": heightFt,
@@ -339,22 +466,44 @@ struct ScanningView: View {
             windowsData.append(windowData)
         }
 
-        // OBJECTS - Extract cabinet and appliance data
+        // OBJECTS - Extract cabinet, appliance, and fixture data with rotation
         var upperCabinets: [[String: Any]] = []
         var lowerCabinets: [[String: Any]] = []
         var appliances: [[String: Any]] = []
+        var sinks: [[String: Any]] = []
 
         var upperIndex = 1
         var lowerIndex = 1
         var applianceIndex = 1
+        var sinkIndex = 1
 
         for object in room.objects {
-            let position = object.transform.columns.3
+            let transform = object.transform
+            let position = transform.columns.3
             let dimensions = object.dimensions
 
             let widthFt = Double(dimensions.x) * 3.28084
             let heightFt = Double(dimensions.y) * 3.28084
             let depthFt = Double(dimensions.z) * 3.28084
+
+            // Calculate corner points for accurate 2D rendering
+            let halfWidth = dimensions.x / 2.0
+            let halfDepth = dimensions.z / 2.0
+
+            // Four corners in local space, transformed to world space
+            let corners = [
+                SIMD4<Float>(-halfWidth, 0, -halfDepth, 1),
+                SIMD4<Float>(halfWidth, 0, -halfDepth, 1),
+                SIMD4<Float>(halfWidth, 0, halfDepth, 1),
+                SIMD4<Float>(-halfWidth, 0, halfDepth, 1)
+            ].map { simd_mul(transform, $0) }
+
+            let cornersData: [[String: Double]] = corners.map { corner in
+                [
+                    "x": Double(corner.x) * 3.28084,
+                    "z": Double(corner.z) * 3.28084
+                ]
+            }
 
             let baseObjectData: [String: Any] = [
                 "position": [
@@ -365,6 +514,7 @@ struct ScanningView: View {
                 "width_ft": widthFt,
                 "height_ft": heightFt,
                 "depth_ft": depthFt,
+                "corners": cornersData,
                 "width_inches": formatFeetInches(widthFt),
                 "height_inches": formatFeetInches(heightFt),
                 "depth_inches": formatFeetInches(depthFt)
@@ -374,7 +524,8 @@ struct ScanningView: View {
             switch object.category {
             case .storage:
                 // Determine if upper or lower cabinet based on height from floor
-                if position.y > 1.2 { // Upper cabinets typically > 4 feet from floor
+                // Upper cabinets typically mounted at 1.2m (4 feet) or higher
+                if position.y >= 1.2 {
                     var cabinetData = baseObjectData
                     cabinetData["id"] = "upper_\(upperIndex)"
                     cabinetData["type"] = "upper_cabinet"
@@ -387,6 +538,12 @@ struct ScanningView: View {
                     lowerCabinets.append(cabinetData)
                     lowerIndex += 1
                 }
+            case .sink:
+                var sinkData = baseObjectData
+                sinkData["id"] = "sink_\(sinkIndex)"
+                sinkData["type"] = "sink"
+                sinks.append(sinkData)
+                sinkIndex += 1
             case .refrigerator, .stove, .oven, .washerDryer, .dishwasher:
                 var applianceData = baseObjectData
                 applianceData["id"] = "appliance_\(applianceIndex)"
@@ -452,7 +609,7 @@ struct ScanningView: View {
                 guard !processedCabinets.contains(index) else { continue }
 
                 // Find all cabinets in the same run (same Z position, adjacent X positions)
-                var cabinetRun = [cabinet]
+                _ = [cabinet]
                 processedCabinets.insert(index)
 
                 // Simple approach: assume each lower cabinet has a countertop
@@ -494,6 +651,7 @@ struct ScanningView: View {
             "lower": lowerCabinets
         ]
         measurements["appliances"] = appliances
+        measurements["sinks"] = sinks
         measurements["countertops"] = countertopsData
         measurements["countertop_summary"] = [
             "total_area_sqft": totalCountertopArea,
@@ -501,6 +659,15 @@ struct ScanningView: View {
                 sum + ((ct["linear_ft"] as? Double) ?? 0)
             },
             "count": countertopsData.count
+        ]
+        measurements["summary"] = [
+            "upper_cabinet_count": upperCabinets.count,
+            "lower_cabinet_count": lowerCabinets.count,
+            "appliance_count": appliances.count,
+            "sink_count": sinks.count,
+            "door_count": doorsData.count,
+            "window_count": windowsData.count,
+            "wall_count": wallsData.count
         ]
 
         // Convert to AnyCodable

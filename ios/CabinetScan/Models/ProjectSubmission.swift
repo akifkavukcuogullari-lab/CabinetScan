@@ -22,9 +22,13 @@ struct CustomerInfo: Codable {
     let lastName: String
     let email: String
     let phone: String?
+    let address: String?
+    let city: String?
+    let state: String?
+    let zipcode: String?
 
     enum CodingKeys: String, CodingKey {
-        case email, phone
+        case email, phone, address, city, state, zipcode
         case firstName = "first_name"
         case lastName = "last_name"
     }
@@ -48,6 +52,7 @@ struct MeasurementData: Codable {
     let doorCount: Int?
     let measurements: [String: AnyCodable]?
     let usdzFileUrl: String?
+    let glbFileUrl: String?
     let previewImageUrl: String?
 
     enum CodingKeys: String, CodingKey {
@@ -61,6 +66,7 @@ struct MeasurementData: Codable {
         case windowCount = "window_count"
         case doorCount = "door_count"
         case usdzFileUrl = "usdz_file_url"
+        case glbFileUrl = "glb_file_url"
         case previewImageUrl = "preview_image_url"
     }
 }

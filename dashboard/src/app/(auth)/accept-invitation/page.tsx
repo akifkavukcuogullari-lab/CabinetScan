@@ -239,7 +239,7 @@ function AcceptInvitationContent() {
             Welcome to {invitation?.showroom_name}
           </CardTitle>
           <CardDescription>
-            Set up your account to manage this showroom on NextLean Scan
+            Set up your account to manage this showroom on Nextlyn Scan
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

@@ -12,15 +12,44 @@ struct OnboardingView: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                // Logo placeholder
-                Image(systemName: "cube.transparent")
-                    .font(.system(size: 80))
-                    .foregroundStyle(.blue)
+                // Nextlyn Scan Logo
+                VStack(spacing: 16) {
+                    // Try to use Logo asset, otherwise show app icon style
+                    if let uiImage = UIImage(named: "Logo") {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: 240, maxHeight: 100)
+                    } else {
+                        // Fallback: App branding with icon
+                        VStack(spacing: 12) {
+                            Image(systemName: "cube.transparent.fill")
+                                .font(.system(size: 60))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [.blue, .cyan],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+
+                            Text("Nextlyn Scan")
+                                .font(.system(size: 32, weight: .bold, design: .rounded))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [.blue, .cyan],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                        }
+                    }
+                }
 
                 VStack(spacing: 8) {
                     Text("Welcome")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+                        .font(.title)
+                        .fontWeight(.semibold)
 
                     Text("Enter your showroom code to get started")
                         .font(.body)

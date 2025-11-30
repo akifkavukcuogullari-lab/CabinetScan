@@ -7,9 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2A9758C72EDC01B700146970 /* ShowroomLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9758C62EDC01B700146970 /* ShowroomLogo.swift */; };
 		APP001 /* CabinetScanApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC001 /* CabinetScanApp.swift */; };
 		APP002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC002 /* ContentView.swift */; };
 		APP003 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC003 /* Config.swift */; };
+		ASSETS001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ASSETS_REF /* Assets.xcassets */; };
 		FEA001 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC030 /* OnboardingView.swift */; };
 		FEA002 /* CustomerInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC031 /* CustomerInfoView.swift */; };
 		FEA003 /* ScanningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC032 /* ScanningView.swift */; };
@@ -24,6 +26,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		2A9758C62EDC01B700146970 /* ShowroomLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowroomLogo.swift; sourceTree = "<group>"; };
+		ASSETS_REF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		INFO001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		PROD001 /* CabinetScan.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CabinetScan.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		SRC001 /* CabinetScanApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CabinetScanApp.swift; sourceTree = "<group>"; };
@@ -56,12 +60,14 @@
 		GRP001 /* CabinetScan */ = {
 			isa = PBXGroup;
 			children = (
+				2A9758C62EDC01B700146970 /* ShowroomLogo.swift */,
 				GRP_APP /* App */,
 				GRP_CORE /* Core */,
 				GRP_FEAT /* Features */,
 				GRP_MOD /* Models */,
 				GRP_SVC /* Services */,
 				GRP_RES /* Resources */,
+				ASSETS_REF /* Assets.xcassets */,
 				SRC003 /* Config.swift */,
 				INFO001 /* Info.plist */,
 			);
@@ -261,6 +267,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ASSETS001 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -284,6 +291,7 @@
 				FEA004 /* SelectionView.swift in Sources */,
 				FEA005 /* ReviewView.swift in Sources */,
 				FEA006 /* SubmissionView.swift in Sources */,
+				2A9758C72EDC01B700146970 /* ShowroomLogo.swift in Sources */,
 				FEA007 /* SuccessView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -420,7 +428,7 @@
 				DEVELOPMENT_TEAM = 3AKYN8H497;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CabinetScan/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Scan";
+				INFOPLIST_KEY_CFBundleDisplayName = "Nextlyn Scan";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is required to scan your room using LiDAR technology";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -453,7 +461,7 @@
 				DEVELOPMENT_TEAM = 3AKYN8H497;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CabinetScan/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Scan";
+				INFOPLIST_KEY_CFBundleDisplayName = "Nextlyn Scan";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is required to scan your room using LiDAR technology";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

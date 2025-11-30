@@ -6,34 +6,57 @@ struct CustomerInfoView: View {
     @State private var lastName = ""
     @State private var email = ""
     @State private var phone = ""
+    @State private var address = ""
+    @State private var city = ""
+    @State private var state = ""
+    @State private var zipcode = ""
     @FocusState private var focusedField: Field?
 
     enum Field {
-        case firstName, lastName, email, phone
+        case firstName, lastName, email, phone, address, city, state, zipcode
     }
 
     private var isFormValid: Bool {
         !firstName.trimmingCharacters(in: .whitespaces).isEmpty &&
         !lastName.trimmingCharacters(in: .whitespaces).isEmpty &&
-        isValidEmail(email)
+        isValidEmail(email) &&
+        !phone.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !address.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !city.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !state.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !zipcode.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    if let config = appState.showroomConfig {
-                        HStack {
-                            Image(systemName: "building.2")
-                                .foregroundStyle(.blue)
+                // Large showroom logo at top - full width
+                if let config = appState.showroomConfig {
+                    Section {
+                        VStack(spacing: 12) {
+                            GeometryReader { geometry in
+                                ShowroomLogo(
+                                    logoUrl: config.branding.logoUrl,
+                                    logoDarkUrl: config.branding.logoDarkUrl,
+                                    maxHeight: 120,
+                                    maxWidth: geometry.size.width
+                                )
+                                .frame(maxWidth: .infinity)
+                            }
+                            .frame(height: 120)
+
                             Text(config.name)
-                                .fontWeight(.medium)
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
                         }
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 24, leading: 0, bottom: 16, trailing: 0))
                     }
-                } header: {
-                    Text("Showroom")
                 }
 
+                // Contact information section
                 Section {
                     TextField("First Name", text: $firstName)
                         .textContentType(.givenName)
@@ -53,36 +76,69 @@ struct CustomerInfoView: View {
                         .focused($focusedField, equals: .email)
                         .submitLabel(.next)
 
-                    TextField("Phone (Optional)", text: $phone)
+                    TextField("Phone", text: $phone)
                         .textContentType(.telephoneNumber)
                         .keyboardType(.phonePad)
                         .focused($focusedField, equals: .phone)
                 } header: {
-                    Text("Your Information")
-                } footer: {
-                    Text("We'll use this to send you the project details")
+                    Text("Contact Information")
                 }
 
+                // Address section
+                Section {
+                    TextField("Street Address", text: $address)
+                        .textContentType(.streetAddressLine1)
+                        .focused($focusedField, equals: .address)
+                        .submitLabel(.next)
+
+                    TextField("City", text: $city)
+                        .textContentType(.addressCity)
+                        .focused($focusedField, equals: .city)
+                        .submitLabel(.next)
+
+                    HStack(spacing: 12) {
+                        TextField("State", text: $state)
+                            .textContentType(.addressState)
+                            .focused($focusedField, equals: .state)
+                            .submitLabel(.next)
+
+                        TextField("Zip Code", text: $zipcode)
+                            .textContentType(.postalCode)
+                            .keyboardType(.numberPad)
+                            .focused($focusedField, equals: .zipcode)
+                    }
+                } header: {
+                    Text("Address")
+                } footer: {
+                    Text("We'll use this information to contact you about your project")
+                }
+
+                // Start Scanning button
                 Section {
                     Button {
                         saveAndContinue()
                     } label: {
-                        HStack {
-                            Spacer()
-                            Text("Start Scanning")
-                                .fontWeight(.semibold)
-                            Spacer()
-                        }
+                        Text("Start Scanning")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
                     }
+                    .buttonStyle(.borderedProminent)
                     .disabled(!isFormValid)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 }
             }
-            .navigationTitle("Your Details")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Back") {
+                    Button {
                         appState.currentScreen = .onboarding
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                            Text("Back")
+                        }
                     }
                 }
             }
@@ -95,6 +151,14 @@ struct CustomerInfoView: View {
                 case .email:
                     focusedField = .phone
                 case .phone:
+                    focusedField = .address
+                case .address:
+                    focusedField = .city
+                case .city:
+                    focusedField = .state
+                case .state:
+                    focusedField = .zipcode
+                case .zipcode:
                     if isFormValid {
                         saveAndContinue()
                     }
@@ -106,11 +170,21 @@ struct CustomerInfoView: View {
     }
 
     private func saveAndContinue() {
+        let trimmedPhone = phone.trimmingCharacters(in: .whitespaces)
+        let trimmedAddress = address.trimmingCharacters(in: .whitespaces)
+        let trimmedCity = city.trimmingCharacters(in: .whitespaces)
+        let trimmedState = state.trimmingCharacters(in: .whitespaces)
+        let trimmedZipcode = zipcode.trimmingCharacters(in: .whitespaces)
+
         let info = CustomerInfo(
             firstName: firstName.trimmingCharacters(in: .whitespaces),
             lastName: lastName.trimmingCharacters(in: .whitespaces),
             email: email.trimmingCharacters(in: .whitespaces).lowercased(),
-            phone: phone.isEmpty ? nil : phone
+            phone: trimmedPhone.isEmpty ? nil : trimmedPhone,
+            address: trimmedAddress.isEmpty ? nil : trimmedAddress,
+            city: trimmedCity.isEmpty ? nil : trimmedCity,
+            state: trimmedState.isEmpty ? nil : trimmedState,
+            zipcode: trimmedZipcode.isEmpty ? nil : trimmedZipcode
         )
         appState.setCustomerInfo(info)
     }

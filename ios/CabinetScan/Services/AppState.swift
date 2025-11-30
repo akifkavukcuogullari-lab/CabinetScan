@@ -55,7 +55,14 @@ class AppState: ObservableObject {
 
     func setMeasurementData(_ data: MeasurementData) {
         measurementData = data
-        currentScreen = .selection
+
+        // Skip selection page if no categories available
+        let categories = showroomConfig?.categories ?? []
+        if categories.isEmpty {
+            currentScreen = .review
+        } else {
+            currentScreen = .selection
+        }
     }
 
     func selectProduct(for categoryId: String, product: Product) {
