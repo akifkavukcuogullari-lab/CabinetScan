@@ -1,51 +1,168 @@
-import { createClient } from '@/lib/supabase/server'
+'use client'
+
+import { useState, useEffect, useMemo } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { FolderKanban, Rotate3d, Layers, Ruler, User, Calendar, ChevronRight, Box } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  FolderKanban,
+  Rotate3d,
+  Layers,
+  Ruler,
+  User,
+  Calendar,
+  ChevronRight,
+  Box,
+  Search,
+  Filter,
+  X,
+  Loader2,
+} from 'lucide-react'
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 
-export default async function ProjectsPage() {
-  const supabase = await createClient()
+const statusOptions = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'in_review', label: 'In Review' },
+  { value: 'quoted', label: 'Quoted' },
+  { value: 'accepted', label: 'Accepted' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'completed', label: 'Completed' },
+]
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+const statusColors: Record<string, string> = {
+  draft: 'bg-gray-100 text-gray-800',
+  submitted: 'bg-blue-100 text-blue-800',
+  in_review: 'bg-yellow-100 text-yellow-800',
+  quoted: 'bg-purple-100 text-purple-800',
+  accepted: 'bg-green-100 text-green-800',
+  rejected: 'bg-red-100 text-red-800',
+  completed: 'bg-green-100 text-green-800',
+}
 
-  // Get the user's showroom
-  const { data: showroomUser } = await supabase
-    .from('showroom_users')
-    .select('showroom_id')
-    .eq('user_id', user.id)
-    .single()
+export default function ProjectsPage() {
+  const router = useRouter()
+  const supabase = createClient()
 
-  if (!showroomUser) redirect('/login')
+  const [loading, setLoading] = useState(true)
+  const [projects, setProjects] = useState<any[]>([])
+  const [error, setError] = useState<string | null>(null)
 
-  // Get projects with their measurements for preview data
-  const { data: projects, error } = await supabase
-    .from('projects')
-    .select(`
-      *,
-      project_measurements (
-        id,
-        usdz_file_url,
-        preview_image_url,
-        measurements,
-        total_linear_ft,
-        total_sq_ft
-      )
-    `)
-    .eq('showroom_id', showroomUser.showroom_id)
-    .order('submitted_at', { ascending: false })
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
 
-  const statusColors: Record<string, string> = {
-    draft: 'bg-gray-100 text-gray-800',
-    submitted: 'bg-blue-100 text-blue-800',
-    in_review: 'bg-yellow-100 text-yellow-800',
-    quoted: 'bg-purple-100 text-purple-800',
-    accepted: 'bg-green-100 text-green-800',
-    rejected: 'bg-red-100 text-red-800',
-    completed: 'bg-green-100 text-green-800',
+  useEffect(() => {
+    async function loadProjects() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/login')
+        return
+      }
+
+      // Get the user's showroom
+      const { data: showroomUser } = await supabase
+        .from('showroom_users')
+        .select('showroom_id')
+        .eq('user_id', user.id)
+        .single()
+
+      if (!showroomUser) {
+        router.push('/login')
+        return
+      }
+
+      // Get projects with their measurements
+      const { data, error: fetchError } = await supabase
+        .from('projects')
+        .select(`
+          *,
+          project_measurements (
+            id,
+            usdz_file_url,
+            preview_image_url,
+            measurements,
+            total_linear_ft,
+            total_sq_ft
+          )
+        `)
+        .eq('showroom_id', showroomUser.showroom_id)
+        .order('submitted_at', { ascending: false })
+
+      if (fetchError) {
+        setError(fetchError.message)
+      } else {
+        setProjects(data || [])
+      }
+      setLoading(false)
+    }
+
+    loadProjects()
+  }, [supabase, router])
+
+  // Filter projects based on search and status
+  const filteredProjects = useMemo(() => {
+    return projects.filter((project) => {
+      // Status filter
+      if (statusFilter !== 'all' && project.status !== statusFilter) {
+        return false
+      }
+
+      // Search filter (customer name, email, project name, reference number)
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase()
+        const customerName = `${project.customer_first_name || ''} ${project.customer_last_name || ''}`.toLowerCase()
+        const email = (project.customer_email || '').toLowerCase()
+        const projectName = (project.project_name || '').toLowerCase()
+        const refNumber = (project.reference_number || '').toLowerCase()
+
+        if (
+          !customerName.includes(query) &&
+          !email.includes(query) &&
+          !projectName.includes(query) &&
+          !refNumber.includes(query)
+        ) {
+          return false
+        }
+      }
+
+      return true
+    })
+  }, [projects, searchQuery, statusFilter])
+
+  // Count projects by status for filter badges
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: projects.length }
+    projects.forEach((p) => {
+      counts[p.status] = (counts[p.status] || 0) + 1
+    })
+    return counts
+  }, [projects])
+
+  const clearFilters = () => {
+    setSearchQuery('')
+    setStatusFilter('all')
+  }
+
+  const hasActiveFilters = searchQuery.trim() || statusFilter !== 'all'
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    )
   }
 
   return (
@@ -55,15 +172,82 @@ export default async function ProjectsPage() {
         <p className="text-gray-500">View and manage customer room scans and selections</p>
       </div>
 
+      {/* Filters Section */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Search Input */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search by customer name, email, or reference..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            {/* Status Filter */}
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-gray-400 hidden sm:block" />
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      <div className="flex items-center justify-between w-full">
+                        <span>{option.label}</span>
+                        {statusCounts[option.value] !== undefined && (
+                          <Badge variant="secondary" className="ml-2 text-xs">
+                            {statusCounts[option.value]}
+                          </Badge>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Clear Filters */}
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Clear
+              </Button>
+            )}
+          </div>
+
+          {/* Active filters summary */}
+          {hasActiveFilters && (
+            <div className="mt-3 pt-3 border-t flex items-center gap-2 text-sm text-gray-600">
+              <span>Showing {filteredProjects.length} of {projects.length} projects</span>
+              {statusFilter !== 'all' && (
+                <Badge className={statusColors[statusFilter]}>
+                  {statusFilter.replace('_', ' ')}
+                </Badge>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {error ? (
         <Card>
           <CardContent className="py-10 text-center text-red-600">
-            Error loading projects: {error.message}
+            Error loading projects: {error}
           </CardContent>
         </Card>
-      ) : projects && projects.length > 0 ? (
+      ) : filteredProjects.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {projects.map((project: any) => {
+          {filteredProjects.map((project: any) => {
             // Extract measurement data for preview
             const measurement = project.project_measurements?.[0]
             const hasUsdzFile = measurement?.usdz_file_url
@@ -204,7 +388,24 @@ export default async function ProjectsPage() {
             )
           })}
         </div>
+      ) : projects.length > 0 ? (
+        // Has projects but none match filters
+        <Card>
+          <CardContent className="py-16 text-center">
+            <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-6">
+              <Search className="h-10 w-10 text-gray-400" />
+            </div>
+            <h3 className="text-xl font-medium mb-2">No matching projects</h3>
+            <p className="text-gray-500 max-w-md mx-auto mb-6">
+              No projects match your current filters. Try adjusting your search or status filter.
+            </p>
+            <Button variant="outline" onClick={clearFilters}>
+              Clear Filters
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
+        // No projects at all
         <Card>
           <CardContent className="py-16 text-center">
             <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-6">
