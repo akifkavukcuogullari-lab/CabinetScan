@@ -88,10 +88,26 @@ struct FloorPlanRenderer {
             }
             ctx.strokePath()
 
+            // Find floor level from storage objects (minimum Y is floor level)
+            let storageObjects = room.objects.filter { $0.category == .storage }
+            let floorLevel = storageObjects.map { $0.transform.columns.3.y }.min() ?? 0
+
+            print("=== FloorPlanRenderer Debug ===")
+            print("Floor level detected: \(floorLevel)m")
+            print("Storage objects count: \(storageObjects.count)")
+
+            var lowerCount = 0
+            var upperCount = 0
+
             // Draw cabinets (lower) - white fill with black outline
             for object in room.objects where object.category == .storage {
                 let position = object.transform.columns.3
-                if position.y < 1.2 { // Lower cabinet
+                let heightAboveFloor = position.y - floorLevel
+
+                // Lower cabinet: less than 1.0m above floor level
+                if heightAboveFloor <= 1.0 {
+                    lowerCount += 1
+                    print("Drawing LOWER cabinet: y=\(position.y)m, heightAboveFloor=\(heightAboveFloor)m")
                     drawObject(ctx: ctx, object: object, scale: scale, minX: minX, minZ: minZ,
                               fillColor: UIColor.white, strokeColor: UIColor.darkGray, strokeWidth: 1.5)
                 }
@@ -101,20 +117,29 @@ struct FloorPlanRenderer {
             for object in room.objects {
                 switch object.category {
                 case .refrigerator, .stove, .oven, .dishwasher, .washerDryer, .sink:
+                    print("Drawing appliance: \(object.category)")
                     drawAppliance(ctx: ctx, object: object, scale: scale, minX: minX, minZ: minZ)
                 default:
                     break
                 }
             }
 
-            // Draw upper cabinets - dashed outline
+            // Draw upper cabinets - dashed outline (drawn on top)
+            // Upper cabinets are more than 1.0m above floor level
             for object in room.objects where object.category == .storage {
                 let position = object.transform.columns.3
-                if position.y >= 1.2 { // Upper cabinet
+                let heightAboveFloor = position.y - floorLevel
+
+                if heightAboveFloor > 1.0 {
+                    upperCount += 1
+                    print("Drawing UPPER cabinet: y=\(position.y)m, heightAboveFloor=\(heightAboveFloor)m")
                     drawObject(ctx: ctx, object: object, scale: scale, minX: minX, minZ: minZ,
-                              fillColor: nil, strokeColor: UIColor.gray, strokeWidth: 1, dashed: true)
+                              fillColor: UIColor.systemGray5, strokeColor: UIColor.blue, strokeWidth: 2.0, dashed: true)
                 }
             }
+
+            print("Lower cabinets drawn: \(lowerCount), Upper cabinets drawn: \(upperCount)")
+            print("=== End FloorPlanRenderer Debug ===")
 
             // Draw walls - thick black lines
             ctx.setStrokeColor(UIColor.black.cgColor)

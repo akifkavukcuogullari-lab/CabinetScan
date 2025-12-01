@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		2A9758C72EDC01B700146970 /* ShowroomLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9758C62EDC01B700146970 /* ShowroomLogo.swift */; };
+		FPR001 /* FloorPlanRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC037 /* FloorPlanRenderer.swift */; };
+		GLB001 /* GLBExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC038 /* GLBExporter.swift */; };
 		APP001 /* CabinetScanApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC001 /* CabinetScanApp.swift */; };
 		APP002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC002 /* ContentView.swift */; };
 		APP003 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC003 /* Config.swift */; };
@@ -44,6 +46,8 @@
 		SRC034 /* ReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewView.swift; sourceTree = "<group>"; };
 		SRC035 /* SubmissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubmissionView.swift; sourceTree = "<group>"; };
 		SRC036 /* SuccessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuccessView.swift; sourceTree = "<group>"; };
+		SRC037 /* FloorPlanRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloorPlanRenderer.swift; sourceTree = "<group>"; };
+		SRC038 /* GLBExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GLBExporter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -163,6 +167,8 @@
 			isa = PBXGroup;
 			children = (
 				SRC032 /* ScanningView.swift */,
+				SRC037 /* FloorPlanRenderer.swift */,
+				SRC038 /* GLBExporter.swift */,
 			);
 			path = Scanning;
 			sourceTree = "<group>";
@@ -237,7 +243,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2610;
 				TargetAttributes = {
 					TGT001 = {
 						CreatedOnToolsVersion = 15.0;
@@ -293,6 +299,8 @@
 				FEA006 /* SubmissionView.swift in Sources */,
 				2A9758C72EDC01B700146970 /* ShowroomLogo.swift in Sources */,
 				FEA007 /* SuccessView.swift in Sources */,
+				FPR001 /* FloorPlanRenderer.swift in Sources */,
+				GLB001 /* GLBExporter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -334,6 +342,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 3AKYN8H497;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -357,6 +366,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -397,6 +407,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 3AKYN8H497;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -413,6 +424,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -425,7 +437,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 3AKYN8H497;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CabinetScan/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Nextlyn Scan";
@@ -458,7 +469,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 3AKYN8H497;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CabinetScan/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Nextlyn Scan";

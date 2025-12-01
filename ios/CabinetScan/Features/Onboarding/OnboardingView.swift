@@ -14,36 +14,11 @@ struct OnboardingView: View {
 
                 // Nextlyn Scan Logo
                 VStack(spacing: 16) {
-                    // Try to use Logo asset, otherwise show app icon style
-                    if let uiImage = UIImage(named: "Logo") {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: 240, maxHeight: 100)
-                    } else {
-                        // Fallback: App branding with icon
-                        VStack(spacing: 12) {
-                            Image(systemName: "cube.transparent.fill")
-                                .font(.system(size: 60))
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [.blue, .cyan],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-
-                            Text("Nextlyn Scan")
-                                .font(.system(size: 32, weight: .bold, design: .rounded))
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [.blue, .cyan],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                        }
-                    }
+                    Image("Logo")
+                        .resizable()
+                        .renderingMode(.original)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: 150, maxHeight: 150)
                 }
 
                 VStack(spacing: 8) {

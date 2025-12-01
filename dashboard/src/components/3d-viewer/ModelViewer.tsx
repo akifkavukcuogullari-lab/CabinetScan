@@ -42,6 +42,7 @@ export function ModelViewer({
   onError
 }: ModelViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const viewerContainerRef = useRef<HTMLDivElement>(null)
   const modelViewerRef = useRef<HTMLElement | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
@@ -115,13 +116,13 @@ export function ModelViewer({
     }
   }, [isScriptLoaded, isLoading, onError])
 
-  // Handle fullscreen toggle
+  // Handle fullscreen toggle - only fullscreen the viewer area
   const toggleFullscreen = async () => {
-    if (!containerRef.current) return
+    if (!viewerContainerRef.current) return
 
     if (!isFullscreen) {
       try {
-        await containerRef.current.requestFullscreen()
+        await viewerContainerRef.current.requestFullscreen()
         setIsFullscreen(true)
       } catch (err) {
         console.error('Fullscreen not supported:', err)
@@ -313,12 +314,39 @@ export function ModelViewer({
         </CardHeader>
       )}
       <CardContent className={showTitle ? 'pt-2' : ''}>
-        <div className={`relative ${viewerHeight} w-full rounded-lg overflow-hidden bg-gradient-to-b from-gray-100 to-gray-200`}>
+        <div
+          ref={viewerContainerRef}
+          className={`relative ${isFullscreen ? 'h-screen w-screen' : viewerHeight + ' w-full'} rounded-lg overflow-hidden bg-gradient-to-b from-gray-900 to-gray-800`}
+        >
+          {/* Fullscreen exit button */}
+          {isFullscreen && (
+            <div className="absolute top-4 right-4 z-30 flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={resetCamera}
+                className="bg-white/10 hover:bg-white/20 text-white border-white/30"
+                title="Reset camera position"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleFullscreen}
+                className="bg-white/10 hover:bg-white/20 text-white border-white/30"
+                title="Exit fullscreen"
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
           {/* Loading overlay */}
           {isLoading && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100/90 z-10">
-              <Loader2 className="h-10 w-10 text-blue-600 animate-spin mb-3" />
-              <p className="text-gray-600 font-medium">Loading 3D Model...</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/90 z-10">
+              <Loader2 className="h-10 w-10 text-blue-400 animate-spin mb-3" />
+              <p className="text-gray-200 font-medium">Loading 3D Model...</p>
               <p className="text-gray-400 text-sm">This may take a moment</p>
             </div>
           )}
@@ -358,7 +386,7 @@ export function ModelViewer({
 
           {/* Interaction hint */}
           {!isLoading && !hasError && (
-            <div className="absolute bottom-4 left-4 z-20 text-xs text-gray-500 bg-white/80 px-2 py-1 rounded">
+            <div className="absolute bottom-4 left-4 z-20 text-xs text-white/70 bg-black/40 px-2 py-1 rounded">
               Drag to rotate | Scroll to zoom | Shift+drag to pan
             </div>
           )}

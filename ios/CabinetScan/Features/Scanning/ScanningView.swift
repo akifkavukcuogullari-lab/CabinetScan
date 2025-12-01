@@ -477,6 +477,53 @@ struct ScanningView: View {
         var applianceIndex = 1
         var sinkIndex = 1
 
+        // DEBUG: Print ALL data from RoomPlan
+        print("\n========== ROOMPLAN COMPLETE DEBUG ==========")
+        print("Walls: \(room.walls.count)")
+        print("Doors: \(room.doors.count)")
+        print("Windows: \(room.windows.count)")
+        print("Objects: \(room.objects.count)")
+        print("Sections: \(room.sections.count)")
+
+        // Print all sections
+        print("\n--- SECTIONS ---")
+        for (idx, section) in room.sections.enumerated() {
+            print("Section[\(idx)]: \(section)")
+        }
+
+        // Print all objects with details
+        print("\n--- ALL OBJECTS ---")
+        var storageCount = 0
+        var storageAbove09m = 0
+        for (idx, obj) in room.objects.enumerated() {
+            let pos = obj.transform.columns.3
+            let dim = obj.dimensions
+            print("Object[\(idx)]: category=\(obj.category)")
+            print("  - Position: x=\(String(format: "%.2f", pos.x))m, y=\(String(format: "%.2f", pos.y))m, z=\(String(format: "%.2f", pos.z))m")
+            print("  - Dimensions: w=\(String(format: "%.2f", dim.x))m, h=\(String(format: "%.2f", dim.y))m, d=\(String(format: "%.2f", dim.z))m")
+            print("  - Y position (height): \(String(format: "%.2f", pos.y))m = \(String(format: "%.1f", pos.y * 3.28084))ft")
+
+            if obj.category == .storage {
+                storageCount += 1
+                if pos.y >= 0.9 {
+                    storageAbove09m += 1
+                    print("  *** THIS SHOULD BE UPPER CABINET (y >= 0.9m) ***")
+                }
+            }
+        }
+        // Calculate floor level for summary
+        let allStorageY = room.objects.filter { $0.category == .storage }.map { $0.transform.columns.3.y }
+        let detectedFloorLevel = allStorageY.min() ?? 0
+        let upperCabCount = allStorageY.filter { ($0 - detectedFloorLevel) > 1.0 }.count
+        let lowerCabCount = allStorageY.filter { ($0 - detectedFloorLevel) <= 1.0 }.count
+
+        print("\n--- STORAGE SUMMARY ---")
+        print("Total storage objects: \(storageCount)")
+        print("Detected floor level: \(String(format: "%.2f", detectedFloorLevel))m")
+        print("Lower cabinets (height above floor <= 1.0m): \(lowerCabCount)")
+        print("Upper cabinets (height above floor > 1.0m): \(upperCabCount)")
+        print("=============================================\n")
+
         for object in room.objects {
             let transform = object.transform
             let position = transform.columns.3
@@ -523,9 +570,24 @@ struct ScanningView: View {
             // Categorize objects based on type and position
             switch object.category {
             case .storage:
-                // Determine if upper or lower cabinet based on height from floor
-                // Upper cabinets typically mounted at 1.2m (4 feet) or higher
-                if position.y >= 1.2 {
+                // Determine if upper or lower cabinet based on RELATIVE height
+                // RoomPlan Y coordinates are relative to scan origin, NOT floor level
+                // We need to find floor level first, then compare
+
+                // Find floor level from all storage objects (minimum Y is floor level)
+                let allStorageYPositions = room.objects
+                    .filter { $0.category == .storage }
+                    .map { $0.transform.columns.3.y }
+                let floorLevel = allStorageYPositions.min() ?? -1.0
+
+                // Upper cabinet if its center is more than 1.0m above floor level
+                // (Lower cabinet centers are ~0.45m above floor, upper cabinet centers are ~1.5m+ above floor)
+                let heightAboveFloor = position.y - floorLevel
+                let isUpperCabinet = heightAboveFloor > 1.0
+
+                print("Storage object: y=\(position.y), floorLevel=\(floorLevel), heightAboveFloor=\(heightAboveFloor), isUpper=\(isUpperCabinet)")
+
+                if isUpperCabinet {
                     var cabinetData = baseObjectData
                     cabinetData["id"] = "upper_\(upperIndex)"
                     cabinetData["type"] = "upper_cabinet"
