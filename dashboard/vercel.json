@@ -1,0 +1,26 @@
+{
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "cabinet-scan.vercel.app"
+        }
+      ],
+      "destination": "https://cabinet.nextlyn.ai/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "cabinet-scan-akifkavukcuogullari-labs-projects.vercel.app"
+        }
+      ],
+      "destination": "https://cabinet.nextlyn.ai/:path*",
+      "permanent": true
+    }
+  ]
+}
