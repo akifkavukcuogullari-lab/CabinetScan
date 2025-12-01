@@ -97,6 +97,7 @@ export type Database = {
           trial_ends_at: string | null
           subscription_plan: string | null
           stripe_customer_id: string | null
+          webhook_url: string | null
           is_active: boolean
           created_at: string
           updated_at: string
@@ -122,6 +123,7 @@ export type Database = {
           trial_ends_at?: string | null
           subscription_plan?: string | null
           stripe_customer_id?: string | null
+          webhook_url?: string | null
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -147,6 +149,7 @@ export type Database = {
           trial_ends_at?: string | null
           subscription_plan?: string | null
           stripe_customer_id?: string | null
+          webhook_url?: string | null
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -338,10 +341,64 @@ export type Database = {
           updated_at?: string
         }
       }
+      customers: {
+        Row: {
+          id: string
+          showroom_id: string
+          phone: string
+          phone_normalized: string
+          first_name: string
+          last_name: string
+          email: string | null
+          customer_type: 'homeowner' | 'contractor'
+          address_line1: string | null
+          city: string | null
+          state: string | null
+          zip_code: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          showroom_id: string
+          phone: string
+          phone_normalized?: string
+          first_name: string
+          last_name: string
+          email?: string | null
+          customer_type?: 'homeowner' | 'contractor'
+          address_line1?: string | null
+          city?: string | null
+          state?: string | null
+          zip_code?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          showroom_id?: string
+          phone?: string
+          phone_normalized?: string
+          first_name?: string
+          last_name?: string
+          email?: string | null
+          customer_type?: 'homeowner' | 'contractor'
+          address_line1?: string | null
+          city?: string | null
+          state?: string | null
+          zip_code?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
       projects: {
         Row: {
           id: string
           showroom_id: string
+          customer_id: string | null
           reference_number: string
           customer_first_name: string
           customer_last_name: string
@@ -356,12 +413,18 @@ export type Database = {
           device_model: string | null
           ios_version: string | null
           app_version: string | null
+          end_client_first_name: string | null
+          end_client_last_name: string | null
+          end_client_phone: string | null
+          end_client_email: string | null
+          end_client_address: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           showroom_id: string
+          customer_id?: string | null
           reference_number: string
           customer_first_name: string
           customer_last_name: string
@@ -376,12 +439,18 @@ export type Database = {
           device_model?: string | null
           ios_version?: string | null
           app_version?: string | null
+          end_client_first_name?: string | null
+          end_client_last_name?: string | null
+          end_client_phone?: string | null
+          end_client_email?: string | null
+          end_client_address?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
           showroom_id?: string
+          customer_id?: string | null
           reference_number?: string
           customer_first_name?: string
           customer_last_name?: string
@@ -396,6 +465,11 @@ export type Database = {
           device_model?: string | null
           ios_version?: string | null
           app_version?: string | null
+          end_client_first_name?: string | null
+          end_client_last_name?: string | null
+          end_client_phone?: string | null
+          end_client_email?: string | null
+          end_client_address?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -505,12 +579,22 @@ export type Database = {
         Args: { p_showroom_id: string }
         Returns: boolean
       }
+      get_customer_stats: {
+        Args: { p_showroom_id: string }
+        Returns: {
+          total_customers: number
+          homeowner_count: number
+          contractor_count: number
+          customers_this_month: number
+        }[]
+      }
     }
     Enums: {
       user_role: 'super_admin' | 'showroom_owner'
       project_status: 'draft' | 'submitted' | 'in_review' | 'quoted' | 'accepted' | 'rejected' | 'completed'
       pricing_unit: 'per_linear_ft' | 'per_sq_ft' | 'per_piece' | 'per_cabinet' | 'flat' | 'none'
       subscription_status: 'trial' | 'active' | 'past_due' | 'canceled' | 'suspended'
+      customer_type: 'homeowner' | 'contractor'
     }
   }
 }

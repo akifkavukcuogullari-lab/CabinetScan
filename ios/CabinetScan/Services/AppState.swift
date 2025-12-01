@@ -11,6 +11,7 @@ class AppState: ObservableObject {
     @Published var currentScreen: Screen = .onboarding
     @Published var showroomConfig: ShowroomConfig?
     @Published var customerInfo: CustomerInfo?
+    @Published var endClientInfo: EndClientInfo?
     @Published var measurementData: MeasurementData?
     @Published var selections: [String: Product] = [:] // categoryId -> selected product
     @Published var isLoading = false
@@ -48,8 +49,9 @@ class AppState: ObservableObject {
         isLoading = false
     }
 
-    func setCustomerInfo(_ info: CustomerInfo) {
+    func setCustomerInfo(_ info: CustomerInfo, endClient: EndClientInfo? = nil) {
         customerInfo = info
+        endClientInfo = endClient
         currentScreen = .scanning
     }
 
@@ -98,6 +100,7 @@ class AppState: ObservableObject {
             let submission = ProjectSubmission(
                 showroomId: config.id,
                 customer: customer,
+                endClient: endClientInfo,
                 project: ProjectInfo(
                     name: "Room Scan",
                     notes: nil
@@ -130,6 +133,7 @@ class AppState: ObservableObject {
         currentScreen = .onboarding
         showroomConfig = nil
         customerInfo = nil
+        endClientInfo = nil
         measurementData = nil
         selections = [:]
         error = nil

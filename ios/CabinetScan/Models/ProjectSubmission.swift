@@ -1,9 +1,23 @@
 import Foundation
 
+// MARK: - Customer Type
+enum CustomerType: String, Codable, CaseIterable {
+    case homeowner
+    case contractor
+
+    var displayName: String {
+        switch self {
+        case .homeowner: return "Homeowner"
+        case .contractor: return "Contractor"
+        }
+    }
+}
+
 // MARK: - Project Submission
 struct ProjectSubmission: Codable {
     let showroomId: String
     let customer: CustomerInfo
+    let endClient: EndClientInfo?
     let project: ProjectInfo
     let measurements: MeasurementData
     let selections: [ProductSelection]
@@ -12,6 +26,7 @@ struct ProjectSubmission: Codable {
     enum CodingKeys: String, CodingKey {
         case customer, project, measurements, selections
         case showroomId = "showroom_id"
+        case endClient = "end_client"
         case deviceInfo = "device_info"
     }
 }
@@ -21,14 +36,33 @@ struct CustomerInfo: Codable {
     let firstName: String
     let lastName: String
     let email: String
-    let phone: String?
-    let address: String?
+    let phone: String  // Now required
+    let customerType: CustomerType
+    let addressLine1: String?
     let city: String?
     let state: String?
-    let zipcode: String?
+    let zipCode: String?
 
     enum CodingKeys: String, CodingKey {
-        case email, phone, address, city, state, zipcode
+        case email, phone, city, state
+        case firstName = "first_name"
+        case lastName = "last_name"
+        case customerType = "customer_type"
+        case addressLine1 = "address_line1"
+        case zipCode = "zip_code"
+    }
+}
+
+// MARK: - End Client Info (for contractors)
+struct EndClientInfo: Codable {
+    let firstName: String?
+    let lastName: String?
+    let phone: String?
+    let email: String?
+    let address: String?
+
+    enum CodingKeys: String, CodingKey {
+        case phone, email, address
         case firstName = "first_name"
         case lastName = "last_name"
     }

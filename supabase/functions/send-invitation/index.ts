@@ -221,7 +221,7 @@ serve(async (req) => {
       .single()
 
     // Build invitation link
-    const dashboardUrl = Deno.env.get('DASHBOARD_URL') || 'https://dashboard.nextleanscan.com'
+    const dashboardUrl = Deno.env.get('DASHBOARD_URL') || 'https://cabinet.nextlyn.ai'
     const invitationLink = `${dashboardUrl}/auth/accept-invitation?token=${token_raw}`
 
     // Generate and send email
@@ -237,7 +237,7 @@ serve(async (req) => {
 
     const emailResult = await sendEmail({
       to: body.email,
-      subject: `You're invited to manage ${showroom.name} on NextLean Scan`,
+      subject: `You're invited to manage ${showroom.name} on Nextlyn Scan`,
       html: emailHtml,
     })
 

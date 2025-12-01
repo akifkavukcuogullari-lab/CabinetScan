@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   CreditCard,
+  Users,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
@@ -41,6 +42,7 @@ const adminLinks = [
 
 const showroomLinks = [
   { href: '/showroom/projects', label: 'Projects', icon: FolderKanban },
+  { href: '/showroom/customers', label: 'Customers', icon: Users },
   { href: '/showroom/products', label: 'Products', icon: Package },
   { href: '/showroom/branding', label: 'Branding', icon: Palette },
   { href: '/showroom/billing', label: 'Billing', icon: CreditCard },
