@@ -209,7 +209,7 @@ serve(async (req) => {
       if (acceptError) {
         console.error('Failed to accept invitation:', acceptError)
         return new Response(
-          JSON.stringify({ success: false, error: 'Failed to complete invitation acceptance' }),
+          JSON.stringify({ success: false, error: `Failed to accept invitation: ${acceptError.message}` }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }

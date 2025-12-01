@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
+import { Webhook, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 
 interface Category {
   id: string
@@ -38,6 +39,10 @@ export default function SettingsPage() {
   const [showroom, setShowroom] = useState<any>(null)
   const [categories, setCategories] = useState<Category[]>([])
   const [showroomCategories, setShowroomCategories] = useState<ShowroomCategory[]>([])
+  const [webhookUrl, setWebhookUrl] = useState('')
+  const [webhookSaving, setWebhookSaving] = useState(false)
+  const [webhookSuccess, setWebhookSuccess] = useState(false)
+  const [webhookError, setWebhookError] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadData() {
@@ -61,7 +66,10 @@ export default function SettingsPage() {
         .eq('id', showroomUser.showroom_id)
         .single()
 
-      if (showroomData) setShowroom(showroomData)
+      if (showroomData) {
+        setShowroom(showroomData)
+        setWebhookUrl(showroomData.webhook_url || '')
+      }
 
       // Load all categories
       const { data: categoriesData } = await supabase
@@ -141,6 +149,43 @@ export default function SettingsPage() {
         sc.category_id === categoryId ? { ...sc, is_required: required } : sc
       )
     )
+  }
+
+  const validateWebhookUrl = (url: string): boolean => {
+    if (!url) return true
+    try {
+      const parsed = new URL(url)
+      return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+    } catch {
+      return false
+    }
+  }
+
+  const saveWebhookUrl = async () => {
+    if (!showroomId) return
+
+    if (webhookUrl && !validateWebhookUrl(webhookUrl)) {
+      setWebhookError('Please enter a valid URL (must start with http:// or https://)')
+      return
+    }
+
+    setWebhookSaving(true)
+    setWebhookError(null)
+    setWebhookSuccess(false)
+
+    const { error } = await supabase
+      .from('showrooms')
+      .update({ webhook_url: webhookUrl || null })
+      .eq('id', showroomId)
+
+    setWebhookSaving(false)
+
+    if (error) {
+      setWebhookError('Failed to save webhook URL')
+    } else {
+      setWebhookSuccess(true)
+      setTimeout(() => setWebhookSuccess(false), 3000)
+    }
   }
 
   if (loading) {
@@ -262,6 +307,134 @@ export default function SettingsPage() {
                 </div>
               )
             })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Webhook Integration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Webhook className="h-5 w-5" />
+            Webhook Integration
+          </CardTitle>
+          <CardDescription>
+            Receive project submission data at your own endpoint. When a customer submits a project,
+            we&apos;ll send a POST request with all project details including measurements, 3D model URLs,
+            and product selections.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="webhook-url">Webhook URL</Label>
+            <div className="flex gap-2">
+              <Input
+                id="webhook-url"
+                type="url"
+                placeholder="https://your-domain.com/api/webhook"
+                value={webhookUrl}
+                onChange={(e) => {
+                  setWebhookUrl(e.target.value)
+                  setWebhookError(null)
+                }}
+                className="flex-1"
+              />
+              <Button
+                onClick={saveWebhookUrl}
+                disabled={webhookSaving}
+              >
+                {webhookSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Save'
+                )}
+              </Button>
+            </div>
+            {webhookError && (
+              <div className="flex items-center gap-2 text-sm text-red-600">
+                <AlertCircle className="h-4 w-4" />
+                {webhookError}
+              </div>
+            )}
+            {webhookSuccess && (
+              <div className="flex items-center gap-2 text-sm text-green-600">
+                <CheckCircle className="h-4 w-4" />
+                Webhook URL saved successfully
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <Label className="text-gray-500">Webhook Payload Example</Label>
+            <pre className="bg-gray-100 p-4 rounded-lg text-xs overflow-x-auto max-h-96">
+{`{
+  "event": "project.submitted",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "project": {
+    "id": "uuid",
+    "reference_number": "ABC123",
+    "status": "submitted"
+  },
+  "customer": {
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john@example.com",
+    "phone": "+1234567890"
+  },
+  "measurements": {
+    "room_name": "Kitchen",
+    "total_linear_ft": 25.5,
+    "total_sq_ft": 150.0,
+    "wall_count": 4,
+    "window_count": 2,
+    "door_count": 1,
+    "lower_cabinet_count": 8,
+    "upper_cabinet_count": 6,
+    "lower_cabinets": [
+      {
+        "id": "lower_1",
+        "width_ft": 2.5,
+        "height_ft": 2.87,
+        "depth_ft": 2.0,
+        "width_inches": 30,
+        "height_inches": 34.5,
+        "depth_inches": 24
+      }
+    ],
+    "upper_cabinets": [
+      {
+        "id": "upper_1",
+        "width_ft": 2.5,
+        "height_ft": 2.5,
+        "depth_ft": 1.0,
+        "width_inches": 30,
+        "height_inches": 30,
+        "depth_inches": 12
+      }
+    ],
+    "walls": [...],
+    "appliances": [...],
+    "usdz_file_url": "https://...",
+    "glb_file_url": "https://...",
+    "preview_image_url": "https://..."
+  },
+  "selections": [
+    {
+      "category": "Cabinet Doors",
+      "product": "Shaker White",
+      "price": 45.00,
+      "pricing_unit": "per_sq_ft"
+    }
+  ],
+  "showroom": {
+    "id": "uuid",
+    "name": "Your Showroom",
+    "code": "DEMO01"
+  }
+}`}
+            </pre>
           </div>
         </CardContent>
       </Card>
