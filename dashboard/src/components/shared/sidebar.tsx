@@ -1,10 +1,15 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { UpgradeModal } from '@/components/subscription/upgrade-modal'
+import { useSubscriptionContextOptional } from '@/contexts/subscription-context'
+import { PlanFeatures, SubscriptionPlan } from '@/lib/subscription'
 import {
   Building2,
   LayoutGrid,
@@ -14,12 +19,10 @@ import {
   Palette,
   LogOut,
   Menu,
-  X,
   CreditCard,
   Users,
+  Lock,
 } from 'lucide-react'
-import { useState } from 'react'
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 
 type UserInfo =
   | { type: 'admin'; name: string; email: string }
@@ -35,12 +38,19 @@ interface SidebarProps {
   userInfo: UserInfo
 }
 
-const adminLinks = [
+interface NavLink {
+  href: string
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  requiredFeature?: keyof PlanFeatures
+}
+
+const adminLinks: NavLink[] = [
   { href: '/admin/showrooms', label: 'Showrooms', icon: Building2 },
   { href: '/admin/categories', label: 'Categories', icon: LayoutGrid },
 ]
 
-const showroomLinks = [
+const showroomLinks: NavLink[] = [
   { href: '/showroom/projects', label: 'Projects', icon: FolderKanban },
   { href: '/showroom/customers', label: 'Customers', icon: Users },
   { href: '/showroom/products', label: 'Products', icon: Package },
@@ -55,12 +65,36 @@ export function Sidebar({ userInfo }: SidebarProps) {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
 
+  // Subscription context - may be null for admin users
+  const subscription = useSubscriptionContextOptional()
+
+  // Upgrade modal state
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
+  const [upgradeFeature, setUpgradeFeature] = useState<keyof PlanFeatures>('webhookAccess')
+
   const links = userInfo.type === 'admin' ? adminLinks : showroomLinks
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/login')
   }
+
+  // Check if a feature is accessible
+  const canAccessFeature = (feature: keyof PlanFeatures | undefined): boolean => {
+    if (!feature) return true // No feature requirement
+    if (!subscription) return true // No subscription context (admin)
+    return subscription.canUseFeature(feature)
+  }
+
+  // Handle click on locked nav item
+  const handleLockedClick = (feature: keyof PlanFeatures) => {
+    setUpgradeFeature(feature)
+    setUpgradeModalOpen(true)
+    setOpen(false) // Close mobile menu if open
+  }
+
+  // Get current plan for upgrade modal
+  const currentPlan = subscription?.subscription?.plan || null
 
   const NavContent = () => (
     <div className="flex flex-col h-full">
@@ -75,7 +109,29 @@ export function Sidebar({ userInfo }: SidebarProps) {
         {links.map((link) => {
           const Icon = link.icon
           const isActive = pathname.startsWith(link.href)
+          const isLocked = !canAccessFeature(link.requiredFeature)
 
+          // Render locked nav item
+          if (isLocked && link.requiredFeature) {
+            return (
+              <button
+                key={link.href}
+                onClick={() => handleLockedClick(link.requiredFeature!)}
+                className={cn(
+                  'flex items-center justify-between w-full px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                  'text-gray-400 hover:bg-gray-100 cursor-pointer'
+                )}
+              >
+                <span className="flex items-center gap-3">
+                  <Icon className="h-5 w-5" />
+                  {link.label}
+                </span>
+                <Lock className="h-4 w-4 text-gray-400" />
+              </button>
+            )
+          }
+
+          // Render regular nav item
           return (
             <Link
               key={link.href}
@@ -94,6 +150,16 @@ export function Sidebar({ userInfo }: SidebarProps) {
           )
         })}
       </nav>
+
+      {/* Subscription status indicator for showroom users */}
+      {userInfo.type === 'showroom' && subscription && (
+        <SubscriptionIndicator
+          plan={subscription.subscription?.plan || null}
+          status={subscription.subscription?.status || 'trial'}
+          trialDaysRemaining={subscription.trialDaysRemaining}
+          isTrial={subscription.isTrial}
+        />
+      )}
 
       <div className="p-4 border-t">
         <div className="mb-4">
@@ -137,6 +203,87 @@ export function Sidebar({ userInfo }: SidebarProps) {
 
       {/* Mobile spacer */}
       <div className="lg:hidden h-16" />
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        isOpen={upgradeModalOpen}
+        onClose={() => setUpgradeModalOpen(false)}
+        feature={upgradeFeature}
+        currentPlan={currentPlan}
+      />
     </>
   )
+}
+
+/**
+ * Subscription status indicator shown in the sidebar.
+ */
+function SubscriptionIndicator({
+  plan,
+  status,
+  trialDaysRemaining,
+  isTrial,
+}: {
+  plan: SubscriptionPlan | null
+  status: string
+  trialDaysRemaining: number | null
+  isTrial: boolean
+}) {
+  // Don't show for active paid plans
+  if (status === 'active' && plan && plan !== 'trial') {
+    return null
+  }
+
+  // Trial indicator
+  if (isTrial && trialDaysRemaining !== null) {
+    const urgency =
+      trialDaysRemaining <= 1 ? 'red' : trialDaysRemaining <= 3 ? 'yellow' : 'blue'
+
+    const bgColors = {
+      red: 'bg-red-50 border-red-200',
+      yellow: 'bg-yellow-50 border-yellow-200',
+      blue: 'bg-blue-50 border-blue-200',
+    }
+
+    const textColors = {
+      red: 'text-red-700',
+      yellow: 'text-yellow-700',
+      blue: 'text-blue-700',
+    }
+
+    return (
+      <div className={cn('mx-4 mb-4 p-3 rounded-lg border', bgColors[urgency])}>
+        <p className={cn('text-xs font-medium', textColors[urgency])}>
+          {trialDaysRemaining === 0
+            ? 'Trial expires today'
+            : trialDaysRemaining === 1
+            ? '1 day left in trial'
+            : `${trialDaysRemaining} days left in trial`}
+        </p>
+        <Link
+          href="/showroom/billing"
+          className={cn('text-xs font-medium hover:underline', textColors[urgency])}
+        >
+          Upgrade now
+        </Link>
+      </div>
+    )
+  }
+
+  // Past due indicator
+  if (status === 'past_due') {
+    return (
+      <div className="mx-4 mb-4 p-3 rounded-lg border bg-red-50 border-red-200">
+        <p className="text-xs font-medium text-red-700">Payment overdue</p>
+        <Link
+          href="/showroom/billing"
+          className="text-xs font-medium text-red-700 hover:underline"
+        >
+          Update payment
+        </Link>
+      </div>
+    )
+  }
+
+  return null
 }

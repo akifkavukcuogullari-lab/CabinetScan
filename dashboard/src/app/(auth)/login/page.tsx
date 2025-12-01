@@ -119,9 +119,14 @@ export default function LoginPage() {
         return
       }
 
+      // Get current user's auth info for the filter
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+
       const { data: showroomUser, error: showroomError } = await supabase
         .from('showroom_users')
         .select('showroom_id')
+        .eq('user_id', authUser?.id)
+        .eq('is_active', true)
         .single()
 
       if (showroomError && showroomError.code !== 'PGRST116') {
@@ -129,6 +134,50 @@ export default function LoginPage() {
       }
 
       if (showroomUser) {
+        // Check showroom subscription status
+        const { data: showroom, error: showroomStatusError } = await supabase
+          .from('showrooms')
+          .select('subscription_status, name')
+          .eq('id', showroomUser.showroom_id)
+          .single()
+
+        if (showroomStatusError) {
+          logError(showroomStatusError, { context: 'checkShowroomStatus', email })
+        }
+
+        // Block access for suspended or canceled subscriptions
+        if (showroom?.subscription_status === 'suspended') {
+          const suspendedError: FormattedError = {
+            title: 'Account Suspended',
+            message: 'Your showroom account has been suspended.',
+            suggestion: 'Please contact support to resolve this issue and restore access.',
+            isRetryable: false,
+          }
+          setError(suspendedError)
+          toast.error(suspendedError.title, {
+            description: suspendedError.message,
+          })
+          await supabase.auth.signOut()
+          setLoading(false)
+          return
+        }
+
+        if (showroom?.subscription_status === 'canceled') {
+          const canceledError: FormattedError = {
+            title: 'Subscription Canceled',
+            message: 'Your showroom subscription has been canceled.',
+            suggestion: 'Please contact support to reactivate your account.',
+            isRetryable: false,
+          }
+          setError(canceledError)
+          toast.error(canceledError.title, {
+            description: canceledError.message,
+          })
+          await supabase.auth.signOut()
+          setLoading(false)
+          return
+        }
+
         toast.success('Welcome back!', {
           description: 'Redirecting to your dashboard...',
         })
@@ -212,7 +261,15 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <Input
                   id="password"

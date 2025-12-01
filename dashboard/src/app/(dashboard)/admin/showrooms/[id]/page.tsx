@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban, Mail } from 'lucide-react'
 import { InvitationList } from '@/components/invitations/invitation-list'
+import { SubscriptionManager } from '@/components/admin/subscription-manager'
 
 interface ShowroomDetailPageProps {
   params: Promise<{ id: string }>
@@ -75,7 +76,9 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
           </div>
           <p className="text-gray-500">{showroom.email}</p>
         </div>
-        <Button variant="outline">Edit Showroom</Button>
+        <Link href={`/admin/showrooms/${id}/edit`}>
+          <Button variant="outline">Edit Showroom</Button>
+        </Link>
       </div>
 
       {/* Showroom Code Card */}
@@ -239,42 +242,17 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
         </TabsContent>
 
         <TabsContent value="subscription" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Subscription</CardTitle>
-              <CardDescription>
-                Billing and subscription details
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">Status</p>
-                  <Badge className={statusColors[showroom.subscription_status]}>
-                    {showroom.subscription_status}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Plan</p>
-                  <p>{showroom.subscription_plan || 'None'}</p>
-                </div>
-              </div>
-
-              {showroom.trial_ends_at && (
-                <div>
-                  <p className="text-sm text-gray-500">Trial Ends</p>
-                  <p>{new Date(showroom.trial_ends_at).toLocaleDateString()}</p>
-                </div>
-              )}
-
-              {showroom.stripe_customer_id && (
-                <div>
-                  <p className="text-sm text-gray-500">Stripe Customer</p>
-                  <p className="font-mono text-sm">{showroom.stripe_customer_id}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <SubscriptionManager
+            showroom={{
+              id: showroom.id,
+              name: showroom.name,
+              subscription_status: showroom.subscription_status,
+              subscription_plan: showroom.subscription_plan,
+              trial_ends_at: showroom.trial_ends_at,
+              stripe_customer_id: showroom.stripe_customer_id,
+              stripe_subscription_id: showroom.stripe_subscription_id,
+            }}
+          />
         </TabsContent>
       </Tabs>
     </div>

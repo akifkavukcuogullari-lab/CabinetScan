@@ -372,11 +372,13 @@ export default function BillingPage() {
                 </>
               ) : (
                 <>
-                  <CreditCard className="h-5 w-5 text-gray-400" />
+                  <Sparkles className="h-5 w-5 text-purple-500" />
                   <div>
                     <p className="font-semibold text-lg">Free Trial</p>
                     <p className="text-sm text-gray-500">
-                      {trialDays > 0 ? `${trialDays} days remaining` : 'Trial expired'}
+                      {trialDays > 0
+                        ? `${trialDays} days remaining with full Pro features`
+                        : 'Trial expired'}
                     </p>
                   </div>
                 </>
@@ -409,7 +411,7 @@ export default function BillingPage() {
             </Alert>
           )}
 
-          {currentPlan && (
+          {currentPlan ? (
             <div className="grid grid-cols-3 gap-4 pt-4 border-t">
               <div>
                 <p className="text-sm text-gray-500">Projects Used</p>
@@ -429,6 +431,56 @@ export default function BillingPage() {
                 <p className="text-lg font-semibold">
                   {currentPlan.team_member_limit || 'Unlimited'}
                 </p>
+              </div>
+            </div>
+          ) : showroom?.subscription_status === 'trial' && trialDays > 0 ? (
+            /* Trial users without a paid plan still get Pro limits */
+            <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+              <div>
+                <p className="text-sm text-gray-500">Projects</p>
+                <p className="text-lg font-semibold">Unlimited</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Storage</p>
+                <p className="text-lg font-semibold">100 GB</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Team Members</p>
+                <p className="text-lg font-semibold">Up to 10</p>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Trial Features Highlight */}
+          {showroom?.subscription_status === 'trial' && trialDays > 0 && (
+            <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <Sparkles className="h-5 w-5 text-purple-500 mt-0.5" />
+                <div>
+                  <p className="font-medium text-purple-900">
+                    7-Day Free Trial with Full Pro Features
+                  </p>
+                  <p className="text-sm text-purple-700 mt-1">
+                    You have access to all Pro features during your trial, including:
+                  </p>
+                  <ul className="text-sm text-purple-700 mt-2 space-y-1">
+                    <li className="flex items-center gap-2">
+                      <Check className="h-3 w-3" /> Unlimited projects
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-3 w-3" /> Up to 500 products
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-3 w-3" /> 100GB storage
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-3 w-3" /> API & Webhook access
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-3 w-3" /> HD scans & AutoCAD export
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
           )}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useSubscriptionContext } from '@/contexts/subscription-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,7 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
-import { Webhook, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { Webhook, CheckCircle, AlertCircle, Loader2, Lock, Sparkles } from 'lucide-react'
+import Link from 'next/link'
 
 interface Category {
   id: string
@@ -30,6 +32,9 @@ interface ShowroomCategory {
 
 export default function SettingsPage() {
   const supabase = createClient()
+  const { canUseFeature, getUpgradeReason } = useSubscriptionContext()
+
+  const canUseWebhooks = canUseFeature('webhookAccess')
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -312,11 +317,17 @@ export default function SettingsPage() {
       </Card>
 
       {/* Webhook Integration */}
-      <Card>
+      <Card className={!canUseWebhooks ? 'border-gray-200 bg-gray-50/50' : ''}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Webhook className="h-5 w-5" />
             Webhook Integration
+            {!canUseWebhooks && (
+              <Badge variant="secondary" className="ml-2 gap-1">
+                <Lock className="h-3 w-3" />
+                Pro
+              </Badge>
+            )}
           </CardTitle>
           <CardDescription>
             Receive project submission data at your own endpoint. When a customer submits a project,
@@ -325,50 +336,52 @@ export default function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="webhook-url">Webhook URL</Label>
-            <div className="flex gap-2">
-              <Input
-                id="webhook-url"
-                type="url"
-                placeholder="https://your-domain.com/api/webhook"
-                value={webhookUrl}
-                onChange={(e) => {
-                  setWebhookUrl(e.target.value)
-                  setWebhookError(null)
-                }}
-                className="flex-1"
-              />
-              <Button
-                onClick={saveWebhookUrl}
-                disabled={webhookSaving}
-              >
-                {webhookSaving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  'Save'
+          {canUseWebhooks ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="webhook-url">Webhook URL</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="webhook-url"
+                    type="url"
+                    placeholder="https://your-domain.com/api/webhook"
+                    value={webhookUrl}
+                    onChange={(e) => {
+                      setWebhookUrl(e.target.value)
+                      setWebhookError(null)
+                    }}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={saveWebhookUrl}
+                    disabled={webhookSaving}
+                  >
+                    {webhookSaving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      'Save'
+                    )}
+                  </Button>
+                </div>
+                {webhookError && (
+                  <div className="flex items-center gap-2 text-sm text-red-600">
+                    <AlertCircle className="h-4 w-4" />
+                    {webhookError}
+                  </div>
                 )}
-              </Button>
-            </div>
-            {webhookError && (
-              <div className="flex items-center gap-2 text-sm text-red-600">
-                <AlertCircle className="h-4 w-4" />
-                {webhookError}
+                {webhookSuccess && (
+                  <div className="flex items-center gap-2 text-sm text-green-600">
+                    <CheckCircle className="h-4 w-4" />
+                    Webhook URL saved successfully
+                  </div>
+                )}
               </div>
-            )}
-            {webhookSuccess && (
-              <div className="flex items-center gap-2 text-sm text-green-600">
-                <CheckCircle className="h-4 w-4" />
-                Webhook URL saved successfully
-              </div>
-            )}
-          </div>
 
-          <Separator />
+              <Separator />
 
-          <div className="space-y-2">
-            <Label className="text-gray-500">Webhook Payload Example</Label>
-            <pre className="bg-gray-100 p-4 rounded-lg text-xs overflow-x-auto max-h-96">
+              <div className="space-y-2">
+                <Label className="text-gray-500">Webhook Payload Example</Label>
+                <pre className="bg-gray-100 p-4 rounded-lg text-xs overflow-x-auto max-h-96">
 {`{
   "event": "project.submitted",
   "timestamp": "2024-01-15T10:30:00Z",
@@ -434,8 +447,25 @@ export default function SettingsPage() {
     "code": "DEMO01"
   }
 }`}
-            </pre>
-          </div>
+                </pre>
+              </div>
+            </>
+          ) : (
+            <div className="py-6 text-center">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 mb-4">
+                <Sparkles className="h-6 w-6 text-blue-600" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">Upgrade to Pro</h3>
+              <p className="text-gray-500 mb-4 max-w-md mx-auto">
+                {getUpgradeReason('webhookAccess')}
+              </p>
+              <Link href="/showroom/billing">
+                <Button>
+                  Upgrade Plan
+                </Button>
+              </Link>
+            </div>
+          )}
         </CardContent>
       </Card>
 

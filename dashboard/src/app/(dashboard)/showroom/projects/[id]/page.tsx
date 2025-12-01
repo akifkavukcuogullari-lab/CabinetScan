@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ModelViewer } from '@/components/3d-viewer/ModelViewer'
 import { InteractiveFloorPlan } from '@/components/floor-plan/InteractiveFloorPlan'
+import { hasFeature, SubscriptionPlan } from '@/lib/subscription'
 import {
   ArrowLeft,
   User,
@@ -17,9 +18,10 @@ import {
   Box,
   DoorOpen,
   Square,
-  Download,
   Layers,
   Rotate3d,
+  Lock,
+  Sparkles,
 } from 'lucide-react'
 
 interface ProjectDetailPageProps {
@@ -41,6 +43,18 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     .single()
 
   if (!showroomUser) redirect('/login')
+
+  // Get showroom subscription plan
+  const { data: showroom } = await supabase
+    .from('showrooms')
+    .select('subscription_plan, subscription_status')
+    .eq('id', showroomUser.showroom_id)
+    .single()
+
+  // Check if 3D viewer is available based on plan
+  // Trial users get Pro features, so check if trial is active
+  const isTrial = showroom?.subscription_status === 'trial'
+  const can3DView = isTrial || hasFeature(showroom?.subscription_plan as SubscriptionPlan | null, 'viewer3D')
 
   // Get project with measurements and selections
   const { data: project, error } = await supabase
@@ -150,8 +164,8 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             Room Scan
           </div>
 
-          {has3DModel && hasFloorPlanData ? (
-            // Both 3D and 2D available - show tabs
+          {has3DModel && hasFloorPlanData && can3DView ? (
+            // Both 3D and 2D available AND user can view 3D - show tabs
             <Tabs defaultValue="2d" className="w-full">
               <TabsList className="mb-4">
                 <TabsTrigger value="2d" className="flex items-center gap-2">
@@ -178,8 +192,42 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                 />
               </TabsContent>
             </Tabs>
-          ) : has3DModel ? (
-            // Only 3D model file available
+          ) : has3DModel && hasFloorPlanData && !can3DView ? (
+            // Both 3D and 2D available but user can't view 3D - show 2D only with upgrade prompt
+            <div className="space-y-4">
+              <InteractiveFloorPlan measurements={measurement.measurements} />
+              <Card className="border-blue-200 bg-blue-50/50">
+                <CardContent className="py-6">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-shrink-0">
+                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100">
+                        <Rotate3d className="h-6 w-6 text-blue-600" />
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium">3D Model Available</h3>
+                        <Badge variant="secondary" className="gap-1">
+                          <Lock className="h-3 w-3" />
+                          Pro
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Upgrade to Pro to view the interactive 3D model captured with LiDAR technology.
+                      </p>
+                    </div>
+                    <Link href="/showroom/billing">
+                      <Button className="gap-2">
+                        <Sparkles className="h-4 w-4" />
+                        Upgrade
+                      </Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : has3DModel && can3DView ? (
+            // Only 3D model file available and user can view
             <ModelViewer
               glbUrl={measurement.glb_file_url}
               usdzUrl={measurement.usdz_file_url}
@@ -187,6 +235,33 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
               title="3D Room Scan"
               description="Interactive 3D model captured with LiDAR - drag to rotate, scroll to zoom"
             />
+          ) : has3DModel && !can3DView ? (
+            // Only 3D model available but user can't view - show upgrade prompt
+            <Card className="border-blue-200 bg-blue-50/50">
+              <CardContent className="py-8">
+                <div className="flex flex-col items-center text-center">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
+                    <Rotate3d className="h-8 w-8 text-blue-600" />
+                  </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-lg font-medium">3D Model Available</h3>
+                    <Badge variant="secondary" className="gap-1">
+                      <Lock className="h-3 w-3" />
+                      Pro
+                    </Badge>
+                  </div>
+                  <p className="text-gray-600 max-w-md mb-4">
+                    This project includes an interactive 3D model captured with LiDAR technology. Upgrade to Pro to view and interact with the 3D scan.
+                  </p>
+                  <Link href="/showroom/billing">
+                    <Button className="gap-2">
+                      <Sparkles className="h-4 w-4" />
+                      Upgrade to Pro
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
           ) : hasFloorPlanData ? (
             // Only 2D floor plan data available
             <InteractiveFloorPlan measurements={measurement.measurements} />
@@ -277,28 +352,6 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                           </div>
                         )}
                       </div>
-
-                      {measurement.usdz_file_url && (
-                        <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Rotate3d className="h-5 w-5 text-blue-600" />
-                              <span className="text-sm font-medium text-blue-900">3D Model Available</span>
-                            </div>
-                            <a
-                              href={measurement.usdz_file_url}
-                              download
-                              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                            >
-                              <Download className="h-4 w-4" />
-                              Download USDZ
-                            </a>
-                          </div>
-                          <p className="text-xs text-blue-600 mt-2">
-                            Open in Apple AR Quick Look, Reality Composer, or any USDZ-compatible viewer
-                          </p>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>

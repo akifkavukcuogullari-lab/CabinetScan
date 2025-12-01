@@ -3,6 +3,10 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
+  useSubscriptionContextOptional,
+  type SubscriptionContextType,
+} from '@/contexts/subscription-context'
+import {
   SubscriptionInfo,
   SubscriptionPlan,
   PlanFeatures,
@@ -31,7 +35,77 @@ interface UseSubscriptionReturn {
   refresh: () => Promise<void>
 }
 
+/**
+ * Hook for accessing subscription data.
+ *
+ * If used within a SubscriptionProvider, it will use the context data.
+ * Otherwise, it will fetch the data directly from Supabase.
+ *
+ * For most dashboard pages, the SubscriptionProvider is available
+ * and this hook will use the pre-loaded context data for better performance.
+ */
 export function useSubscription(): UseSubscriptionReturn {
+  const context = useSubscriptionContextOptional()
+
+  // If context is available, use it
+  if (context) {
+    return useSubscriptionFromContext(context)
+  }
+
+  // Otherwise, fall back to direct fetching
+  return useSubscriptionDirect()
+}
+
+/**
+ * Use subscription data from context (faster, uses pre-loaded data)
+ */
+function useSubscriptionFromContext(context: SubscriptionContextType): UseSubscriptionReturn {
+  const {
+    loading,
+    subscription: contextSub,
+    features,
+    isActive,
+    isTrialExpired: trialExpired,
+    trialDaysRemaining,
+    canUseFeature,
+    canAddMore,
+    getRequiredPlan,
+    refreshSubscription,
+    usage,
+  } = context
+
+  // Convert context subscription to SubscriptionInfo format for backward compatibility
+  const subscription: SubscriptionInfo | null = contextSub
+    ? {
+        plan: contextSub.plan,
+        status: contextSub.status,
+        projectLimit: features.projectLimit,
+        projectsUsed: usage.projects.current,
+        trialEndsAt: contextSub.trialEndsAt,
+        periodEnd: contextSub.currentPeriodEnd,
+        cancelAtPeriodEnd: contextSub.cancelAtPeriodEnd,
+      }
+    : null
+
+  return {
+    loading,
+    subscription,
+    features,
+    isActive,
+    isTrialExpired: trialExpired,
+    trialDaysRemaining: trialDaysRemaining ?? 0,
+    hasFeature: canUseFeature,
+    canCreateProject: () => canAddMore('projects'),
+    remainingProjects: usage.projects.unlimited ? null : usage.projects.remaining,
+    requiredPlanFor: getRequiredPlan,
+    refresh: refreshSubscription,
+  }
+}
+
+/**
+ * Direct subscription fetching (fallback when context is not available)
+ */
+function useSubscriptionDirect(): UseSubscriptionReturn {
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null)

@@ -26,6 +26,7 @@ export interface PlanFeatures {
   crmIntegration: boolean
   aiAgent: boolean
   customBranding: boolean
+  viewer3D: boolean
 }
 
 // Plan feature definitions
@@ -34,13 +35,14 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     projectLimit: 5,
     storageGb: 1,
     teamMembers: 1,
-    webhookAccess: false,
-    apiAccess: false,
-    autocadExport: false,
+    webhookAccess: true,  // Trial gets Pro features
+    apiAccess: true,
+    autocadExport: true,
     prioritySupport: false,
     crmIntegration: false,
     aiAgent: false,
     customBranding: true,
+    viewer3D: true,       // Trial gets Pro features
   },
   basic: {
     projectLimit: 20,
@@ -53,6 +55,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     crmIntegration: false,
     aiAgent: false,
     customBranding: true,
+    viewer3D: false,      // Basic doesn't get 3D viewer
   },
   pro: {
     projectLimit: null, // unlimited
@@ -65,6 +68,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     crmIntegration: false,
     aiAgent: false,
     customBranding: true,
+    viewer3D: true,
   },
   enterprise: {
     projectLimit: null,
@@ -77,6 +81,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     crmIntegration: true,
     aiAgent: true,
     customBranding: true,
+    viewer3D: true,
   },
 }
 
@@ -188,6 +193,7 @@ export const featureNames: Record<keyof PlanFeatures, string> = {
   crmIntegration: 'CRM integration',
   aiAgent: 'AI processing agent',
   customBranding: 'Custom branding',
+  viewer3D: '3D Model Viewer',
 }
 
 /**

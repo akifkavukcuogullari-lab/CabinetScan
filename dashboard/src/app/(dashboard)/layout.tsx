@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/shared/sidebar'
+import { SubscriptionProviderWrapper } from './subscription-provider-wrapper'
 
 export default async function DashboardLayout({
   children,
@@ -24,11 +25,12 @@ export default async function DashboardLayout({
     .eq('user_id', user.id)
     .single()
 
-  // Check if user is showroom owner
+  // Check if user is showroom owner (must be active)
   const { data: showroomUser } = await supabase
     .from('showroom_users')
     .select('id, full_name, email, showroom_id, showrooms(name)')
     .eq('user_id', user.id)
+    .eq('is_active', true)
     .single()
 
   const userInfo = admin
@@ -47,12 +49,81 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
+  // Fetch subscription data for showroom users
+  let subscriptionData = null
+  if (userInfo.type === 'showroom') {
+    const { data: showroom } = await supabase
+      .from('showrooms')
+      .select(`
+        subscription_status,
+        subscription_plan,
+        subscription_plan_id,
+        project_count_this_period,
+        product_count,
+        storage_used_bytes,
+        team_member_count,
+        trial_ends_at,
+        current_period_end,
+        grace_period_ends_at,
+        cancel_at_period_end,
+        subscription_plans (
+          id,
+          name,
+          slug,
+          project_limit,
+          product_limit,
+          storage_limit_gb,
+          team_member_limit,
+          soft_limit_threshold,
+          has_webhook_access,
+          has_api_access,
+          has_autocad_export,
+          has_priority_support,
+          has_crm_integration,
+          has_ai_agent,
+          price_monthly,
+          price_yearly
+        )
+      `)
+      .eq('id', userInfo.showroomId)
+      .single()
+
+    subscriptionData = showroom
+
+    // Block access for suspended or canceled subscriptions
+    if (showroom?.subscription_status === 'suspended') {
+      redirect('/account-suspended')
+    }
+
+    if (showroom?.subscription_status === 'canceled') {
+      redirect('/account-canceled')
+    }
+  }
+
+  // For admin users, render without subscription provider
+  if (userInfo.type === 'admin') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Sidebar userInfo={userInfo} />
+        <main className="lg:pl-64">
+          <div className="p-6">{children}</div>
+        </main>
+      </div>
+    )
+  }
+
+  // For showroom users, wrap with subscription provider
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Sidebar userInfo={userInfo} />
-      <main className="lg:pl-64">
-        <div className="p-6">{children}</div>
-      </main>
-    </div>
+    <SubscriptionProviderWrapper
+      showroomId={userInfo.showroomId}
+      initialData={subscriptionData}
+    >
+      <div className="min-h-screen bg-gray-50">
+        <Sidebar userInfo={userInfo} />
+        <main className="lg:pl-64">
+          <div className="p-6">{children}</div>
+        </main>
+      </div>
+    </SubscriptionProviderWrapper>
   )
 }
