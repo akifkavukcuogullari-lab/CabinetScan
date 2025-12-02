@@ -38,6 +38,13 @@ interface ProjectSubmission {
     measurements?: Record<string, unknown>
     usdz_file_url?: string
     preview_image_url?: string
+    // Video capture fields
+    video_url?: string
+    video_thumbnail_url?: string
+    video_duration_seconds?: number
+    video_size_bytes?: number
+    video_resolution?: string
+    video_format?: string
   }
   selections: Array<{
     category_id: string
@@ -358,6 +365,14 @@ async function callWebhook(
           glb_file_url: measurements.glb_file_url,
           preview_image_url: measurements.preview_image_url,
 
+          // Video capture data
+          video_url: measurements.video_url || null,
+          video_thumbnail_url: measurements.video_thumbnail_url || null,
+          video_duration_seconds: measurements.video_duration_seconds || null,
+          video_size_bytes: measurements.video_size_bytes || null,
+          video_resolution: measurements.video_resolution || null,
+          video_format: measurements.video_format || null,
+
           // Raw data for full access
           raw_measurements: measurements.measurements,
           roomplan_data: measurements.roomplan_data,
@@ -572,22 +587,35 @@ serve(async (req) => {
 
     // Create measurements if provided
     if (submission.measurements?.roomplan_data) {
+      const measurementData: Record<string, unknown> = {
+        project_id: project.id,
+        room_name: submission.measurements.room_name || 'Main Room',
+        room_type: submission.measurements.room_type,
+        roomplan_data: submission.measurements.roomplan_data,
+        total_linear_ft: submission.measurements.total_linear_ft,
+        total_sq_ft: submission.measurements.total_sq_ft,
+        wall_count: submission.measurements.wall_count,
+        window_count: submission.measurements.window_count,
+        door_count: submission.measurements.door_count,
+        measurements: submission.measurements.measurements || {},
+        usdz_file_url: submission.measurements.usdz_file_url,
+        preview_image_url: submission.measurements.preview_image_url,
+      }
+
+      // Add video fields if provided
+      if (submission.measurements.video_url) {
+        measurementData.video_url = submission.measurements.video_url
+        measurementData.video_thumbnail_url = submission.measurements.video_thumbnail_url
+        measurementData.video_duration_seconds = submission.measurements.video_duration_seconds
+        measurementData.video_size_bytes = submission.measurements.video_size_bytes
+        measurementData.video_resolution = submission.measurements.video_resolution
+        measurementData.video_format = submission.measurements.video_format || 'mp4'
+        measurementData.video_uploaded_at = new Date().toISOString()
+      }
+
       const { error: measurementError } = await supabaseAdmin
         .from('project_measurements')
-        .insert({
-          project_id: project.id,
-          room_name: submission.measurements.room_name || 'Main Room',
-          room_type: submission.measurements.room_type,
-          roomplan_data: submission.measurements.roomplan_data,
-          total_linear_ft: submission.measurements.total_linear_ft,
-          total_sq_ft: submission.measurements.total_sq_ft,
-          wall_count: submission.measurements.wall_count,
-          window_count: submission.measurements.window_count,
-          door_count: submission.measurements.door_count,
-          measurements: submission.measurements.measurements || {},
-          usdz_file_url: submission.measurements.usdz_file_url,
-          preview_image_url: submission.measurements.preview_image_url,
-        })
+        .insert(measurementData)
 
       if (measurementError) {
         console.error('Error creating measurements:', measurementError)

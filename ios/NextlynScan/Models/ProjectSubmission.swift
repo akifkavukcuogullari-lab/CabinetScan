@@ -88,6 +88,13 @@ struct MeasurementData: Codable {
     let usdzFileUrl: String?
     let glbFileUrl: String?
     let previewImageUrl: String?
+    // Video capture fields
+    let videoUrl: String?
+    let videoThumbnailUrl: String?
+    let videoDurationSeconds: Int?
+    let videoSizeBytes: Int64?
+    let videoResolution: String?
+    let videoFormat: String?
 
     enum CodingKeys: String, CodingKey {
         case measurements
@@ -102,6 +109,12 @@ struct MeasurementData: Codable {
         case usdzFileUrl = "usdz_file_url"
         case glbFileUrl = "glb_file_url"
         case previewImageUrl = "preview_image_url"
+        case videoUrl = "video_url"
+        case videoThumbnailUrl = "video_thumbnail_url"
+        case videoDurationSeconds = "video_duration_seconds"
+        case videoSizeBytes = "video_size_bytes"
+        case videoResolution = "video_resolution"
+        case videoFormat = "video_format"
     }
 }
 

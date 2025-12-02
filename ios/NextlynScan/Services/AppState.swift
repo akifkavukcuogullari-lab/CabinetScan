@@ -14,6 +14,7 @@ class AppState: ObservableObject {
     @Published var endClientInfo: EndClientInfo?
     @Published var measurementData: MeasurementData?
     @Published var selections: [String: Product] = [:] // categoryId -> selected product
+    @Published var specialRequests: String = "" // Additional notes/special requests from customer
     @Published var isLoading = false
     @Published var error: Error?
 
@@ -103,7 +104,7 @@ class AppState: ObservableObject {
                 endClient: endClientInfo,
                 project: ProjectInfo(
                     name: "Room Scan",
-                    notes: nil
+                    notes: specialRequests.isEmpty ? nil : specialRequests
                 ),
                 measurements: measurements,
                 selections: projectSelections,
@@ -136,6 +137,7 @@ class AppState: ObservableObject {
         endClientInfo = nil
         measurementData = nil
         selections = [:]
+        specialRequests = ""
         error = nil
     }
 

@@ -148,6 +148,16 @@ struct ReviewView: View {
                     }
                 }
 
+                // Special requests section
+                Section {
+                    TextField("Enter any special requests or details...", text: $appState.specialRequests, axis: .vertical)
+                        .lineLimit(3...6)
+                } header: {
+                    Text("Special Requests")
+                } footer: {
+                    Text("Add any specific requirements, design preferences, or additional details you'd like the showroom to know.")
+                }
+
                 // Submit section
                 Section {
                     Button {

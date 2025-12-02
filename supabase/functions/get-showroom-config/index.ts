@@ -41,6 +41,15 @@ interface ShowroomConfig {
       specifications: Record<string, unknown>
     }>
   }>
+  subscription: {
+    status: string
+    plan: string | null
+    video_capture: {
+      enabled: boolean
+      max_duration_seconds: number
+      max_size_mb: number
+    } | null
+  }
 }
 
 serve(async (req) => {
@@ -63,10 +72,21 @@ serve(async (req) => {
       )
     }
 
-    // Fetch showroom by code
+    // Fetch showroom by code with subscription info
     const { data: showroom, error: showroomError } = await supabaseAdmin
       .from('showrooms')
-      .select('id, name, showroom_code')
+      .select(`
+        id,
+        name,
+        showroom_code,
+        subscription_status,
+        subscription_plans (
+          slug,
+          has_video_capture,
+          video_max_duration_seconds,
+          video_max_size_mb
+        )
+      `)
       .eq('showroom_code', showroomCode.toUpperCase())
       .eq('is_active', true)
       .single()
@@ -147,6 +167,17 @@ serve(async (req) => {
       }
     })
 
+    // Build video capture settings based on subscription
+    const plan = showroom.subscription_plans as any
+    const isSubscriptionActive = ['trial', 'active'].includes(showroom.subscription_status)
+    const videoCapture = plan?.has_video_capture && isSubscriptionActive
+      ? {
+          enabled: true,
+          max_duration_seconds: plan.video_max_duration_seconds || 300,
+          max_size_mb: plan.video_max_size_mb || 500,
+        }
+      : null
+
     const config: ShowroomConfig = {
       id: showroom.id,
       name: showroom.name,
@@ -179,6 +210,11 @@ serve(async (req) => {
             privacy_url: null,
           },
       categories: categoriesWithProducts,
+      subscription: {
+        status: showroom.subscription_status,
+        plan: plan?.slug || null,
+        video_capture: videoCapture,
+      },
     }
 
     return new Response(JSON.stringify(config), {

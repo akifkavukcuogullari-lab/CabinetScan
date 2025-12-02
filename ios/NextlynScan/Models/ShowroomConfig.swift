@@ -7,10 +7,36 @@ struct ShowroomConfig: Codable, Identifiable {
     let showroomCode: String
     let branding: Branding
     let categories: [Category]
+    let subscription: SubscriptionInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, branding, categories
+        case id, name, branding, categories, subscription
         case showroomCode = "showroom_code"
+    }
+}
+
+// MARK: - Subscription Info
+struct SubscriptionInfo: Codable {
+    let status: String
+    let plan: String?
+    let videoCapture: ShowroomVideoCaptureSettings?
+
+    enum CodingKeys: String, CodingKey {
+        case status, plan
+        case videoCapture = "video_capture"
+    }
+}
+
+// MARK: - Video Capture Settings
+struct ShowroomVideoCaptureSettings: Codable {
+    let enabled: Bool
+    let maxDurationSeconds: Int
+    let maxSizeMb: Int
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case maxDurationSeconds = "max_duration_seconds"
+        case maxSizeMb = "max_size_mb"
     }
 }
 

@@ -1,6 +1,7 @@
 import SwiftUI
 import RoomPlan
 import simd
+import ARKit
 
 struct ScanningView: View {
     @EnvironmentObject var appState: AppState
@@ -9,17 +10,41 @@ struct ScanningView: View {
     @State private var processingStatus = "Processing scan..."
     @State private var capturedRoom: CapturedRoom?
     @State private var rotationAngle: Double = 0
+    @State private var videoRecorder: VideoRecorder?
+    @State private var recordedVideoURL: URL?
+    @State private var recordingDuration: TimeInterval = 0
+    @State private var videoRecorderDelegate: VideoRecorderDelegateHandler?
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
                 if isScanning {
-                    RoomCaptureViewRepresentable(
-                        isScanning: $isScanning,
-                        capturedRoom: $capturedRoom,
-                        onComplete: handleScanComplete
-                    )
-                    .ignoresSafeArea()
+                    ZStack(alignment: .top) {
+                        RoomCaptureViewRepresentable(
+                            isScanning: $isScanning,
+                            capturedRoom: $capturedRoom,
+                            videoRecorder: videoRecorder,
+                            onComplete: handleScanComplete
+                        )
+                        .ignoresSafeArea()
+
+                        // Video recording indicator
+                        if videoRecorder != nil {
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(Color.red)
+                                    .frame(width: 12, height: 12)
+                                Text(formatDuration(recordingDuration))
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Capsule())
+                            .padding(.top, 60)
+                        }
+                    }
                 } else if isProcessing {
                     // Processing view - shown after scan, before navigation
                     VStack(spacing: 32) {
@@ -98,7 +123,7 @@ struct ScanningView: View {
                         Spacer()
 
                         Button {
-                            isScanning = true
+                            startScanning()
                         } label: {
                             Label("Start Scanning", systemImage: "camera")
                                 .frame(maxWidth: .infinity)
@@ -132,8 +157,61 @@ struct ScanningView: View {
         }
     }
 
+    // MARK: - Video Capture Helpers
+
+    private var isVideoCaptureEnabled: Bool {
+        appState.showroomConfig?.subscription?.videoCapture?.enabled ?? false
+    }
+
+    private func startScanning() {
+        // Initialize video recorder if enabled
+        if isVideoCaptureEnabled {
+            // Cast ShowroomVideoCaptureSettings? to VideoCaptureSettings? if compatible
+            let captureSettings = appState.showroomConfig?.subscription?.videoCapture as? VideoCaptureSettings
+            let recorder = VideoRecorder(captureSettings: captureSettings)
+
+            // Create and store delegate to prevent deallocation
+            let delegateHandler = VideoRecorderDelegateHandler(
+                onDurationUpdate: { duration in
+                    DispatchQueue.main.async {
+                        self.recordingDuration = duration
+                    }
+                },
+                onRecordingComplete: { url in
+                    DispatchQueue.main.async {
+                        self.recordedVideoURL = url
+                    }
+                }
+            )
+            recorder.delegate = delegateHandler
+            videoRecorderDelegate = delegateHandler
+
+            do {
+                try recorder.prepare()
+                videoRecorder = recorder
+                print("[ScanningView] Video recorder prepared")
+            } catch {
+                print("[ScanningView] Failed to prepare video recorder: \(error)")
+                videoRecorder = nil
+                videoRecorderDelegate = nil
+            }
+        }
+
+        isScanning = true
+    }
+
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+
     private func handleScanComplete(room: CapturedRoom) {
         capturedRoom = room
+
+        // Stop video recording
+        videoRecorder?.stopRecording()
+
         isProcessing = true
         processingStatus = "Analyzing room data..."
 
@@ -146,7 +224,7 @@ struct ScanningView: View {
     private func processScanData(room: CapturedRoom) async {
         guard let showroomCode = appState.showroomConfig?.showroomCode else {
             print("No showroom code available")
-            let measurements = extractMeasurements(from: room, floorPlanUrl: nil, usdzUrl: nil, glbUrl: nil)
+            let measurements = extractMeasurements(from: room, floorPlanUrl: nil, usdzUrl: nil, glbUrl: nil, videoData: nil)
             await MainActor.run {
                 isProcessing = false
             }
@@ -181,16 +259,106 @@ struct ScanningView: View {
             glbUrl = await convertAndUploadGLB(usdzUrl: localUsdzUrl, showroomCode: showroomCode)
         }
 
+        // Process and upload video if recorded
+        var videoData: UploadedVideoData? = nil
+        if let recorder = videoRecorder, let videoURL = recordedVideoURL {
+            await MainActor.run {
+                processingStatus = "Uploading video..."
+            }
+            print("Processing video capture...")
+            videoData = await processAndUploadVideo(recorder: recorder, videoURL: videoURL, showroomCode: showroomCode)
+        }
+
         // Extract measurements with URLs
         await MainActor.run {
             processingStatus = "Finalizing measurements..."
         }
-        let measurements = extractMeasurements(from: room, floorPlanUrl: floorPlanUrl, usdzUrl: usdzUrl, glbUrl: glbUrl)
+        let measurements = extractMeasurements(from: room, floorPlanUrl: floorPlanUrl, usdzUrl: usdzUrl, glbUrl: glbUrl, videoData: videoData)
 
         await MainActor.run {
             isProcessing = false
+            // Clean up video recorder
+            videoRecorder = nil
+            videoRecorderDelegate = nil
+            recordedVideoURL = nil
+            recordingDuration = 0
         }
         appState.setMeasurementData(measurements)
+    }
+
+    // MARK: - Video Processing and Upload
+
+    private struct UploadedVideoData {
+        let videoUrl: String
+        let thumbnailUrl: String?
+        let durationSeconds: Int
+        let sizeBytes: Int64
+        let resolution: String
+    }
+
+    private func processAndUploadVideo(recorder: VideoRecorder, videoURL: URL, showroomCode: String) async -> UploadedVideoData? {
+        guard let metadata = recorder.getVideoMetadata() else {
+            print("Failed to get video metadata")
+            return nil
+        }
+
+        print("Video metadata: duration=\(metadata.durationSeconds)s, size=\(String(format: "%.2f", metadata.sizeMB))MB, resolution=\(metadata.resolution)")
+
+        // Upload video file
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let randomId = UUID().uuidString.prefix(8)
+        let videoFilename = "video_\(timestamp)_\(randomId).mp4"
+        let videoPath = "\(showroomCode.lowercased())/\(videoFilename)"
+
+        var uploadedVideoUrl: String? = nil
+        do {
+            let videoData = try Data(contentsOf: videoURL)
+            uploadedVideoUrl = try await APIService.shared.uploadFile(
+                bucket: "scans",
+                path: videoPath,
+                data: videoData,
+                contentType: "video/mp4"
+            )
+            print("Video uploaded: \(uploadedVideoUrl ?? "nil")")
+        } catch {
+            print("Failed to upload video: \(error)")
+            return nil
+        }
+
+        // Extract and upload thumbnail
+        var thumbnailUrl: String? = nil
+        if let thumbnail = await recorder.extractThumbnail(at: 1.0) {
+            if let thumbnailData = thumbnail.jpegData(compressionQuality: 0.8) {
+                let thumbnailFilename = "video_thumb_\(timestamp)_\(randomId).jpg"
+                let thumbnailPath = "\(showroomCode.lowercased())/\(thumbnailFilename)"
+                do {
+                    thumbnailUrl = try await APIService.shared.uploadFile(
+                        bucket: "scans",
+                        path: thumbnailPath,
+                        data: thumbnailData,
+                        contentType: "image/jpeg"
+                    )
+                    print("Video thumbnail uploaded: \(thumbnailUrl ?? "nil")")
+                } catch {
+                    print("Failed to upload thumbnail: \(error)")
+                }
+            }
+        }
+
+        // Clean up temp video file
+        try? FileManager.default.removeItem(at: videoURL)
+
+        guard let finalVideoUrl = uploadedVideoUrl else {
+            return nil
+        }
+
+        return UploadedVideoData(
+            videoUrl: finalVideoUrl,
+            thumbnailUrl: thumbnailUrl,
+            durationSeconds: metadata.durationSeconds,
+            sizeBytes: metadata.sizeBytes,
+            resolution: metadata.resolution
+        )
     }
 
     // MARK: - Floor Plan Image Upload
@@ -297,7 +465,7 @@ struct ScanningView: View {
         }
     }
 
-    private func extractMeasurements(from room: CapturedRoom, floorPlanUrl: String?, usdzUrl: String?, glbUrl: String?) -> MeasurementData {
+    private func extractMeasurements(from room: CapturedRoom, floorPlanUrl: String?, usdzUrl: String?, glbUrl: String?, videoData: UploadedVideoData?) -> MeasurementData {
         // Calculate total linear feet from walls
         var totalLinearFt: Double = 0
         var wallCount = 0
@@ -333,7 +501,13 @@ struct ScanningView: View {
             measurements: detailedMeasurements,
             usdzFileUrl: usdzUrl,
             glbFileUrl: glbUrl,
-            previewImageUrl: floorPlanUrl
+            previewImageUrl: floorPlanUrl,
+            videoUrl: videoData?.videoUrl,
+            videoThumbnailUrl: videoData?.thumbnailUrl,
+            videoDurationSeconds: videoData?.durationSeconds,
+            videoSizeBytes: videoData?.sizeBytes,
+            videoResolution: videoData?.resolution,
+            videoFormat: videoData != nil ? "mp4" : nil
         )
     }
 
@@ -764,19 +938,39 @@ struct InstructionRow: View {
 struct RoomCaptureViewRepresentable: UIViewRepresentable {
     @Binding var isScanning: Bool
     @Binding var capturedRoom: CapturedRoom?
+    var videoRecorder: VideoRecorder?
     let onComplete: (CapturedRoom) -> Void
 
     func makeUIView(context: Context) -> RoomCaptureView {
         let view = RoomCaptureView(frame: .zero)
         view.captureSession.delegate = context.coordinator
+
+        // Set up ARSession delegate for video frame capture
+        view.captureSession.arSession.delegate = context.coordinator
+
         return view
     }
 
     func updateUIView(_ uiView: RoomCaptureView, context: Context) {
+        context.coordinator.videoRecorder = videoRecorder
+
+        // Directly assign delegate without optional binding
+        uiView.captureSession.arSession.delegate = context.coordinator
+
         if isScanning && !context.coordinator.isSessionRunning {
             let config = RoomCaptureSession.Configuration()
             uiView.captureSession.run(configuration: config)
             context.coordinator.isSessionRunning = true
+
+            // Start video recording
+            if let recorder = videoRecorder {
+                do {
+                    try recorder.startRecording()
+                    print("[RoomCaptureView] Video recording started")
+                } catch {
+                    print("[RoomCaptureView] Failed to start video recording: \(error)")
+                }
+            }
         } else if !isScanning && context.coordinator.isSessionRunning {
             uiView.captureSession.stop()
             context.coordinator.isSessionRunning = false
@@ -787,13 +981,17 @@ struct RoomCaptureViewRepresentable: UIViewRepresentable {
         Coordinator(parent: self)
     }
 
-    class Coordinator: NSObject, RoomCaptureSessionDelegate {
+    class Coordinator: NSObject, RoomCaptureSessionDelegate, ARSessionDelegate {
         let parent: RoomCaptureViewRepresentable
         var isSessionRunning = false
+        var videoRecorder: VideoRecorder?
+        private var sessionStartTime: TimeInterval?
 
         init(parent: RoomCaptureViewRepresentable) {
             self.parent = parent
         }
+
+        // MARK: - RoomCaptureSessionDelegate
 
         func captureSession(_ session: RoomCaptureSession, didEndWith data: CapturedRoomData, error: Error?) {
             guard error == nil else {
@@ -809,6 +1007,49 @@ struct RoomCaptureViewRepresentable: UIViewRepresentable {
                 }
             }
         }
+
+        // MARK: - ARSessionDelegate
+
+        func session(_ session: ARSession, didUpdate frame: ARFrame) {
+            guard let recorder = videoRecorder, recorder.isCurrentlyRecording else { return }
+
+            // Initialize session start time on first frame
+            if sessionStartTime == nil {
+                sessionStartTime = frame.timestamp
+            }
+
+            // Calculate timestamp relative to session start
+            let relativeTimestamp = frame.timestamp - (sessionStartTime ?? 0)
+
+            // Append frame to video recorder
+            recorder.appendPixelBuffer(frame.capturedImage, timestamp: relativeTimestamp)
+        }
+    }
+}
+
+// MARK: - Video Recorder Delegate Handler
+class VideoRecorderDelegateHandler: VideoRecorderDelegate {
+    private let onDurationUpdate: (TimeInterval) -> Void
+    private let onRecordingComplete: (URL?) -> Void
+
+    init(onDurationUpdate: @escaping (TimeInterval) -> Void, onRecordingComplete: @escaping (URL?) -> Void) {
+        self.onDurationUpdate = onDurationUpdate
+        self.onRecordingComplete = onRecordingComplete
+    }
+
+    func videoRecorderDidStartRecording(_ recorder: VideoRecorder) {
+        print("[VideoRecorderDelegateHandler] Recording started")
+    }
+
+    func videoRecorderDidStopRecording(_ recorder: VideoRecorder, outputURL: URL?, error: Error?) {
+        if let error = error {
+            print("[VideoRecorderDelegateHandler] Recording failed: \(error)")
+        }
+        onRecordingComplete(outputURL)
+    }
+
+    func videoRecorderDidUpdateDuration(_ recorder: VideoRecorder, duration: TimeInterval) {
+        onDurationUpdate(duration)
     }
 }
 
