@@ -3,8 +3,8 @@ import SwiftUI
 struct SelectionView: View {
     @EnvironmentObject var appState: AppState
     @State private var currentCategoryIndex = 0
-    @State private var selectedProductForVariants: Product? = nil
-    @State private var showVariantPicker = false
+    @State private var showingColorSelection = false
+    @State private var selectedModelForColors: Product? = nil
 
     private var categories: [Category] {
         appState.showroomConfig?.categories ?? []
@@ -15,9 +15,30 @@ struct SelectionView: View {
         return categories[currentCategoryIndex]
     }
 
+    // Adjust progress to account for color selection step
+    private var totalSteps: Int {
+        var steps = categories.count
+        // Add extra step for each category that has a selected product with variants
+        for category in categories {
+            if let selectedProduct = appState.selections[category.categoryId],
+               selectedProduct.hasVariants && !selectedProduct.variants.isEmpty {
+                steps += 1
+            }
+        }
+        return steps
+    }
+
+    private var currentStep: Int {
+        var step = currentCategoryIndex + 1
+        if showingColorSelection {
+            step += 1
+        }
+        return step
+    }
+
     private var progress: Double {
-        guard !categories.isEmpty else { return 0 }
-        return Double(currentCategoryIndex + 1) / Double(categories.count)
+        guard totalSteps > 0 else { return 0 }
+        return Double(currentStep) / Double(max(totalSteps, categories.count))
     }
 
     var body: some View {
@@ -39,7 +60,25 @@ struct SelectionView: View {
                     .progressViewStyle(.linear)
                     .tint(.blue)
 
-                if let category = currentCategory {
+                if showingColorSelection, let product = selectedModelForColors, let category = currentCategory {
+                    // Color Selection View (full screen, same style as category)
+                    ColorSelectionView(
+                        product: product,
+                        category: category,
+                        onSelect: { variant in
+                            selectColor(variant, for: product, in: category)
+                        },
+                        onBack: {
+                            withAnimation {
+                                showingColorSelection = false
+                                selectedModelForColors = nil
+                                // Clear the model selection so user can pick again
+                                appState.selections.removeValue(forKey: category.categoryId)
+                                appState.variantSelections.removeValue(forKey: product.id)
+                            }
+                        }
+                    )
+                } else if let category = currentCategory {
                     // Category header
                     VStack(spacing: 4) {
                         Text(category.name)
@@ -129,7 +168,14 @@ struct SelectionView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Back") {
-                        appState.currentScreen = .scanning
+                        if showingColorSelection {
+                            withAnimation {
+                                showingColorSelection = false
+                                selectedModelForColors = nil
+                            }
+                        } else {
+                            appState.currentScreen = .scanning
+                        }
                     }
                 }
 
@@ -140,36 +186,27 @@ struct SelectionView: View {
                     .foregroundStyle(.secondary)
                 }
             }
-            .sheet(isPresented: $showVariantPicker) {
-                if let product = selectedProductForVariants,
-                   let category = currentCategory {
-                    VariantPickerSheet(
-                        product: product,
-                        category: category,
-                        onSelect: { variant in
-                            selectProductWithVariant(product, variant: variant, in: category)
-                            showVariantPicker = false
-                        },
-                        onCancel: {
-                            showVariantPicker = false
-                        }
-                    )
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-                }
-            }
         }
     }
 
     private func selectProduct(_ product: Product, in category: Category) {
-        // If product has variants (colors), show the variant picker
+        // If product has variants (colors), show color selection as next step
         if product.hasVariants && !product.variants.isEmpty {
-            selectedProductForVariants = product
-            showVariantPicker = true
+            // First select the model
+            withAnimation(.spring(response: 0.3)) {
+                appState.selectProduct(for: category.categoryId, product: product)
+            }
+            // Then show color selection
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                withAnimation {
+                    selectedModelForColors = product
+                    showingColorSelection = true
+                }
+            }
             return
         }
 
-        // Otherwise, select the product directly
+        // Otherwise, select the product directly and advance
         withAnimation(.spring(response: 0.3)) {
             appState.selectProduct(for: category.categoryId, product: product)
         }
@@ -177,12 +214,19 @@ struct SelectionView: View {
         advanceToNextCategory()
     }
 
-    private func selectProductWithVariant(_ product: Product, variant: ProductVariant, in category: Category) {
+    private func selectColor(_ variant: ProductVariant, for product: Product, in category: Category) {
         withAnimation(.spring(response: 0.3)) {
-            appState.selectProduct(for: category.categoryId, product: product, variant: variant)
+            appState.selectVariant(for: product, variant: variant)
         }
 
-        advanceToNextCategory()
+        // Hide color selection and advance
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation {
+                showingColorSelection = false
+                selectedModelForColors = nil
+            }
+            advanceToNextCategory()
+        }
     }
 
     private func advanceToNextCategory() {
@@ -197,84 +241,88 @@ struct SelectionView: View {
     }
 }
 
-// MARK: - Variant Picker Sheet
-struct VariantPickerSheet: View {
+// MARK: - Color Selection View (Full Screen)
+struct ColorSelectionView: View {
     let product: Product
     let category: Category
     let onSelect: (ProductVariant) -> Void
-    let onCancel: () -> Void
+    let onBack: () -> Void
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                // Product header
-                HStack(spacing: 12) {
-                    if let imageUrl = product.imageUrl,
-                       let url = URL(string: imageUrl) {
-                        AsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } placeholder: {
-                            ProgressView()
-                        }
-                        .frame(width: 60, height: 60)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+        VStack(spacing: 0) {
+            // Header showing selected model
+            HStack(spacing: 12) {
+                if let imageUrl = product.imageUrl,
+                   let url = URL(string: imageUrl) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        ProgressView()
                     }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(product.name)
-                            .font(.headline)
-                        Text("Select a color")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
+                    .frame(width: 50, height: 50)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
-                .padding(.horizontal)
 
-                Divider()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(product.name)
+                        .font(.headline)
+                    Text("Select Color")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                }
 
-                // Color variants grid
-                ScrollView {
-                    LazyVGrid(columns: [
-                        GridItem(.flexible()),
-                        GridItem(.flexible()),
-                        GridItem(.flexible())
-                    ], spacing: 16) {
-                        ForEach(product.variants) { variant in
-                            VariantCard(variant: variant, onSelect: {
-                                onSelect(variant)
-                            })
+                Spacer()
+            }
+            .padding()
+            .background(Color(.systemGray6))
+
+            // Color options grid - larger cards for door images
+            ScrollView {
+                LazyVGrid(columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible())
+                ], spacing: 16) {
+                    ForEach(product.variants) { variant in
+                        ColorOptionCard(variant: variant) {
+                            onSelect(variant)
                         }
                     }
-                    .padding()
                 }
+                .padding()
             }
-            .navigationTitle("Choose Color")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        onCancel()
-                    }
+
+            // Back button
+            HStack {
+                Button {
+                    onBack()
+                } label: {
+                    Label("Change Model", systemImage: "chevron.left")
                 }
+                .buttonStyle(.bordered)
+
+                Spacer()
             }
+            .padding()
         }
     }
 }
 
-// MARK: - Variant Card
-struct VariantCard: View {
+// MARK: - Color Option Card (Larger for door images)
+struct ColorOptionCard: View {
     let variant: ProductVariant
     let onSelect: () -> Void
 
     var body: some View {
         Button(action: onSelect) {
             VStack(spacing: 8) {
-                // Color swatch or image
+                // Door image or color swatch - taller aspect ratio for doors
                 ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(.systemGray6))
+                        .aspectRatio(0.6, contentMode: .fit) // Taller for door images
+
                     if let imageUrl = variant.imageUrl,
                        let url = URL(string: imageUrl) {
                         AsyncImage(url: url) { image in
@@ -284,45 +332,43 @@ struct VariantCard: View {
                         } placeholder: {
                             ProgressView()
                         }
-                        .frame(width: 80, height: 80)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                     } else if let colorCode = variant.colorCode,
                               let color = Color(hex: colorCode) {
                         RoundedRectangle(cornerRadius: 12)
                             .fill(color)
-                            .frame(width: 80, height: 80)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
                                     .strokeBorder(Color(.systemGray4), lineWidth: 1)
                             )
                     } else {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.systemGray5))
-                            .frame(width: 80, height: 80)
-                            .overlay(
-                                Image(systemName: "paintpalette")
-                                    .foregroundStyle(.secondary)
-                            )
+                        Image(systemName: "paintpalette")
+                            .font(.system(size: 40))
+                            .foregroundStyle(.tertiary)
                     }
 
                     // Default badge
                     if variant.isDefault {
                         VStack {
                             HStack {
+                                Text("Popular")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(.yellow)
+                                    .clipShape(Capsule())
                                 Spacer()
-                                Image(systemName: "star.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(.yellow)
                             }
                             Spacer()
                         }
-                        .padding(4)
+                        .padding(8)
                     }
                 }
 
-                // Variant name
+                // Color name
                 Text(variant.name)
-                    .font(.caption)
+                    .font(.subheadline)
                     .fontWeight(.medium)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
@@ -330,7 +376,7 @@ struct VariantCard: View {
                 // Price
                 if let price = variant.price {
                     Text("$\(price, specifier: "%.2f")")
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
