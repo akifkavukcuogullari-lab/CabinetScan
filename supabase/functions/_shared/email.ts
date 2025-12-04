@@ -23,7 +23,7 @@ export async function sendEmail(options: EmailOptions): Promise<{ success: boole
     return { success: false, error: 'Email service not configured' }
   }
 
-  const fromEmail = options.from || Deno.env.get('EMAIL_FROM') || 'Nextlyn Scan <noreply@nextlyn.ai>'
+  const fromEmail = options.from || Deno.env.get('EMAIL_FROM') || 'CabinetHub <noreply@nextlyn.ai>'
 
   console.log('Sending email via Resend:', { to: options.to, from: fromEmail, subject: options.subject })
 
@@ -117,7 +117,7 @@ export function generateInvitationEmailHtml(options: {
                 ${greeting},
               </p>
               <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #374151;">
-                You've been invited to manage <strong style="color: ${primaryColor};">${showroomName}</strong> on Nextlyn Scan.
+                You've been invited to manage <strong style="color: ${primaryColor};">${showroomName}</strong> on CabinetHub.
                 This platform will allow you to view 3D room scans, manage your product catalog, and connect with customers.
               </p>
               ${customMessage ? `
@@ -153,7 +153,7 @@ export function generateInvitationEmailHtml(options: {
           <tr>
             <td style="padding: 24px 40px; background-color: #f9fafb; border-radius: 0 0 12px 12px; border-top: 1px solid #e5e7eb;">
               <p style="margin: 0 0 8px; font-size: 12px; color: #9ca3af; text-align: center;">
-                This email was sent by Nextlyn Scan
+                This email was sent by CabinetHub
               </p>
               <p style="margin: 0; font-size: 12px; color: #9ca3af; text-align: center;">
                 If the button doesn't work, copy and paste this link into your browser:<br>

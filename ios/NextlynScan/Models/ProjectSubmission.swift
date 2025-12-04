@@ -122,6 +122,7 @@ struct MeasurementData: Codable {
 struct ProductSelection: Codable {
     let categoryId: String
     let productId: String
+    let variantId: String?  // For products with color variants
     let quantity: Int?
     let customerNotes: String?
 
@@ -129,6 +130,7 @@ struct ProductSelection: Codable {
         case quantity
         case categoryId = "category_id"
         case productId = "product_id"
+        case variantId = "variant_id"
         case customerNotes = "customer_notes"
     }
 }

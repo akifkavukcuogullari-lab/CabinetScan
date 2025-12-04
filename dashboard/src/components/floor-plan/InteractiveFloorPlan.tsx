@@ -224,6 +224,16 @@ export function InteractiveFloorPlan({
     }
   }, [targetRotation, targetZoom])
 
+  // Sync fullscreen state with browser fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -266,10 +276,6 @@ export function InteractiveFloorPlan({
           toggleFullscreen()
           break
         case 'Escape':
-          if (isFullscreen) {
-            e.preventDefault()
-            setIsFullscreen(false)
-          }
           setSelectedObject(null)
           break
         case '?':
@@ -281,7 +287,7 @@ export function InteractiveFloorPlan({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isFullscreen])
+  }, [])
 
   // Touch gesture handlers
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -634,8 +640,22 @@ export function InteractiveFloorPlan({
   }, [])
 
   // Toggle fullscreen
-  const toggleFullscreen = useCallback(() => {
-    setIsFullscreen(prev => !prev)
+  const toggleFullscreen = useCallback(async () => {
+    if (!containerRef.current) return
+
+    try {
+      if (!document.fullscreenElement) {
+        // Enter fullscreen
+        await containerRef.current.requestFullscreen()
+        setIsFullscreen(true)
+      } else {
+        // Exit fullscreen
+        await document.exitFullscreen()
+        setIsFullscreen(false)
+      }
+    } catch (error) {
+      console.error('Fullscreen error:', error)
+    }
   }, [])
 
   // Export functions
@@ -929,12 +949,8 @@ export function InteractiveFloorPlan({
     ? ((room.max_x - room.min_x) * (room.max_z - room.min_z)).toFixed(0)
     : null
 
-  const containerClasses = isFullscreen
-    ? 'fixed inset-0 z-50 bg-white flex flex-col'
-    : className
-
   return (
-    <Card className={containerClasses}>
+    <Card className={className}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div>
@@ -986,7 +1002,7 @@ export function InteractiveFloorPlan({
           </div>
         </div>
       </CardHeader>
-      <CardContent className={isFullscreen ? 'flex-1 flex flex-col' : ''}>
+      <CardContent>
         {/* Controls */}
         <div className="flex items-center gap-4 mb-4 p-3 bg-gradient-to-r from-gray-50 to-gray-100/50 rounded-xl border border-gray-100">
           <div className="flex items-center gap-2 flex-1">
@@ -1092,7 +1108,7 @@ export function InteractiveFloorPlan({
 
         <div
           ref={containerRef}
-          className={`relative bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm ${isFullscreen ? 'flex-1' : ''}`}
+          className="relative bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -1101,8 +1117,11 @@ export function InteractiveFloorPlan({
           <svg
             ref={svgRef}
             viewBox={`0 0 ${viewWidth} ${viewHeight}`}
-            className="w-full h-auto transition-transform duration-75"
-            style={{ maxHeight: isFullscreen ? '100%' : '500px' }}
+            className="w-full transition-transform duration-75"
+            style={{
+              height: isFullscreen ? '100vh' : 'auto',
+              maxHeight: isFullscreen ? '100vh' : '500px'
+            }}
             role="img"
             aria-label="Interactive floor plan showing room layout with walls, cabinets, and appliances"
           >

@@ -14,6 +14,7 @@ class AppState: ObservableObject {
     @Published var endClientInfo: EndClientInfo?
     @Published var measurementData: MeasurementData?
     @Published var selections: [String: Product] = [:] // categoryId -> selected product
+    @Published var variantSelections: [String: ProductVariant] = [:] // productId -> selected variant (for products with colors)
     @Published var specialRequests: String = "" // Additional notes/special requests from customer
     @Published var isLoading = false
     @Published var error: Error?
@@ -68,8 +69,23 @@ class AppState: ObservableObject {
         }
     }
 
-    func selectProduct(for categoryId: String, product: Product) {
+    func selectProduct(for categoryId: String, product: Product, variant: ProductVariant? = nil) {
         selections[categoryId] = product
+        // Store variant selection if provided
+        if let variant = variant {
+            variantSelections[product.id] = variant
+        } else {
+            // Clear any previous variant selection for this product
+            variantSelections.removeValue(forKey: product.id)
+        }
+    }
+
+    func selectVariant(for product: Product, variant: ProductVariant) {
+        variantSelections[product.id] = variant
+    }
+
+    func getSelectedVariant(for product: Product) -> ProductVariant? {
+        return variantSelections[product.id]
     }
 
     func proceedToReview() {
@@ -90,9 +106,11 @@ class AppState: ObservableObject {
 
         do {
             let projectSelections = selections.map { categoryId, product in
-                ProductSelection(
+                let variantId = variantSelections[product.id]?.id
+                return ProductSelection(
                     categoryId: categoryId,
                     productId: product.id,
+                    variantId: variantId,
                     quantity: 1,
                     customerNotes: nil
                 )
@@ -137,6 +155,7 @@ class AppState: ObservableObject {
         endClientInfo = nil
         measurementData = nil
         selections = [:]
+        variantSelections = [:]
         specialRequests = ""
         error = nil
     }

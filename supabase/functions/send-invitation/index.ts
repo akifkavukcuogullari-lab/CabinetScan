@@ -237,7 +237,7 @@ serve(async (req) => {
 
     const emailResult = await sendEmail({
       to: body.email,
-      subject: `You're invited to manage ${showroom.name} on Nextlyn Scan`,
+      subject: `You're invited to manage ${showroom.name} on CabinetHub`,
       html: emailHtml,
     })
 

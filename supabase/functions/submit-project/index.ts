@@ -49,6 +49,7 @@ interface ProjectSubmission {
   selections: Array<{
     category_id: string
     product_id: string
+    variant_id?: string  // Optional: for products with color variants
     quantity?: number
     customer_notes?: string
   }>
@@ -176,6 +177,14 @@ async function callWebhook(
     `)
     .eq('project_id', project.id)
 
+  // Helper function to format measurements
+  const formatDimension = (feet: number | null | undefined): string => {
+    if (!feet) return '0\' 0"'
+    const ft = Math.floor(feet)
+    const inches = Math.round((feet - ft) * 12)
+    return `${ft}' ${inches}"`
+  }
+
   // Build comprehensive webhook payload
   const webhookPayload = {
     event: 'project.submitted',
@@ -204,183 +213,112 @@ async function callWebhook(
       },
     },
     end_client: submission.end_client || null,
-    measurements: measurements
+    room: measurements
       ? {
-          room_name: measurements.room_name,
-          room_type: measurements.room_type,
-          total_linear_ft: measurements.total_linear_ft,
-          total_sq_ft: measurements.total_sq_ft,
-          wall_count: measurements.wall_count,
-          window_count: measurements.window_count,
-          door_count: measurements.door_count,
-
-          // Cabinet counts
-          lower_cabinet_count: measurements.roomplan_data?.cabinet_counts?.lower || 0,
-          upper_cabinet_count: measurements.roomplan_data?.cabinet_counts?.upper || 0,
-
-          // Individual lower cabinet measurements
-          lower_cabinets: (measurements.roomplan_data?.cabinets?.lower || []).map((cab: any, index: number) => ({
-            id: `lower_cabinet_${index + 1}`,
-            type: 'lower_cabinet',
-            width_ft: cab.width_ft || cab.width,
-            height_ft: cab.height_ft || cab.height,
-            depth_ft: cab.depth_ft || cab.depth,
-            width_inches: cab.width_inches || (cab.width_ft ? cab.width_ft * 12 : null),
-            height_inches: cab.height_inches || (cab.height_ft ? cab.height_ft * 12 : null),
-            depth_inches: cab.depth_inches || (cab.depth_ft ? cab.depth_ft * 12 : null),
-            position: cab.position || null,
-            raw_data: cab,
-          })),
-
-          // Individual upper cabinet measurements
-          upper_cabinets: (measurements.roomplan_data?.cabinets?.upper || []).map((cab: any, index: number) => ({
-            id: `upper_cabinet_${index + 1}`,
-            type: 'upper_cabinet',
-            width_ft: cab.width_ft || cab.width,
-            height_ft: cab.height_ft || cab.height,
-            depth_ft: cab.depth_ft || cab.depth,
-            width_inches: cab.width_inches || (cab.width_ft ? cab.width_ft * 12 : null),
-            height_inches: cab.height_inches || (cab.height_ft ? cab.height_ft * 12 : null),
-            depth_inches: cab.depth_inches || (cab.depth_ft ? cab.depth_ft * 12 : null),
-            position: cab.position || null,
-            raw_data: cab,
-          })),
-
-          // Individual wall measurements
-          walls: (measurements.roomplan_data?.walls || []).map((wall: any, index: number) => ({
-            id: `wall_${index + 1}`,
-            type: 'wall',
-            width_ft: wall.width_ft || wall.width,
-            height_ft: wall.height_ft || wall.height,
-            length_ft: wall.length_ft || wall.length,
-            width_inches: wall.width_inches || (wall.width_ft ? wall.width_ft * 12 : null),
-            height_inches: wall.height_inches || (wall.height_ft ? wall.height_ft * 12 : null),
-            length_inches: wall.length_inches || (wall.length_ft ? wall.length_ft * 12 : null),
-            position: wall.position || null,
-            raw_data: wall,
-          })),
-
-          // Individual window measurements
-          windows: (measurements.roomplan_data?.windows || []).map((win: any, index: number) => ({
-            id: `window_${index + 1}`,
-            type: 'window',
-            width_ft: win.width_ft || win.width,
-            height_ft: win.height_ft || win.height,
-            width_inches: win.width_inches || (win.width_ft ? win.width_ft * 12 : null),
-            height_inches: win.height_inches || (win.height_ft ? win.height_ft * 12 : null),
-            position: win.position || null,
-            raw_data: win,
-          })),
-
-          // Individual door measurements
-          doors: (measurements.roomplan_data?.doors || []).map((door: any, index: number) => ({
-            id: `door_${index + 1}`,
-            type: 'door',
-            width_ft: door.width_ft || door.width,
-            height_ft: door.height_ft || door.height,
-            width_inches: door.width_inches || (door.width_ft ? door.width_ft * 12 : null),
-            height_inches: door.height_inches || (door.height_ft ? door.height_ft * 12 : null),
-            position: door.position || null,
-            raw_data: door,
-          })),
-
-          // Individual appliance measurements (stove, oven, refrigerator, dishwasher, washer/dryer)
-          appliances: (measurements.roomplan_data?.appliances || []).map((app: any, index: number) => ({
-            id: `appliance_${index + 1}`,
-            type: app.type || app.category || 'appliance',
-            category: app.category,
-            width_ft: app.width_ft || app.width,
-            height_ft: app.height_ft || app.height,
-            depth_ft: app.depth_ft || app.depth,
-            width_inches: app.width_inches || (app.width_ft ? app.width_ft * 12 : null),
-            height_inches: app.height_inches || (app.height_ft ? app.height_ft * 12 : null),
-            depth_inches: app.depth_inches || (app.depth_ft ? app.depth_ft * 12 : null),
-            position: app.position || null,
-            raw_data: app,
-          })),
-
-          // Individual sink measurements
-          sinks: (measurements.roomplan_data?.sinks || []).map((sink: any, index: number) => ({
-            id: `sink_${index + 1}`,
-            type: 'sink',
-            width_ft: sink.width_ft || sink.width,
-            height_ft: sink.height_ft || sink.height,
-            depth_ft: sink.depth_ft || sink.depth,
-            width_inches: sink.width_inches || (sink.width_ft ? sink.width_ft * 12 : null),
-            height_inches: sink.height_inches || (sink.height_ft ? sink.height_ft * 12 : null),
-            depth_inches: sink.depth_inches || (sink.depth_ft ? sink.depth_ft * 12 : null),
-            position: sink.position || null,
-            raw_data: sink,
-          })),
-
-          // All objects in a single array for convenience
-          all_objects: [
-            ...(measurements.roomplan_data?.cabinets?.lower || []).map((cab: any, index: number) => ({
-              id: `lower_cabinet_${index + 1}`,
-              type: 'lower_cabinet',
-              dimensions: { width_ft: cab.width_ft, height_ft: cab.height_ft, depth_ft: cab.depth_ft },
-              position: cab.position,
-            })),
-            ...(measurements.roomplan_data?.cabinets?.upper || []).map((cab: any, index: number) => ({
-              id: `upper_cabinet_${index + 1}`,
-              type: 'upper_cabinet',
-              dimensions: { width_ft: cab.width_ft, height_ft: cab.height_ft, depth_ft: cab.depth_ft },
-              position: cab.position,
-            })),
-            ...(measurements.roomplan_data?.walls || []).map((wall: any, index: number) => ({
-              id: `wall_${index + 1}`,
-              type: 'wall',
-              dimensions: { width_ft: wall.width_ft, height_ft: wall.height_ft, length_ft: wall.length_ft },
-              position: wall.position,
-            })),
-            ...(measurements.roomplan_data?.windows || []).map((win: any, index: number) => ({
-              id: `window_${index + 1}`,
-              type: 'window',
-              dimensions: { width_ft: win.width_ft, height_ft: win.height_ft },
-              position: win.position,
-            })),
-            ...(measurements.roomplan_data?.doors || []).map((door: any, index: number) => ({
-              id: `door_${index + 1}`,
-              type: 'door',
-              dimensions: { width_ft: door.width_ft, height_ft: door.height_ft },
-              position: door.position,
-            })),
-            ...(measurements.roomplan_data?.appliances || []).map((app: any, index: number) => ({
-              id: `appliance_${index + 1}`,
-              type: app.type || app.category || 'appliance',
-              category: app.category,
-              dimensions: { width_ft: app.width_ft, height_ft: app.height_ft, depth_ft: app.depth_ft },
-              position: app.position,
-            })),
-            ...(measurements.roomplan_data?.sinks || []).map((sink: any, index: number) => ({
-              id: `sink_${index + 1}`,
-              type: 'sink',
-              dimensions: { width_ft: sink.width_ft, height_ft: sink.height_ft, depth_ft: sink.depth_ft },
-              position: sink.position,
-            })),
-          ],
-
-          // File URLs
-          usdz_file_url: measurements.usdz_file_url,
-          glb_file_url: measurements.glb_file_url,
-          preview_image_url: measurements.preview_image_url,
-
-          // Video capture data
-          video_url: measurements.video_url || null,
-          video_thumbnail_url: measurements.video_thumbnail_url || null,
-          video_duration_seconds: measurements.video_duration_seconds || null,
-          video_size_bytes: measurements.video_size_bytes || null,
-          video_resolution: measurements.video_resolution || null,
-          video_format: measurements.video_format || null,
-
-          // Raw data for full access
-          raw_measurements: measurements.measurements,
-          roomplan_data: measurements.roomplan_data,
+          name: measurements.room_name,
+          type: measurements.room_type,
+          ceiling_height: formatDimension(measurements.measurements?.room?.ceiling_height_ft),
+          total_area_sqft: Math.round(measurements.total_sq_ft || 0),
         }
       : null,
-    selections: (selections || []).map((s: any) => ({
+    measurements: measurements
+      ? {
+          walls: (Array.isArray(measurements.measurements?.walls) ? measurements.measurements.walls : []).map((wall: any, index: number) => ({
+            id: `wall_${index + 1}`,
+            length: formatDimension(wall.width_ft || wall.length_ft),
+            height: formatDimension(wall.height_ft),
+            linear_ft: Number((wall.width_ft || wall.length_ft || 0).toFixed(2)),
+          })),
+
+          lower_cabinets: (Array.isArray(measurements.measurements?.cabinets?.lower) ? measurements.measurements.cabinets.lower : []).map((cab: any, index: number) => ({
+            id: `lower_cabinet_${index + 1}`,
+            width: formatDimension(cab.width_ft),
+            height: formatDimension(cab.height_ft),
+            depth: formatDimension(cab.depth_ft),
+          })),
+
+          upper_cabinets: (Array.isArray(measurements.measurements?.cabinets?.upper) ? measurements.measurements.cabinets.upper : []).map((cab: any, index: number) => ({
+            id: `upper_cabinet_${index + 1}`,
+            width: formatDimension(cab.width_ft),
+            height: formatDimension(cab.height_ft),
+            depth: formatDimension(cab.depth_ft),
+          })),
+
+          appliances: (Array.isArray(measurements.measurements?.appliances) ? measurements.measurements.appliances : []).map((app: any, index: number) => ({
+            id: `appliance_${index + 1}`,
+            type: app.type || 'appliance',
+            width: formatDimension(app.width_ft),
+            height: formatDimension(app.height_ft),
+            depth: formatDimension(app.depth_ft),
+          })),
+
+          sinks: (Array.isArray(measurements.measurements?.sinks) ? measurements.measurements.sinks : []).map((sink: any, index: number) => ({
+            id: `sink_${index + 1}`,
+            width: formatDimension(sink.width_ft),
+            height: formatDimension(sink.height_ft),
+            depth: formatDimension(sink.depth_ft),
+          })),
+
+          windows: (Array.isArray(measurements.measurements?.windows) ? measurements.measurements.windows : []).map((win: any, index: number) => ({
+            id: `window_${index + 1}`,
+            width: formatDimension(win.width_ft),
+            height: formatDimension(win.height_ft),
+          })),
+
+          doors: (Array.isArray(measurements.measurements?.doors) ? measurements.measurements.doors : []).map((door: any, index: number) => ({
+            id: `door_${index + 1}`,
+            width: formatDimension(door.width_ft),
+            height: formatDimension(door.height_ft),
+          })),
+
+          countertops: measurements.measurements?.countertop_summary
+            ? {
+                total_area_sqft: Number((measurements.measurements.countertop_summary.total_area_sqft || 0).toFixed(2)),
+                total_linear_ft: Number((measurements.measurements.countertop_summary.total_linear_ft || 0).toFixed(2)),
+                sections: (Array.isArray(measurements.measurements.countertops) ? measurements.measurements.countertops : []).map((ct: any, index: number) => ({
+                  id: `countertop_${index + 1}`,
+                  width: formatDimension(ct.width_ft),
+                  depth: formatDimension(ct.depth_ft),
+                  area_sqft: Number((ct.area_sqft || 0).toFixed(2)),
+                  linear_ft: Number((ct.linear_ft || 0).toFixed(2)),
+                })),
+              }
+            : null,
+
+          summary: {
+            total_linear_ft: Number((measurements.total_linear_ft || 0).toFixed(2)),
+            wall_count: measurements.wall_count || 0,
+            lower_cabinet_count: measurements.measurements?.summary?.lower_cabinet_count || 0,
+            upper_cabinet_count: measurements.measurements?.summary?.upper_cabinet_count || 0,
+            appliance_count: measurements.measurements?.summary?.appliance_count || 0,
+            sink_count: measurements.measurements?.summary?.sink_count || 0,
+            window_count: measurements.window_count || 0,
+            door_count: measurements.door_count || 0,
+          },
+        }
+      : null,
+    files: measurements
+      ? {
+          scan_3d: measurements.usdz_file_url,
+          floor_plan: measurements.preview_image_url,
+          video: measurements.video_url || null,
+          video_thumbnail: measurements.video_thumbnail_url || null,
+        }
+      : null,
+    video: measurements?.video_url
+      ? {
+          url: measurements.video_url,
+          thumbnail: measurements.video_thumbnail_url,
+          duration_seconds: measurements.video_duration_seconds,
+          size_mb: measurements.video_size_bytes ? Number((measurements.video_size_bytes / (1024 * 1024)).toFixed(2)) : null,
+          resolution: measurements.video_resolution,
+          format: measurements.video_format,
+        }
+      : null,
+    selections: (Array.isArray(selections) ? selections : []).map((s: any) => ({
       category: s.categories?.name || 'Unknown',
       product: s.product_name_snapshot,
+      variant: s.variant_name_snapshot || null,
       price: s.product_price_snapshot,
       pricing_unit: s.pricing_unit_snapshot,
       quantity: s.quantity,
@@ -395,6 +333,9 @@ async function callWebhook(
   }
 
   // Send webhook with timeout
+  console.log(`[WEBHOOK] Calling webhook URL: ${webhookUrl}`)
+  console.log(`[WEBHOOK] Project ID: ${project.id}`)
+
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
@@ -414,12 +355,18 @@ async function callWebhook(
     clearTimeout(timeoutId)
 
     if (!response.ok) {
-      console.error(`Webhook returned status ${response.status}`)
+      const responseText = await response.text()
+      console.error(`[WEBHOOK] Webhook returned status ${response.status}`)
+      console.error(`[WEBHOOK] Response body: ${responseText}`)
     } else {
-      console.log(`Webhook called successfully for project ${project.id}`)
+      console.log(`[WEBHOOK] ✅ Webhook called successfully for project ${project.id}`)
+      console.log(`[WEBHOOK] Response status: ${response.status}`)
     }
   } catch (err) {
     clearTimeout(timeoutId)
+    console.error(`[WEBHOOK] ❌ Webhook call failed:`, err)
+    console.error(`[WEBHOOK] Error name: ${err.name}`)
+    console.error(`[WEBHOOK] Error message: ${err.message}`)
     throw err
   }
 }
@@ -629,22 +576,47 @@ serve(async (req) => {
       const productIds = submission.selections.map((s) => s.product_id)
       const { data: products } = await supabaseAdmin
         .from('products')
-        .select('id, name, price, category_id, categories(pricing_unit)')
+        .select('id, name, price, has_variants, category_id, categories(pricing_unit)')
         .in('id', productIds)
 
       const productMap = new Map(products?.map((p: any) => [p.id, p]) || [])
+
+      // Fetch variant details for selections that include variants
+      const variantIds = submission.selections
+        .filter((s) => s.variant_id)
+        .map((s) => s.variant_id as string)
+
+      let variantMap = new Map<string, any>()
+      if (variantIds.length > 0) {
+        const { data: variants } = await supabaseAdmin
+          .from('product_variants')
+          .select('id, name, price, product_id')
+          .in('id', variantIds)
+
+        variantMap = new Map(variants?.map((v: any) => [v.id, v]) || [])
+      }
 
       const selectionsToInsert = submission.selections
         .filter((s) => productMap.has(s.product_id))
         .map((s) => {
           const product = productMap.get(s.product_id) as any
+          const variant = s.variant_id ? variantMap.get(s.variant_id) : null
+
+          // For products with variants, use variant price; otherwise use product price
+          const effectivePrice = variant?.price ?? product.price
+          const effectiveName = variant
+            ? `${product.name} - ${variant.name}`
+            : product.name
+
           return {
             project_id: project.id,
             category_id: s.category_id,
             product_id: s.product_id,
+            variant_id: s.variant_id || null,
             quantity: s.quantity || 1,
-            product_name_snapshot: product.name,
-            product_price_snapshot: product.price,
+            product_name_snapshot: effectiveName,
+            variant_name_snapshot: variant?.name || null,
+            product_price_snapshot: effectivePrice,
             pricing_unit_snapshot: product.categories?.pricing_unit || 'none',
             customer_notes: s.customer_notes,
           }

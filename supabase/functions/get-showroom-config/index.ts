@@ -2,6 +2,31 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { supabaseAdmin } from '../_shared/supabase.ts'
 
+interface ProductVariant {
+  id: string
+  name: string
+  color_code: string | null
+  price: number | null
+  image_url: string | null
+  thumbnail_url: string | null
+  display_order: number
+  is_default: boolean
+}
+
+interface Product {
+  id: string
+  name: string
+  description: string | null
+  price: number | null
+  image_url: string | null
+  thumbnail_url: string | null
+  display_order: number
+  is_featured: boolean
+  specifications: Record<string, unknown>
+  has_variants: boolean
+  variants: ProductVariant[]
+}
+
 interface ShowroomConfig {
   id: string
   name: string
@@ -29,17 +54,7 @@ interface ShowroomConfig {
     icon_name: string | null
     display_order: number
     is_required: boolean
-    products: Array<{
-      id: string
-      name: string
-      description: string | null
-      price: number | null
-      image_url: string | null
-      thumbnail_url: string | null
-      display_order: number
-      is_featured: boolean
-      specifications: Record<string, unknown>
-    }>
+    products: Product[]
   }>
   subscription: {
     status: string
@@ -137,6 +152,33 @@ serve(async (req) => {
       .eq('is_active', true)
       .order('display_order')
 
+    // Fetch variants for products that have them
+    const productIds = (products || []).map((p: any) => p.id)
+    const { data: variants } = await supabaseAdmin
+      .from('product_variants')
+      .select('*')
+      .in('product_id', productIds)
+      .eq('is_active', true)
+      .order('display_order')
+
+    // Group variants by product_id
+    const variantsByProduct: Record<string, ProductVariant[]> = {}
+    for (const v of variants || []) {
+      if (!variantsByProduct[v.product_id]) {
+        variantsByProduct[v.product_id] = []
+      }
+      variantsByProduct[v.product_id].push({
+        id: v.id,
+        name: v.name,
+        color_code: v.color_code,
+        price: v.price,
+        image_url: v.image_url,
+        thumbnail_url: v.thumbnail_url,
+        display_order: v.display_order,
+        is_default: v.is_default,
+      })
+    }
+
     // Build categories with their products
     const categoriesWithProducts = (showroomCategories || []).map((sc: any) => {
       const categoryProducts = (products || [])
@@ -151,6 +193,8 @@ serve(async (req) => {
           display_order: p.display_order,
           is_featured: p.is_featured,
           specifications: p.specifications,
+          has_variants: p.has_variants || false,
+          variants: variantsByProduct[p.id] || [],
         }))
 
       return {
@@ -170,6 +214,13 @@ serve(async (req) => {
     // Build video capture settings based on subscription
     const plan = showroom.subscription_plans as any
     const isSubscriptionActive = ['trial', 'active'].includes(showroom.subscription_status)
+
+    console.log(`[VIDEO CAPTURE] Showroom: ${showroom.name}`)
+    console.log(`[VIDEO CAPTURE] Subscription status: ${showroom.subscription_status}`)
+    console.log(`[VIDEO CAPTURE] Plan: ${plan?.slug}`)
+    console.log(`[VIDEO CAPTURE] Plan has_video_capture: ${plan?.has_video_capture}`)
+    console.log(`[VIDEO CAPTURE] Is subscription active: ${isSubscriptionActive}`)
+
     const videoCapture = plan?.has_video_capture && isSubscriptionActive
       ? {
           enabled: true,
@@ -177,6 +228,8 @@ serve(async (req) => {
           max_size_mb: plan.video_max_size_mb || 500,
         }
       : null
+
+    console.log(`[VIDEO CAPTURE] Final videoCapture:`, videoCapture)
 
     const config: ShowroomConfig = {
       id: showroom.id,

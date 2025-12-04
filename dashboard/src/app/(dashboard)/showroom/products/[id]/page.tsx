@@ -34,13 +34,26 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { ArrowLeft, Loader2, Upload, X, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Upload, X, Trash2, Plus, Palette, GripVertical } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 
 interface Category {
   id: string
   name: string
   slug: string
   pricing_unit: string
+}
+
+interface ProductVariant {
+  id: string
+  product_id: string
+  name: string
+  color_code: string | null
+  price: number | null
+  image_url: string | null
+  display_order: number
+  is_active: boolean
+  is_default: boolean
 }
 
 interface Product {
@@ -53,6 +66,7 @@ interface Product {
   price: number | null
   is_active: boolean
   is_featured: boolean
+  has_variants: boolean
   image_url: string | null
 }
 
@@ -73,6 +87,10 @@ export default function EditProductPage({
   const [categories, setCategories] = useState<Category[]>([])
   const [error, setError] = useState<string | null>(null)
   const [product, setProduct] = useState<Product | null>(null)
+  const [variants, setVariants] = useState<ProductVariant[]>([])
+  const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null)
+  const [showVariantForm, setShowVariantForm] = useState(false)
+  const [variantUploading, setVariantUploading] = useState(false)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -82,7 +100,16 @@ export default function EditProductPage({
     category_id: '',
     is_active: true,
     is_featured: false,
+    has_variants: false,
     image_url: '',
+  })
+
+  const [variantForm, setVariantForm] = useState({
+    name: '',
+    color_code: '',
+    price: '',
+    image_url: '',
+    is_default: false,
   })
 
   useEffect(() => {
@@ -130,8 +157,20 @@ export default function EditProductPage({
         category_id: productData.category_id,
         is_active: productData.is_active,
         is_featured: productData.is_featured,
+        has_variants: productData.has_variants || false,
         image_url: productData.image_url || '',
       })
+
+      // Load variants
+      const { data: variantsData } = await supabase
+        .from('product_variants')
+        .select('*')
+        .eq('product_id', id)
+        .order('display_order')
+
+      if (variantsData) {
+        setVariants(variantsData)
+      }
 
       // Load categories
       const { data: categoriesData } = await supabase
@@ -198,6 +237,7 @@ export default function EditProductPage({
           price: formData.price ? parseFloat(formData.price) : null,
           is_active: formData.is_active,
           is_featured: formData.is_featured,
+          has_variants: formData.has_variants,
           image_url: formData.image_url || null,
         })
         .eq('id', product.id)
@@ -237,6 +277,140 @@ export default function EditProductPage({
   }
 
   const selectedCategory = categories.find((c) => c.id === formData.category_id)
+  const isCabinetModel = selectedCategory?.slug === 'cabinet-model'
+
+  // Variant management functions
+  const resetVariantForm = () => {
+    setVariantForm({
+      name: '',
+      color_code: '',
+      price: '',
+      image_url: '',
+      is_default: false,
+    })
+    setEditingVariant(null)
+    setShowVariantForm(false)
+  }
+
+  const handleVariantImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !showroomId) return
+
+    setVariantUploading(true)
+
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${showroomId}/variants/${Date.now()}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('products')
+        .upload(fileName, file)
+
+      if (uploadError) throw uploadError
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('products').getPublicUrl(fileName)
+
+      setVariantForm((prev) => ({ ...prev, image_url: publicUrl }))
+    } catch (err) {
+      console.error('Error uploading variant image:', err)
+      setError('Failed to upload variant image.')
+    } finally {
+      setVariantUploading(false)
+    }
+  }
+
+  const handleSaveVariant = async () => {
+    if (!product || !variantForm.name) return
+
+    try {
+      if (editingVariant) {
+        // Update existing variant
+        const { error } = await supabase
+          .from('product_variants')
+          .update({
+            name: variantForm.name,
+            color_code: variantForm.color_code || null,
+            price: variantForm.price ? parseFloat(variantForm.price) : null,
+            image_url: variantForm.image_url || null,
+            is_default: variantForm.is_default,
+          })
+          .eq('id', editingVariant.id)
+
+        if (error) throw error
+
+        setVariants((prev) =>
+          prev.map((v) =>
+            v.id === editingVariant.id
+              ? {
+                  ...v,
+                  name: variantForm.name,
+                  color_code: variantForm.color_code || null,
+                  price: variantForm.price ? parseFloat(variantForm.price) : null,
+                  image_url: variantForm.image_url || null,
+                  is_default: variantForm.is_default,
+                }
+              : variantForm.is_default ? { ...v, is_default: false } : v
+          )
+        )
+      } else {
+        // Create new variant
+        const { data, error } = await supabase
+          .from('product_variants')
+          .insert({
+            product_id: product.id,
+            name: variantForm.name,
+            color_code: variantForm.color_code || null,
+            price: variantForm.price ? parseFloat(variantForm.price) : null,
+            image_url: variantForm.image_url || null,
+            is_default: variantForm.is_default,
+            display_order: variants.length,
+          })
+          .select()
+          .single()
+
+        if (error) throw error
+
+        // If new variant is default, unset others
+        if (variantForm.is_default) {
+          setVariants((prev) => [...prev.map((v) => ({ ...v, is_default: false })), data])
+        } else {
+          setVariants((prev) => [...prev, data])
+        }
+      }
+
+      resetVariantForm()
+    } catch (err) {
+      console.error('Error saving variant:', err)
+      setError('Failed to save variant.')
+    }
+  }
+
+  const handleEditVariant = (variant: ProductVariant) => {
+    setEditingVariant(variant)
+    setVariantForm({
+      name: variant.name,
+      color_code: variant.color_code || '',
+      price: variant.price?.toString() || '',
+      image_url: variant.image_url || '',
+      is_default: variant.is_default,
+    })
+    setShowVariantForm(true)
+  }
+
+  const handleDeleteVariant = async (variantId: string) => {
+    try {
+      const { error } = await supabase.from('product_variants').delete().eq('id', variantId)
+
+      if (error) throw error
+
+      setVariants((prev) => prev.filter((v) => v.id !== variantId))
+    } catch (err) {
+      console.error('Error deleting variant:', err)
+      setError('Failed to delete variant.')
+    }
+  }
 
   if (loading) {
     return (
@@ -457,6 +631,264 @@ export default function EditProductPage({
                 )}
               </CardContent>
             </Card>
+
+            {/* Color Variants - Only show for Cabinet Model category */}
+            {isCabinetModel && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Palette className="h-5 w-5" />
+                        Color Variants
+                      </CardTitle>
+                      <CardDescription>
+                        Add available colors for this cabinet model
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="has_variants"
+                        checked={formData.has_variants}
+                        onCheckedChange={(checked) =>
+                          setFormData((prev) => ({ ...prev, has_variants: checked }))
+                        }
+                      />
+                      <Label htmlFor="has_variants" className="text-sm">
+                        Enable
+                      </Label>
+                    </div>
+                  </div>
+                </CardHeader>
+                {formData.has_variants && (
+                  <CardContent className="space-y-4">
+                    {/* Existing variants */}
+                    {variants.length > 0 && (
+                      <div className="space-y-2">
+                        {variants.map((variant) => (
+                          <div
+                            key={variant.id}
+                            className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50"
+                          >
+                            <GripVertical className="h-4 w-4 text-gray-400 cursor-move" />
+                            {variant.color_code ? (
+                              <div
+                                className="w-8 h-8 rounded border"
+                                style={{ backgroundColor: variant.color_code }}
+                              />
+                            ) : variant.image_url ? (
+                              <img
+                                src={variant.image_url}
+                                alt={variant.name}
+                                className="w-8 h-8 rounded object-cover"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
+                                <Palette className="h-4 w-4 text-gray-400" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium truncate">{variant.name}</span>
+                                {variant.is_default && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    Default
+                                  </Badge>
+                                )}
+                              </div>
+                              {variant.price && (
+                                <span className="text-sm text-gray-500">
+                                  ${variant.price.toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditVariant(variant)}
+                            >
+                              Edit
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button type="button" variant="ghost" size="icon">
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Color Variant</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete &quot;{variant.name}&quot;?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteVariant(variant.id)}
+                                    className="bg-red-600 hover:bg-red-700"
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add/Edit variant form */}
+                    {showVariantForm ? (
+                      <div className="border rounded-lg p-4 space-y-4 bg-gray-50">
+                        <h4 className="font-medium">
+                          {editingVariant ? 'Edit Color' : 'Add New Color'}
+                        </h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Color Name *</Label>
+                            <Input
+                              value={variantForm.name}
+                              onChange={(e) =>
+                                setVariantForm((prev) => ({ ...prev, name: e.target.value }))
+                              }
+                              placeholder="e.g., White, Navy Blue"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Color Code</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                type="color"
+                                value={variantForm.color_code || '#ffffff'}
+                                onChange={(e) =>
+                                  setVariantForm((prev) => ({
+                                    ...prev,
+                                    color_code: e.target.value,
+                                  }))
+                                }
+                                className="w-12 h-10 p-1"
+                              />
+                              <Input
+                                value={variantForm.color_code}
+                                onChange={(e) =>
+                                  setVariantForm((prev) => ({
+                                    ...prev,
+                                    color_code: e.target.value,
+                                  }))
+                                }
+                                placeholder="#FFFFFF"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Price</Label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                                $
+                              </span>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={variantForm.price}
+                                onChange={(e) =>
+                                  setVariantForm((prev) => ({ ...prev, price: e.target.value }))
+                                }
+                                placeholder="0.00"
+                                className="pl-7"
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Image (optional)</Label>
+                            {variantForm.image_url ? (
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={variantForm.image_url}
+                                  alt="Variant"
+                                  className="w-10 h-10 rounded object-cover"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setVariantForm((prev) => ({ ...prev, image_url: '' }))
+                                  }
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <Button type="button" variant="outline" size="sm" asChild>
+                                  <span>
+                                    {variantUploading ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Upload className="h-4 w-4" />
+                                    )}
+                                  </span>
+                                </Button>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept="image/*"
+                                  onChange={handleVariantImageUpload}
+                                  disabled={variantUploading}
+                                />
+                              </label>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id="variant_is_default"
+                            checked={variantForm.is_default}
+                            onCheckedChange={(checked) =>
+                              setVariantForm((prev) => ({ ...prev, is_default: checked }))
+                            }
+                          />
+                          <Label htmlFor="variant_is_default">Default color</Label>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            onClick={handleSaveVariant}
+                            disabled={!variantForm.name}
+                          >
+                            {editingVariant ? 'Update' : 'Add'} Color
+                          </Button>
+                          <Button type="button" variant="outline" onClick={resetVariantForm}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setShowVariantForm(true)}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Color Variant
+                      </Button>
+                    )}
+
+                    {variants.length === 0 && !showVariantForm && (
+                      <p className="text-sm text-gray-500 text-center py-4">
+                        No color variants added yet. Add colors that customers can choose from.
+                      </p>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+            )}
           </div>
 
           {/* Sidebar */}

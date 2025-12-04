@@ -44,7 +44,10 @@
       "Bash(npx vercel deploy --prod --token=1ExnXgS5xxeSrQMSSLfa7ro1 --yes)",
       "Bash(VERCEL_TOKEN=\"1ExnXgS5xxeSrQMSSLfa7ro1\" curl -s -X POST \"https://api.vercel.com/v13/deployments\" -H \"Authorization: Bearer $VERCEL_TOKEN\" -H \"Content-Type: application/json\" -d '{\"\"\"\"name\"\"\"\":\"\"\"\"cabinet-scan\"\"\"\",\"\"\"\"project\"\"\"\":\"\"\"\"prj_s0Xnc51NU23TJVq90FNEfLLjcoh6\"\"\"\",\"\"\"\"gitSource\"\"\"\":{\"\"\"\"type\"\"\"\":\"\"\"\"github\"\"\"\",\"\"\"\"org\"\"\"\":\"\"\"\"akifkavukcuogullari-lab\"\"\"\",\"\"\"\"repo\"\"\"\":\"\"\"\"CabinetScan\"\"\"\",\"\"\"\"ref\"\"\"\":\"\"\"\"main\"\"\"\"},\"\"\"\"target\"\"\"\":\"\"\"\"production\"\"\"\"}')",
       "Bash(python3:*)",
-      "Bash(npx shadcn@latest add:*)"
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(supabase db execute:*)",
+      "Bash(supabase db dump --data-only --table subscription_plans)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": [],
     "ask": []

@@ -103,13 +103,52 @@ struct Product: Codable, Identifiable {
     let displayOrder: Int
     let isFeatured: Bool
     let specifications: [String: AnyCodable]?
+    let hasVariants: Bool
+    let variants: [ProductVariant]
 
     enum CodingKeys: String, CodingKey {
-        case id, name, description, price, specifications
+        case id, name, description, price, specifications, variants
         case imageUrl = "image_url"
         case thumbnailUrl = "thumbnail_url"
         case displayOrder = "display_order"
         case isFeatured = "is_featured"
+        case hasVariants = "has_variants"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        price = try container.decodeIfPresent(Double.self, forKey: .price)
+        imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        thumbnailUrl = try container.decodeIfPresent(String.self, forKey: .thumbnailUrl)
+        displayOrder = try container.decode(Int.self, forKey: .displayOrder)
+        isFeatured = try container.decode(Bool.self, forKey: .isFeatured)
+        specifications = try container.decodeIfPresent([String: AnyCodable].self, forKey: .specifications)
+        hasVariants = try container.decodeIfPresent(Bool.self, forKey: .hasVariants) ?? false
+        variants = try container.decodeIfPresent([ProductVariant].self, forKey: .variants) ?? []
+    }
+}
+
+// MARK: - Product Variant (Color)
+struct ProductVariant: Codable, Identifiable {
+    let id: String
+    let name: String
+    let colorCode: String?
+    let price: Double?
+    let imageUrl: String?
+    let thumbnailUrl: String?
+    let displayOrder: Int
+    let isDefault: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, price
+        case colorCode = "color_code"
+        case imageUrl = "image_url"
+        case thumbnailUrl = "thumbnail_url"
+        case displayOrder = "display_order"
+        case isDefault = "is_default"
     }
 }
 
