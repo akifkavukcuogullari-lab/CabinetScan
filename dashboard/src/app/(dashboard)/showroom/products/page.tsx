@@ -82,12 +82,8 @@ export default async function ProductsPage() {
               <TabsTrigger
                 key={category.id}
                 value={category.id}
-                className="relative"
               >
                 {category.name}
-                {!enabledCategoryIds.has(category.id) && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-gray-400 rounded-full" />
-                )}
               </TabsTrigger>
             ))}
           </TabsList>

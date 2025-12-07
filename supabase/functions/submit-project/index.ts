@@ -45,6 +45,8 @@ interface ProjectSubmission {
     video_size_bytes?: number
     video_resolution?: string
     video_format?: string
+    // Visualization photo (wide-angle corner shot)
+    visualization_photo_url?: string
   }
   selections: Array<{
     category_id: string
@@ -148,9 +150,8 @@ async function findOrCreateCustomer(
   return newCustomer.id
 }
 
-// Call webhook with project data
-async function callWebhook(
-  webhookUrl: string,
+// Build webhook payload (used for both sending and storing)
+async function buildWebhookPayload(
   data: {
     project: any
     referenceNumber: string
@@ -158,7 +159,7 @@ async function callWebhook(
     submission: ProjectSubmission
     customerId: string
   }
-): Promise<void> {
+): Promise<Record<string, unknown>> {
   const { project, referenceNumber, showroom, submission } = data
 
   // Fetch complete measurements data
@@ -186,7 +187,7 @@ async function callWebhook(
   }
 
   // Build comprehensive webhook payload
-  const webhookPayload = {
+  return {
     event: 'project.submitted',
     timestamp: new Date().toISOString(),
     project: {
@@ -303,6 +304,7 @@ async function callWebhook(
           floor_plan: measurements.preview_image_url,
           video: measurements.video_url || null,
           video_thumbnail: measurements.video_thumbnail_url || null,
+          visualization_photo: measurements.visualization_photo_url || null,
         }
       : null,
     video: measurements?.video_url
@@ -313,6 +315,12 @@ async function callWebhook(
           size_mb: measurements.video_size_bytes ? Number((measurements.video_size_bytes / (1024 * 1024)).toFixed(2)) : null,
           resolution: measurements.video_resolution,
           format: measurements.video_format,
+        }
+      : null,
+    visualization_photo: measurements?.visualization_photo_url
+      ? {
+          url: measurements.visualization_photo_url,
+          description: 'Wide-angle corner photo for visualization',
         }
       : null,
     selections: (Array.isArray(selections) ? selections : []).map((s: any) => ({
@@ -331,10 +339,17 @@ async function callWebhook(
     },
     device_info: submission.device_info || null,
   }
+}
 
+// Call webhook with project data
+async function callWebhook(
+  webhookUrl: string,
+  webhookPayload: Record<string, unknown>,
+  projectId: string
+): Promise<void> {
   // Send webhook with timeout
   console.log(`[WEBHOOK] Calling webhook URL: ${webhookUrl}`)
-  console.log(`[WEBHOOK] Project ID: ${project.id}`)
+  console.log(`[WEBHOOK] Project ID: ${projectId}`)
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
@@ -346,7 +361,7 @@ async function callWebhook(
         'Content-Type': 'application/json',
         'User-Agent': 'NextLean-Scan-Webhook/1.0',
         'X-Webhook-Event': 'project.submitted',
-        'X-Project-ID': project.id,
+        'X-Project-ID': projectId,
       },
       body: JSON.stringify(webhookPayload),
       signal: controller.signal,
@@ -359,10 +374,10 @@ async function callWebhook(
       console.error(`[WEBHOOK] Webhook returned status ${response.status}`)
       console.error(`[WEBHOOK] Response body: ${responseText}`)
     } else {
-      console.log(`[WEBHOOK] ✅ Webhook called successfully for project ${project.id}`)
+      console.log(`[WEBHOOK] ✅ Webhook called successfully for project ${projectId}`)
       console.log(`[WEBHOOK] Response status: ${response.status}`)
     }
-  } catch (err) {
+  } catch (err: any) {
     clearTimeout(timeoutId)
     console.error(`[WEBHOOK] ❌ Webhook call failed:`, err)
     console.error(`[WEBHOOK] Error name: ${err.name}`)
@@ -560,6 +575,11 @@ serve(async (req) => {
         measurementData.video_uploaded_at = new Date().toISOString()
       }
 
+      // Add visualization photo if provided
+      if (submission.measurements.visualization_photo_url) {
+        measurementData.visualization_photo_url = submission.measurements.visualization_photo_url
+      }
+
       const { error: measurementError } = await supabaseAdmin
         .from('project_measurements')
         .insert(measurementData)
@@ -634,15 +654,33 @@ serve(async (req) => {
       }
     }
 
-    // Call webhook if configured (async, don't block response)
+    // Build and save webhook payload (always save if showroom has webhook configured)
+    // This allows viewing the payload in the dashboard even if webhook delivery fails
     if (showroom.webhook_url) {
-      callWebhook(showroom.webhook_url, {
+      // Build webhook payload
+      const webhookPayload = await buildWebhookPayload({
         project,
         referenceNumber,
         showroom,
         submission,
         customerId,
-      }).catch((err) => {
+      })
+
+      // Save webhook payload to project (async, don't block)
+      supabaseAdmin
+        .from('projects')
+        .update({ webhook_payload: webhookPayload })
+        .eq('id', project.id)
+        .then(({ error }) => {
+          if (error) {
+            console.error('Error saving webhook payload:', error)
+          } else {
+            console.log(`[WEBHOOK] Saved webhook payload for project ${project.id}`)
+          }
+        })
+
+      // Call webhook (async, don't block response)
+      callWebhook(showroom.webhook_url, webhookPayload, project.id).catch((err) => {
         console.error('Webhook call failed:', err)
       })
     }

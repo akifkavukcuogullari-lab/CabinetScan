@@ -14,11 +14,23 @@ struct ScanningView: View {
     @State private var recordedVideoURL: URL?
     @State private var recordingDuration: TimeInterval = 0
     @State private var videoRecorderDelegate: VideoRecorderDelegateHandler?
+    // Visualization photo state
+    @State private var showVisualizationPhoto = false
+    @State private var pendingMeasurements: MeasurementData?
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                if isScanning {
+                if showVisualizationPhoto {
+                    VisualizationPhotoView(
+                        onPhotoTaken: { image in
+                            handleVisualizationPhoto(image)
+                        },
+                        onSkip: {
+                            handleVisualizationPhotoSkipped()
+                        }
+                    )
+                } else if isScanning {
                     ZStack(alignment: .top) {
                         RoomCaptureViewRepresentable(
                             isScanning: $isScanning,
@@ -165,9 +177,20 @@ struct ScanningView: View {
 
     private func startScanning() {
         // Initialize video recorder if enabled
+        print("[ScanningView] isVideoCaptureEnabled: \(isVideoCaptureEnabled)")
+        print("[ScanningView] subscription: \(String(describing: appState.showroomConfig?.subscription))")
+        print("[ScanningView] videoCapture: \(String(describing: appState.showroomConfig?.subscription?.videoCapture))")
+
         if isVideoCaptureEnabled {
-            // Cast ShowroomVideoCaptureSettings? to VideoCaptureSettings? if compatible
-            let captureSettings = appState.showroomConfig?.subscription?.videoCapture as? VideoCaptureSettings
+            // Convert ShowroomVideoCaptureSettings to VideoCaptureSettings
+            var captureSettings: VideoCaptureSettings? = nil
+            if let showroomSettings = appState.showroomConfig?.subscription?.videoCapture {
+                captureSettings = VideoCaptureSettings(
+                    maxDurationSeconds: TimeInterval(showroomSettings.maxDurationSeconds),
+                    maxSizeMB: Double(showroomSettings.maxSizeMb)
+                )
+                print("[ScanningView] Created captureSettings: maxDuration=\(showroomSettings.maxDurationSeconds)s, maxSize=\(showroomSettings.maxSizeMb)MB")
+            }
             let recorder = VideoRecorder(captureSettings: captureSettings)
 
             // Create and store delegate to prevent deallocation
@@ -179,6 +202,7 @@ struct ScanningView: View {
                 },
                 onRecordingComplete: { url in
                     DispatchQueue.main.async {
+                        print("[ScanningView] Recording complete, URL: \(String(describing: url))")
                         self.recordedVideoURL = url
                     }
                 }
@@ -189,12 +213,14 @@ struct ScanningView: View {
             do {
                 try recorder.prepare()
                 videoRecorder = recorder
-                print("[ScanningView] Video recorder prepared")
+                print("[ScanningView] Video recorder prepared successfully")
             } catch {
                 print("[ScanningView] Failed to prepare video recorder: \(error)")
                 videoRecorder = nil
                 videoRecorderDelegate = nil
             }
+        } else {
+            print("[ScanningView] Video capture is NOT enabled")
         }
 
         isScanning = true
@@ -208,16 +234,39 @@ struct ScanningView: View {
 
     private func handleScanComplete(room: CapturedRoom) {
         capturedRoom = room
-
-        // Stop video recording
-        videoRecorder?.stopRecording()
-
         isProcessing = true
         processingStatus = "Analyzing room data..."
 
-        // Process scan data asynchronously
-        Task {
-            await processScanData(room: room)
+        // Stop video recording and wait for it to complete before processing
+        if let recorder = videoRecorder {
+            print("[ScanningView] Stopping video recording...")
+            processingStatus = "Finalizing video..."
+
+            // Stop recording - the delegate callback will set recordedVideoURL
+            recorder.stopRecording()
+
+            // Wait a bit for the video to finish writing, then process
+            Task {
+                // Wait for up to 5 seconds for video to finish
+                var waitTime = 0.0
+                while recordedVideoURL == nil && waitTime < 5.0 {
+                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second
+                    waitTime += 0.1
+                }
+
+                if recordedVideoURL != nil {
+                    print("[ScanningView] Video recording finished, URL: \(recordedVideoURL!)")
+                } else {
+                    print("[ScanningView] Video recording did not complete in time")
+                }
+
+                await processScanData(room: room)
+            }
+        } else {
+            // No video recording, process immediately
+            Task {
+                await processScanData(room: room)
+            }
         }
     }
 
@@ -282,8 +331,166 @@ struct ScanningView: View {
             videoRecorderDelegate = nil
             recordedVideoURL = nil
             recordingDuration = 0
+
+            // Store measurements and show visualization photo capture
+            pendingMeasurements = measurements
+            showVisualizationPhoto = true
         }
-        appState.setMeasurementData(measurements)
+    }
+
+    // MARK: - Visualization Photo Handling
+
+    private func handleVisualizationPhoto(_ image: UIImage) {
+        showVisualizationPhoto = false
+        isProcessing = true
+        processingStatus = "Uploading visualization photo..."
+
+        Task {
+            guard var measurements = pendingMeasurements,
+                  let showroomCode = appState.showroomConfig?.showroomCode else {
+                await MainActor.run {
+                    isProcessing = false
+                    if let measurements = pendingMeasurements {
+                        appState.setMeasurementData(measurements)
+                    }
+                }
+                return
+            }
+
+            // Upload the visualization photo
+            if let photoUrl = await uploadVisualizationPhoto(image, showroomCode: showroomCode) {
+                measurements.visualizationPhotoUrl = photoUrl
+            }
+
+            await MainActor.run {
+                isProcessing = false
+                pendingMeasurements = nil
+                appState.setMeasurementData(measurements)
+            }
+        }
+    }
+
+    private func handleVisualizationPhotoSkipped() {
+        showVisualizationPhoto = false
+
+        if let measurements = pendingMeasurements {
+            pendingMeasurements = nil
+            appState.setMeasurementData(measurements)
+        }
+    }
+
+    private func uploadVisualizationPhoto(_ image: UIImage, showroomCode: String) async -> String? {
+        // Normalize image orientation before saving
+        // Camera photos may have EXIF orientation that needs to be applied
+        let normalizedImage = normalizeImageOrientation(image)
+
+        // Compress image to reasonable size (max 2MB)
+        guard let imageData = normalizedImage.jpegData(compressionQuality: 0.7) else {
+            print("Failed to convert visualization photo to JPEG")
+            return nil
+        }
+
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let randomId = UUID().uuidString.prefix(8)
+        let filename = "visualization_\(timestamp)_\(randomId).jpg"
+        let storagePath = "\(showroomCode.lowercased())/\(filename)"
+
+        do {
+            let uploadedUrl = try await APIService.shared.uploadFile(
+                bucket: "scans",
+                path: storagePath,
+                data: imageData,
+                contentType: "image/jpeg"
+            )
+            print("Visualization photo uploaded: \(uploadedUrl)")
+            return uploadedUrl
+        } catch {
+            print("Failed to upload visualization photo: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Normalize image orientation by redrawing with correct transform applied
+    /// This ensures the image pixels match the visual orientation
+    private func normalizeImageOrientation(_ image: UIImage) -> UIImage {
+        // If already upright, no need to redraw
+        guard image.imageOrientation != .up else {
+            return image
+        }
+
+        guard let cgImage = image.cgImage else {
+            return image
+        }
+
+        let width = cgImage.width
+        let height = cgImage.height
+
+        var transform = CGAffineTransform.identity
+        var outputWidth = width
+        var outputHeight = height
+
+        // Determine the transform based on orientation
+        switch image.imageOrientation {
+        case .down, .downMirrored:
+            transform = transform.translatedBy(x: CGFloat(width), y: CGFloat(height))
+            transform = transform.rotated(by: .pi)
+        case .left, .leftMirrored:
+            outputWidth = height
+            outputHeight = width
+            transform = transform.translatedBy(x: CGFloat(height), y: 0)
+            transform = transform.rotated(by: .pi / 2)
+        case .right, .rightMirrored:
+            outputWidth = height
+            outputHeight = width
+            transform = transform.translatedBy(x: 0, y: CGFloat(width))
+            transform = transform.rotated(by: -.pi / 2)
+        case .up, .upMirrored:
+            break
+        @unknown default:
+            break
+        }
+
+        // Handle mirrored orientations
+        switch image.imageOrientation {
+        case .upMirrored, .downMirrored:
+            transform = transform.translatedBy(x: CGFloat(width), y: 0)
+            transform = transform.scaledBy(x: -1, y: 1)
+        case .leftMirrored, .rightMirrored:
+            transform = transform.translatedBy(x: CGFloat(height), y: 0)
+            transform = transform.scaledBy(x: -1, y: 1)
+        default:
+            break
+        }
+
+        // Create a context with the correct output size
+        guard let colorSpace = cgImage.colorSpace,
+              let context = CGContext(
+                  data: nil,
+                  width: outputWidth,
+                  height: outputHeight,
+                  bitsPerComponent: cgImage.bitsPerComponent,
+                  bytesPerRow: 0,
+                  space: colorSpace,
+                  bitmapInfo: cgImage.bitmapInfo.rawValue
+              ) else {
+            // Fallback: use UIGraphicsImageRenderer
+            let outputSize = CGSize(width: outputWidth, height: outputHeight)
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1.0
+            let renderer = UIGraphicsImageRenderer(size: outputSize, format: format)
+            return renderer.image { _ in
+                image.draw(in: CGRect(origin: .zero, size: outputSize))
+            }
+        }
+
+        context.concatenate(transform)
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        guard let normalizedCGImage = context.makeImage() else {
+            return image
+        }
+
+        return UIImage(cgImage: normalizedCGImage, scale: image.scale, orientation: .up)
     }
 
     // MARK: - Video Processing and Upload

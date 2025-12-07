@@ -465,6 +465,7 @@ export type Database = {
           end_client_phone: string | null
           end_client_email: string | null
           end_client_address: string | null
+          webhook_payload: Json | null
           created_at: string
           updated_at: string
         }
@@ -491,6 +492,7 @@ export type Database = {
           end_client_phone?: string | null
           end_client_email?: string | null
           end_client_address?: string | null
+          webhook_payload?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -517,6 +519,7 @@ export type Database = {
           end_client_phone?: string | null
           end_client_email?: string | null
           end_client_address?: string | null
+          webhook_payload?: Json | null
           created_at?: string
           updated_at?: string
         }

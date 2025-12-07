@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		2A9758C72EDC01B700146970 /* ShowroomLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9758C62EDC01B700146970 /* ShowroomLogo.swift */; };
-		2A9758C92EDEA54000146970 /* VideoRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9758C82EDEA54000146970 /* VideoRecorder.swift */; };
+		2A9E02972EE14EBC00B48731 /* VisualizationPhotoView 2.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9E02962EE14EBC00B48731 /* VisualizationPhotoView 2.swift */; };
 		APP001 /* NextlynScanApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC001 /* NextlynScanApp.swift */; };
 		APP002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC002 /* ContentView.swift */; };
 		APP003 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC003 /* Config.swift */; };
@@ -26,11 +26,12 @@
 		MOD002 /* ProjectSubmission.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC011 /* ProjectSubmission.swift */; };
 		SVC001 /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC020 /* APIService.swift */; };
 		SVC002 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC021 /* AppState.swift */; };
+		SVC003 /* VideoRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC022 /* VideoRecorder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		2A9758C62EDC01B700146970 /* ShowroomLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowroomLogo.swift; sourceTree = "<group>"; };
-		2A9758C82EDEA54000146970 /* VideoRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoRecorder.swift; sourceTree = "<group>"; };
+		2A9E02962EE14EBC00B48731 /* VisualizationPhotoView 2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualizationPhotoView 2.swift"; sourceTree = "<group>"; };
 		ASSETS_REF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		INFO001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		PROD001 /* NextlynScan.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NextlynScan.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -41,6 +42,7 @@
 		SRC011 /* ProjectSubmission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSubmission.swift; sourceTree = "<group>"; };
 		SRC020 /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
 		SRC021 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		SRC022 /* VideoRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoRecorder.swift; sourceTree = "<group>"; };
 		SRC030 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		SRC031 /* CustomerInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomerInfoView.swift; sourceTree = "<group>"; };
 		SRC032 /* ScanningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanningView.swift; sourceTree = "<group>"; };
@@ -171,7 +173,7 @@
 				SRC032 /* ScanningView.swift */,
 				SRC037 /* FloorPlanRenderer.swift */,
 				SRC038 /* GLBExporter.swift */,
-				2A9758C82EDEA54000146970 /* VideoRecorder.swift */,
+				2A9E02962EE14EBC00B48731 /* VisualizationPhotoView 2.swift */,
 			);
 			path = Scanning;
 			sourceTree = "<group>";
@@ -199,6 +201,7 @@
 			children = (
 				SRC020 /* APIService.swift */,
 				SRC021 /* AppState.swift */,
+				SRC022 /* VideoRecorder.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -300,11 +303,12 @@
 				FEA004 /* SelectionView.swift in Sources */,
 				FEA005 /* ReviewView.swift in Sources */,
 				FEA006 /* SubmissionView.swift in Sources */,
+				2A9E02972EE14EBC00B48731 /* VisualizationPhotoView 2.swift in Sources */,
 				2A9758C72EDC01B700146970 /* ShowroomLogo.swift in Sources */,
 				FEA007 /* SuccessView.swift in Sources */,
 				FPR001 /* FloorPlanRenderer.swift in Sources */,
 				GLB001 /* GLBExporter.swift in Sources */,
-				2A9758C92EDEA54000146970 /* VideoRecorder.swift in Sources */,
+				SVC003 /* VideoRecorder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

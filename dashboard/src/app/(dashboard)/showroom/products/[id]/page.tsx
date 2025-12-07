@@ -106,7 +106,6 @@ export default function EditProductPage({
 
   const [variantForm, setVariantForm] = useState({
     name: '',
-    color_code: '',
     price: '',
     image_url: '',
     is_default: false,
@@ -260,6 +259,9 @@ export default function EditProductPage({
     setError(null)
 
     try {
+      // Delete the product
+      // Product variants cascade automatically (ON DELETE CASCADE)
+      // Project selections will have product_id set to NULL (ON DELETE SET NULL)
       const { error: deleteError } = await supabase
         .from('products')
         .delete()
@@ -283,7 +285,6 @@ export default function EditProductPage({
   const resetVariantForm = () => {
     setVariantForm({
       name: '',
-      color_code: '',
       price: '',
       image_url: '',
       is_default: false,
@@ -331,7 +332,7 @@ export default function EditProductPage({
           .from('product_variants')
           .update({
             name: variantForm.name,
-            color_code: variantForm.color_code || null,
+            color_code: null,
             price: variantForm.price ? parseFloat(variantForm.price) : null,
             image_url: variantForm.image_url || null,
             is_default: variantForm.is_default,
@@ -346,7 +347,7 @@ export default function EditProductPage({
               ? {
                   ...v,
                   name: variantForm.name,
-                  color_code: variantForm.color_code || null,
+                  color_code: null,
                   price: variantForm.price ? parseFloat(variantForm.price) : null,
                   image_url: variantForm.image_url || null,
                   is_default: variantForm.is_default,
@@ -361,7 +362,7 @@ export default function EditProductPage({
           .insert({
             product_id: product.id,
             name: variantForm.name,
-            color_code: variantForm.color_code || null,
+            color_code: null,
             price: variantForm.price ? parseFloat(variantForm.price) : null,
             image_url: variantForm.image_url || null,
             is_default: variantForm.is_default,
@@ -391,7 +392,6 @@ export default function EditProductPage({
     setEditingVariant(variant)
     setVariantForm({
       name: variant.name,
-      color_code: variant.color_code || '',
       price: variant.price?.toString() || '',
       image_url: variant.image_url || '',
       is_default: variant.is_default,
@@ -671,12 +671,7 @@ export default function EditProductPage({
                             className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50"
                           >
                             <GripVertical className="h-4 w-4 text-gray-400 cursor-move" />
-                            {variant.color_code ? (
-                              <div
-                                className="w-8 h-8 rounded border"
-                                style={{ backgroundColor: variant.color_code }}
-                              />
-                            ) : variant.image_url ? (
+                            {variant.image_url ? (
                               <img
                                 src={variant.image_url}
                                 alt={variant.name}
@@ -745,104 +740,75 @@ export default function EditProductPage({
                         <h4 className="font-medium">
                           {editingVariant ? 'Edit Color' : 'Add New Color'}
                         </h4>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label>Color Name *</Label>
-                            <Input
-                              value={variantForm.name}
-                              onChange={(e) =>
-                                setVariantForm((prev) => ({ ...prev, name: e.target.value }))
-                              }
-                              placeholder="e.g., White, Navy Blue"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Color Code</Label>
-                            <div className="flex gap-2">
-                              <Input
-                                type="color"
-                                value={variantForm.color_code || '#ffffff'}
-                                onChange={(e) =>
-                                  setVariantForm((prev) => ({
-                                    ...prev,
-                                    color_code: e.target.value,
-                                  }))
-                                }
-                                className="w-12 h-10 p-1"
-                              />
-                              <Input
-                                value={variantForm.color_code}
-                                onChange={(e) =>
-                                  setVariantForm((prev) => ({
-                                    ...prev,
-                                    color_code: e.target.value,
-                                  }))
-                                }
-                                placeholder="#FFFFFF"
-                              />
-                            </div>
-                          </div>
+                        <div className="space-y-2">
+                          <Label>Color Name *</Label>
+                          <Input
+                            value={variantForm.name}
+                            onChange={(e) =>
+                              setVariantForm((prev) => ({ ...prev, name: e.target.value }))
+                            }
+                            placeholder="e.g., White, Navy Blue"
+                          />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label>Price</Label>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
-                                $
-                              </span>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={variantForm.price}
-                                onChange={(e) =>
-                                  setVariantForm((prev) => ({ ...prev, price: e.target.value }))
-                                }
-                                placeholder="0.00"
-                                className="pl-7"
+                        <div className="space-y-2">
+                          <Label>Color Image *</Label>
+                          {variantForm.image_url ? (
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={variantForm.image_url}
+                                alt="Variant"
+                                className="w-16 h-16 rounded object-cover"
                               />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  setVariantForm((prev) => ({ ...prev, image_url: '' }))
+                                }
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
                             </div>
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Image (optional)</Label>
-                            {variantForm.image_url ? (
-                              <div className="flex items-center gap-2">
-                                <img
-                                  src={variantForm.image_url}
-                                  alt="Variant"
-                                  className="w-10 h-10 rounded object-cover"
-                                />
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    setVariantForm((prev) => ({ ...prev, image_url: '' }))
-                                  }
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
+                          ) : (
+                            <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                              <div className="flex flex-col items-center justify-center">
+                                {variantUploading ? (
+                                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                                ) : (
+                                  <Upload className="h-6 w-6 text-gray-400" />
+                                )}
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {variantUploading ? 'Uploading...' : 'Upload color image'}
+                                </p>
                               </div>
-                            ) : (
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <Button type="button" variant="outline" size="sm" asChild>
-                                  <span>
-                                    {variantUploading ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <Upload className="h-4 w-4" />
-                                    )}
-                                  </span>
-                                </Button>
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  accept="image/*"
-                                  onChange={handleVariantImageUpload}
-                                  disabled={variantUploading}
-                                />
-                              </label>
-                            )}
+                              <input
+                                type="file"
+                                className="hidden"
+                                accept="image/*"
+                                onChange={handleVariantImageUpload}
+                                disabled={variantUploading}
+                              />
+                            </label>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Price (optional)</Label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                              $
+                            </span>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={variantForm.price}
+                              onChange={(e) =>
+                                setVariantForm((prev) => ({ ...prev, price: e.target.value }))
+                              }
+                              placeholder="0.00"
+                              className="pl-7"
+                            />
                           </div>
                         </div>
                         <div className="flex items-center gap-2">

@@ -22,7 +22,13 @@ import {
   Rotate3d,
   Lock,
   Sparkles,
+  Download,
+  Video,
+  FileBox,
+  FileCode,
+  ImageIcon,
 } from 'lucide-react'
+import { WebhookPayloadViewer } from '@/components/webhook/WebhookPayloadViewer'
 
 interface ProjectDetailPageProps {
   params: Promise<{ id: string }>
@@ -113,9 +119,12 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   const measurement = measurements && measurements.length > 0 ? measurements[0] : null
   const hasGlbFile = measurement?.glb_file_url
   const hasUsdzFile = measurement?.usdz_file_url
+  const hasVideoFile = measurement?.video_url
+  const hasVisualizationPhoto = measurement?.visualization_photo_url
   const hasFloorPlanData = measurement?.measurements?.walls?.length > 0 || measurement?.measurements?.room
   const has3DModel = hasGlbFile || hasUsdzFile
   const hasScanData = has3DModel || hasFloorPlanData
+  const hasDownloadableFiles = hasGlbFile || hasUsdzFile || hasVideoFile || hasVisualizationPhoto
 
   return (
     <div className="space-y-6">
@@ -487,6 +496,99 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             </CardContent>
           </Card>
 
+          {/* Export & Downloads */}
+          {hasDownloadableFiles && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Download className="h-5 w-5" />
+                  Export & Downloads
+                </CardTitle>
+                <CardDescription>Download scan files</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {hasVisualizationPhoto && (
+                  <div className="space-y-2">
+                    <a
+                      href={measurement.visualization_photo_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block rounded-lg overflow-hidden border border-gray-200 hover:border-blue-300 transition-colors"
+                    >
+                      <img
+                        src={measurement.visualization_photo_url}
+                        alt="Kitchen visualization"
+                        className="w-full h-32 object-cover [image-orientation:from-image]"
+                      />
+                    </a>
+                    <a
+                      href={measurement.visualization_photo_url}
+                      download
+                      className="flex items-center justify-center gap-2 p-2 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download Photo
+                    </a>
+                  </div>
+                )}
+                {hasVideoFile && (
+                  <a
+                    href={measurement.video_url}
+                    download
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
+                  >
+                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center group-hover:bg-red-200 transition-colors">
+                      <Video className="h-5 w-5 text-red-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">Scan Video</p>
+                      <p className="text-xs text-gray-500">MP4 recording of the scan</p>
+                    </div>
+                    <Download className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+                  </a>
+                )}
+                {hasUsdzFile && (
+                  <a
+                    href={measurement.usdz_file_url}
+                    download
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
+                  >
+                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center group-hover:bg-purple-200 transition-colors">
+                      <FileBox className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">USDZ Model</p>
+                      <p className="text-xs text-gray-500">Apple AR Quick Look format</p>
+                    </div>
+                    <Download className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+                  </a>
+                )}
+                {hasGlbFile && (
+                  <a
+                    href={measurement.glb_file_url}
+                    download
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
+                  >
+                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center group-hover:bg-green-200 transition-colors">
+                      <FileCode className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">GLB Model</p>
+                      <p className="text-xs text-gray-500">Web-compatible 3D format</p>
+                    </div>
+                    <Download className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+                  </a>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Device Info */}
           {(project.device_model || project.ios_version || project.app_version) && (
             <Card>
@@ -529,6 +631,11 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
           )}
         </div>
       </div>
+
+      {/* Webhook JSON Payload - Collapsible */}
+      {project.webhook_payload && (
+        <WebhookPayloadViewer payload={project.webhook_payload as Record<string, unknown>} />
+      )}
     </div>
   )
 }

@@ -95,6 +95,8 @@ struct MeasurementData: Codable {
     let videoSizeBytes: Int64?
     let videoResolution: String?
     let videoFormat: String?
+    // Visualization photo (wide-angle corner shot)
+    var visualizationPhotoUrl: String?
 
     enum CodingKeys: String, CodingKey {
         case measurements
@@ -115,6 +117,7 @@ struct MeasurementData: Codable {
         case videoSizeBytes = "video_size_bytes"
         case videoResolution = "video_resolution"
         case videoFormat = "video_format"
+        case visualizationPhotoUrl = "visualization_photo_url"
     }
 }
 

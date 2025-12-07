@@ -47,7 +47,11 @@
       "Bash(npx shadcn@latest add:*)",
       "Bash(supabase db execute:*)",
       "Bash(supabase db dump --data-only --table subscription_plans)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndueXJucGVhYmh4ZHF2Y3BvZm1iIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDI0NjM1OCwiZXhwIjoyMDc5ODIyMzU4fQ.O_PEXoZnK14oK0x22yNf33qub_URBTc4XkUdHqH6TpY\")",
+      "Bash(__NEW_LINE__ curl -s \"https://wnyrnpeabhxdqvcpofmb.supabase.co/rest/v1/projects?showroom_id=eq.dc808235-f00d-45ee-b3e3-9b720d2c6926&select=id,created_at,customer_name&order=created_at.desc&limit=5\" )",
+      "Bash(ANON_KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndueXJucGVhYmh4ZHF2Y3BvZm1iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNDYzNTgsImV4cCI6MjA3OTgyMjM1OH0.OOangh4u0sy7oHFQl1pFv6ldNPlN201uY774gpyQlHc\":*)",
+      "Bash(__NEW_LINE__ curl -s \"https://wnyrnpeabhxdqvcpofmb.supabase.co/functions/v1/get-showroom-config?code=QNEXWR\" )"
     ],
     "deny": [],
     "ask": []

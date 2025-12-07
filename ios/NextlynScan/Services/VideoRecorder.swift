@@ -1,6 +1,8 @@
 import Foundation
 import AVFoundation
 import CoreVideo
+import CoreImage
+import Metal
 import UIKit
 
 // MARK: - Video Recorder Delegate
@@ -24,6 +26,7 @@ class VideoRecorder {
     private var isRecording = false
     private var startTime: CMTime?
     private var frameCount: Int = 0
+    private var nextFrameNumber: Int64 = 0  // Counter for frame numbering (incremented on main/ARSession thread)
     private var lastFrameTime: CMTime?
 
     private let outputURL: URL
@@ -70,12 +73,13 @@ class VideoRecorder {
 
         init(from captureSettings: VideoCaptureSettings?) {
             // Use HD settings for PRO, SD for lower tiers
-            let useHD = captureSettings?.maxSizeMb ?? 0 >= 500
+            let maxSizeMB = captureSettings?.maxSizeMbInt ?? 500
+            let useHD = maxSizeMB >= 500
 
             self.width = useHD ? 1920 : 1280
             self.height = useHD ? 1080 : 720
-            self.maxDurationSeconds = captureSettings?.maxDurationSeconds ?? 300
-            self.maxSizeMB = captureSettings?.maxSizeMb ?? 500
+            self.maxDurationSeconds = captureSettings?.maxDurationSecondsInt ?? 300
+            self.maxSizeMB = maxSizeMB
         }
     }
 
@@ -155,6 +159,7 @@ class VideoRecorder {
         assetWriter.startWriting()
         isRecording = true
         frameCount = 0
+        nextFrameNumber = 0
         startTime = nil
         lastRecordedFrameTime = 0
         recordingStartDate = Date()
@@ -178,6 +183,10 @@ class VideoRecorder {
     }
 
     /// Append a pixel buffer (ARFrame.capturedImage) to the video
+    ///
+    /// IMPORTANT: ARKit's pixel buffers come from a fixed-size pool and are recycled
+    /// immediately after the delegate callback. We must copy the data SYNCHRONOUSLY
+    /// before dispatching to the async queue.
     func appendPixelBuffer(_ pixelBuffer: CVPixelBuffer, timestamp: TimeInterval) {
         guard isRecording,
               let videoInput = videoInput,
@@ -193,24 +202,36 @@ class VideoRecorder {
         }
         lastRecordedFrameTime = currentTime
 
+        // CRITICAL: Copy/resize pixel buffer NOW while it's still valid
+        // ARKit will recycle this buffer as soon as we return from the delegate callback
+        guard let copiedBuffer = resizePixelBuffer(pixelBuffer) else {
+            return
+        }
+
+        // Get frame number and increment for next frame
+        // This is called on the ARSession delegate thread (serial), so no race condition here
+        let frameNumber = nextFrameNumber
+        nextFrameNumber += 1
+
         processingQueue.async { [weak self] in
-            guard let self = self else { return }
+            guard let self = self, self.isRecording else { return }
 
             // Start the session on first frame
             if self.startTime == nil {
-                let time = CMTime(seconds: timestamp, preferredTimescale: 600)
-                self.assetWriter?.startSession(atSourceTime: time)
-                self.startTime = time
+                self.assetWriter?.startSession(atSourceTime: .zero)
+                self.startTime = .zero
             }
 
-            // Calculate presentation time relative to start
-            let presentationTime = CMTime(seconds: timestamp, preferredTimescale: 600)
+            // Use frame count based timestamp for guaranteed monotonic ordering
+            let presentationTime = CMTime(value: CMTimeValue(frameNumber), timescale: Int32(self.targetFrameRate))
 
-            // Resize pixel buffer if needed
-            if let resizedBuffer = self.resizePixelBuffer(pixelBuffer) {
-                if adaptor.append(resizedBuffer, withPresentationTime: presentationTime) {
-                    self.frameCount += 1
-                    self.lastFrameTime = presentationTime
+            if adaptor.append(copiedBuffer, withPresentationTime: presentationTime) {
+                self.frameCount = Int(frameNumber) + 1
+                self.lastFrameTime = presentationTime
+            } else {
+                // Log error for debugging
+                if let writer = self.assetWriter {
+                    print("[VideoRecorder] Append failed - status: \(writer.status.rawValue), error: \(String(describing: writer.error))")
                 }
             }
         }
@@ -279,45 +300,87 @@ class VideoRecorder {
 
     // MARK: - Private Methods
 
+    // Reusable CIContext for performance (creating CIContext is expensive)
+    private lazy var ciContext: CIContext = {
+        // Use Metal for best performance
+        if let device = MTLCreateSystemDefaultDevice() {
+            return CIContext(mtlDevice: device, options: [.useSoftwareRenderer: false])
+        }
+        return CIContext(options: [.useSoftwareRenderer: false])
+    }()
+
+    /// Resize and copy pixel buffer. This creates a NEW buffer that we own,
+    /// so the original ARKit buffer can be safely recycled.
+    /// Also rotates the image 90 degrees clockwise to correct for ARKit's landscape camera orientation
+    /// when the device is held in portrait mode.
     private func resizePixelBuffer(_ pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
         let sourceWidth = CVPixelBufferGetWidth(pixelBuffer)
         let sourceHeight = CVPixelBufferGetHeight(pixelBuffer)
 
-        // If already correct size, return original
-        if sourceWidth == videoSettings.width && sourceHeight == videoSettings.height {
-            return pixelBuffer
-        }
-
         // Create a new pixel buffer with target size
         var newPixelBuffer: CVPixelBuffer?
+        let attributes: [String: Any] = [
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:],
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+        ]
+
         let status = CVPixelBufferCreate(
             kCFAllocatorDefault,
             videoSettings.width,
             videoSettings.height,
             kCVPixelFormatType_32BGRA,
-            nil,
+            attributes as CFDictionary,
             &newPixelBuffer
         )
 
         guard status == kCVReturnSuccess, let outputBuffer = newPixelBuffer else {
+            print("[VideoRecorder] Failed to create pixel buffer: \(status)")
             return nil
         }
 
-        // Use Core Image for efficient resizing
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let scaleX = CGFloat(videoSettings.width) / CGFloat(sourceWidth)
-        let scaleY = CGFloat(videoSettings.height) / CGFloat(sourceHeight)
+        // Create CIImage from source - this is a lightweight reference
+        var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+
+        // ARKit camera frames come in landscape orientation (sensor is landscape).
+        // When holding the phone in portrait mode, we need to rotate 90 degrees clockwise.
+        // Rotation is around origin (0,0), so we need to translate after rotating.
+
+        // Step 1: Rotate 90 degrees clockwise (negative angle)
+        ciImage = ciImage.transformed(by: CGAffineTransform(rotationAngle: -.pi / 2))
+
+        // Step 2: After rotating -90°, the image is in negative Y space, translate it back
+        // Original: width=1920, height=1440 (landscape ARKit frame)
+        // After -90° rotation: effectively width=1440, height=1920 (portrait)
+        // The image origin moves to negative coordinates, so translate by original width
+        ciImage = ciImage.transformed(by: CGAffineTransform(translationX: 0, y: CGFloat(sourceWidth)))
+
+        // Now the rotated dimensions are swapped
+        let rotatedWidth = CGFloat(sourceHeight)
+        let rotatedHeight = CGFloat(sourceWidth)
+
+        // Calculate scale to fit target dimensions while maintaining aspect ratio
+        let scaleX = CGFloat(videoSettings.width) / rotatedWidth
+        let scaleY = CGFloat(videoSettings.height) / rotatedHeight
         let scale = min(scaleX, scaleY)
 
-        let scaledImage = ciImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        // Scale the image
+        ciImage = ciImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
 
-        // Center the scaled image
-        let offsetX = (CGFloat(videoSettings.width) - scaledImage.extent.width) / 2
-        let offsetY = (CGFloat(videoSettings.height) - scaledImage.extent.height) / 2
-        let centeredImage = scaledImage.transformed(by: CGAffineTransform(translationX: offsetX, y: offsetY))
+        // Center the scaled image in the target buffer
+        let scaledWidth = rotatedWidth * scale
+        let scaledHeight = rotatedHeight * scale
+        let offsetX = (CGFloat(videoSettings.width) - scaledWidth) / 2
+        let offsetY = (CGFloat(videoSettings.height) - scaledHeight) / 2
+        ciImage = ciImage.transformed(by: CGAffineTransform(translationX: offsetX, y: offsetY))
 
-        let context = CIContext()
-        context.render(centeredImage, to: outputBuffer)
+        // IMPORTANT: Render immediately to the output buffer
+        // This copies the pixel data, allowing ARKit's buffer to be recycled
+        ciContext.render(
+            ciImage,
+            to: outputBuffer,
+            bounds: CGRect(x: 0, y: 0, width: videoSettings.width, height: videoSettings.height),
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
 
         return outputBuffer
     }
@@ -395,6 +458,21 @@ struct VideoMetadata {
     var sizeMB: Double {
         return Double(sizeBytes) / (1024 * 1024)
     }
+}
+
+// MARK: - Video Capture Settings (used by ScanningView)
+struct VideoCaptureSettings {
+    let maxDurationSeconds: TimeInterval
+    let maxSizeMB: Double
+
+    init(maxDurationSeconds: TimeInterval, maxSizeMB: Double) {
+        self.maxDurationSeconds = maxDurationSeconds
+        self.maxSizeMB = maxSizeMB
+    }
+
+    // Convert to Int values for VideoSettings
+    var maxDurationSecondsInt: Int { Int(maxDurationSeconds) }
+    var maxSizeMbInt: Int { Int(maxSizeMB) }
 }
 
 // MARK: - Errors
