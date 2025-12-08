@@ -169,14 +169,21 @@ async function buildWebhookPayload(
     .eq('project_id', project.id)
     .single()
 
-  // Fetch complete selections with category names
+  // Fetch complete selections with category names and slugs
   const { data: selections } = await supabaseAdmin
     .from('project_selections')
     .select(`
       *,
-      categories(name)
+      categories(name, slug)
     `)
     .eq('project_id', project.id)
+
+  // Fetch ALL active categories (master list from super admin)
+  const { data: allCategories } = await supabaseAdmin
+    .from('categories')
+    .select('id, name, slug')
+    .eq('is_active', true)
+    .order('display_order')
 
   // Helper function to format measurements
   const formatDimension = (feet: number | null | undefined): string => {
@@ -323,15 +330,36 @@ async function buildWebhookPayload(
           description: 'Wide-angle corner photo for visualization',
         }
       : null,
-    selections: (Array.isArray(selections) ? selections : []).map((s: any) => ({
-      category: s.categories?.name || 'Unknown',
-      product: s.product_name_snapshot,
-      variant: s.variant_name_snapshot || null,
-      price: s.product_price_snapshot,
-      pricing_unit: s.pricing_unit_snapshot,
-      quantity: s.quantity,
-      notes: s.customer_notes,
-    })),
+    selections: (() => {
+      // Create selections object with ALL categories (null for unselected)
+      const selectionsObj: Record<string, any> = {}
+
+      // First, initialize all categories with null
+      if (Array.isArray(allCategories)) {
+        allCategories.forEach((cat: any) => {
+          selectionsObj[cat.slug] = null
+        })
+      }
+
+      // Then, fill in the selected ones
+      if (Array.isArray(selections)) {
+        selections.forEach((s: any) => {
+          const categorySlug = s.categories?.slug || 'unknown'
+
+          selectionsObj[categorySlug] = {
+            category_name: s.categories?.name || 'Unknown',
+            product: s.product_name_snapshot,
+            variant: s.variant_name_snapshot || null,
+            price: s.product_price_snapshot,
+            pricing_unit: s.pricing_unit_snapshot,
+            quantity: s.quantity,
+            notes: s.customer_notes,
+          }
+        })
+      }
+
+      return selectionsObj
+    })(),
     showroom: {
       id: showroom.id,
       name: showroom.name,

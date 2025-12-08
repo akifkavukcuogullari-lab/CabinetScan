@@ -452,12 +452,11 @@ export function logError(error: unknown, context?: Record<string, unknown>): voi
   const timestamp = new Date().toISOString()
   const formatted = formatError(error)
 
-  console.error(`[${timestamp}] ${formatted.title}:`, {
-    message: formatted.message,
-    code: formatted.code,
-    context,
-    originalError: error,
-  })
+  // Log full error details for debugging
+  console.error(`[${timestamp}] ${formatted.title}:`, error)
+  if (context) {
+    console.error('Context:', context)
+  }
 }
 
 /**

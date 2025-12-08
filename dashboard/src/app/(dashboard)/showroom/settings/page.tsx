@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
-import { Webhook, CheckCircle, AlertCircle, Loader2, Lock, Sparkles } from 'lucide-react'
+import { Webhook, CheckCircle, AlertCircle, Loader2, Lock, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
 import Link from 'next/link'
 
 interface Category {
@@ -48,6 +48,12 @@ export default function SettingsPage() {
   const [webhookSaving, setWebhookSaving] = useState(false)
   const [webhookSuccess, setWebhookSuccess] = useState(false)
   const [webhookError, setWebhookError] = useState<string | null>(null)
+  const [quoteWebhookUrl, setQuoteWebhookUrl] = useState('')
+  const [quoteWebhookSaving, setQuoteWebhookSaving] = useState(false)
+  const [quoteWebhookSuccess, setQuoteWebhookSuccess] = useState(false)
+  const [quoteWebhookError, setQuoteWebhookError] = useState<string | null>(null)
+  const [showWebhookExample, setShowWebhookExample] = useState(false)
+  const [showQuoteWebhookExample, setShowQuoteWebhookExample] = useState(false)
 
   useEffect(() => {
     async function loadData() {
@@ -74,6 +80,7 @@ export default function SettingsPage() {
       if (showroomData) {
         setShowroom(showroomData)
         setWebhookUrl(showroomData.webhook_url || '')
+        setQuoteWebhookUrl(showroomData.quote_webhook_url || '')
       }
 
       // Load all categories
@@ -190,6 +197,33 @@ export default function SettingsPage() {
     } else {
       setWebhookSuccess(true)
       setTimeout(() => setWebhookSuccess(false), 3000)
+    }
+  }
+
+  const saveQuoteWebhookUrl = async () => {
+    if (!showroomId) return
+
+    if (quoteWebhookUrl && !validateWebhookUrl(quoteWebhookUrl)) {
+      setQuoteWebhookError('Please enter a valid URL (must start with http:// or https://)')
+      return
+    }
+
+    setQuoteWebhookSaving(true)
+    setQuoteWebhookError(null)
+    setQuoteWebhookSuccess(false)
+
+    const { error } = await supabase
+      .from('showrooms')
+      .update({ quote_webhook_url: quoteWebhookUrl || null })
+      .eq('id', showroomId)
+
+    setQuoteWebhookSaving(false)
+
+    if (error) {
+      setQuoteWebhookError('Failed to save quote webhook URL')
+    } else {
+      setQuoteWebhookSuccess(true)
+      setTimeout(() => setQuoteWebhookSuccess(false), 3000)
     }
   }
 
@@ -316,12 +350,12 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Webhook Integration */}
+      {/* Project Submission Webhook */}
       <Card className={!canUseWebhooks ? 'border-gray-200 bg-gray-50/50' : ''}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Webhook className="h-5 w-5" />
-            Webhook Integration
+            Project Submission Webhook
             {!canUseWebhooks && (
               <Badge variant="secondary" className="ml-2 gap-1">
                 <Lock className="h-3 w-3" />
@@ -330,21 +364,20 @@ export default function SettingsPage() {
             )}
           </CardTitle>
           <CardDescription>
-            Receive project submission data at your own endpoint. When a customer submits a project,
-            we&apos;ll send a POST request with all project details including measurements, 3D model URLs,
-            and product selections.
+            Receive project submission data when a customer completes a scan. We&apos;ll send a POST request
+            with measurements, 3D model URLs, product selections, and customer information to your endpoint.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {canUseWebhooks ? (
             <>
               <div className="space-y-2">
-                <Label htmlFor="webhook-url">Webhook URL</Label>
+                <Label htmlFor="webhook-url">Project Submission Webhook URL</Label>
                 <div className="flex gap-2">
                   <Input
                     id="webhook-url"
                     type="url"
-                    placeholder="https://your-domain.com/api/webhook"
+                    placeholder="https://your-domain.com/api/webhooks/project-submitted"
                     value={webhookUrl}
                     onChange={(e) => {
                       setWebhookUrl(e.target.value)
@@ -372,7 +405,7 @@ export default function SettingsPage() {
                 {webhookSuccess && (
                   <div className="flex items-center gap-2 text-sm text-green-600">
                     <CheckCircle className="h-4 w-4" />
-                    Webhook URL saved successfully
+                    Project webhook URL saved successfully
                   </div>
                 )}
               </div>
@@ -380,8 +413,21 @@ export default function SettingsPage() {
               <Separator />
 
               <div className="space-y-2">
-                <Label className="text-gray-500">Webhook Payload Example</Label>
-                <pre className="bg-gray-100 p-4 rounded-lg text-xs overflow-x-auto max-h-96">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowWebhookExample(!showWebhookExample)}
+                  className="w-full justify-between"
+                >
+                  <span className="text-gray-600">View Webhook Payload Example</span>
+                  {showWebhookExample ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </Button>
+                {showWebhookExample && (
+                  <pre className="bg-gray-100 p-4 rounded-lg text-xs overflow-x-auto max-h-96">
 {`{
   "event": "project.submitted",
   "timestamp": "2024-01-15T10:30:00Z",
@@ -433,21 +479,228 @@ export default function SettingsPage() {
     "glb_file_url": "https://...",
     "preview_image_url": "https://..."
   },
-  "selections": [
-    {
-      "category": "Cabinet Doors",
-      "product": "Shaker White",
+  "selections": {
+    "cabinet_model": {
+      "category_name": "Cabinet Model",
+      "product": "Shaker Premium",
+      "variant": null,
+      "price": 125.00,
+      "pricing_unit": "per_cabinet",
+      "quantity": 12,
+      "notes": null
+    },
+    "cabinet_color": null,
+    "cabinet_finish": null,
+    "countertop": {
+      "category_name": "Countertop",
+      "product": "Granite Black Galaxy",
+      "variant": null,
+      "price": 85.00,
+      "pricing_unit": "per_sq_ft",
+      "quantity": 1,
+      "notes": null
+    },
+    "countertop_edge": {
+      "category_name": "Countertop Edge",
+      "product": "Bullnose",
+      "variant": null,
+      "price": 8.00,
+      "pricing_unit": "per_linear_ft",
+      "quantity": 1,
+      "notes": null
+    },
+    "hardware": {
+      "category_name": "Hardware",
+      "product": "Brushed Nickel Pulls",
+      "variant": null,
+      "price": 12.50,
+      "pricing_unit": "per_piece",
+      "quantity": 24,
+      "notes": null
+    },
+    "backsplash": {
+      "category_name": "Backsplash",
+      "product": "Subway Tile White",
+      "variant": null,
+      "price": 12.50,
+      "pricing_unit": "per_sq_ft",
+      "quantity": 1,
+      "notes": null
+    },
+    "sink": {
+      "category_name": "Sink",
+      "product": "Undermount Single Bowl",
+      "variant": null,
+      "price": 350.00,
+      "pricing_unit": "per_piece",
+      "quantity": 1,
+      "notes": null
+    },
+    "faucet": {
+      "category_name": "Faucet",
+      "product": "Delta Single Handle",
+      "variant": "Chrome",
+      "price": 225.00,
+      "pricing_unit": "per_piece",
+      "quantity": 1,
+      "notes": null
+    },
+    "cabinet_lighting": {
+      "category_name": "Cabinet Lighting",
+      "product": "LED Under Cabinet Strips",
+      "variant": null,
       "price": 45.00,
-      "pricing_unit": "per_sq_ft"
+      "pricing_unit": "per_linear_ft",
+      "quantity": 1,
+      "notes": null
+    },
+    "crown_molding": null,
+    "toe_kick": null,
+    "soft_close_hinges": {
+      "category_name": "Soft-Close Hinges",
+      "product": "Premium Soft-Close",
+      "variant": null,
+      "price": 8.00,
+      "pricing_unit": "per_cabinet",
+      "quantity": 1,
+      "notes": null
+    },
+    "pull_out_organizers": {
+      "category_name": "Pull-out Organizers",
+      "product": "Spice Rack Pull-out",
+      "variant": null,
+      "price": 125.00,
+      "pricing_unit": "per_piece",
+      "quantity": 2,
+      "notes": null
     }
-  ],
+  },
   "showroom": {
     "id": "uuid",
     "name": "Your Showroom",
     "code": "DEMO01"
   }
 }`}
-                </pre>
+                  </pre>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="py-6 text-center">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 mb-4">
+                <Sparkles className="h-6 w-6 text-blue-600" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">Upgrade to Pro</h3>
+              <p className="text-gray-500 mb-4 max-w-md mx-auto">
+                {getUpgradeReason('webhookAccess')}
+              </p>
+              <Link href="/showroom/billing">
+                <Button>
+                  Upgrade Plan
+                </Button>
+              </Link>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Quote Email Webhook */}
+      <Card className={!canUseWebhooks ? 'border-gray-200 bg-gray-50/50' : ''}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Webhook className="h-5 w-5" />
+            Quote Email Webhook
+            {!canUseWebhooks && (
+              <Badge variant="secondary" className="ml-2 gap-1">
+                <Lock className="h-3 w-3" />
+                Pro
+              </Badge>
+            )}
+          </CardTitle>
+          <CardDescription>
+            Send quote emails when you click &quot;Send Email to Customer&quot;. We&apos;ll send a POST request
+            with the email content, customer details, and quote summary to your n8n workflow for email delivery.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {canUseWebhooks ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="quote-webhook-url">Quote Email Webhook URL</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="quote-webhook-url"
+                    type="url"
+                    placeholder="https://your-n8n.com/webhook/send-quote-email"
+                    value={quoteWebhookUrl}
+                    onChange={(e) => {
+                      setQuoteWebhookUrl(e.target.value)
+                      setQuoteWebhookError(null)
+                    }}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={saveQuoteWebhookUrl}
+                    disabled={quoteWebhookSaving}
+                  >
+                    {quoteWebhookSaving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      'Save'
+                    )}
+                  </Button>
+                </div>
+                {quoteWebhookError && (
+                  <div className="flex items-center gap-2 text-sm text-red-600">
+                    <AlertCircle className="h-4 w-4" />
+                    {quoteWebhookError}
+                  </div>
+                )}
+                {quoteWebhookSuccess && (
+                  <div className="flex items-center gap-2 text-sm text-green-600">
+                    <CheckCircle className="h-4 w-4" />
+                    Quote webhook URL saved successfully
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowQuoteWebhookExample(!showQuoteWebhookExample)}
+                  className="w-full justify-between"
+                >
+                  <span className="text-gray-600">View Webhook Payload Example</span>
+                  {showQuoteWebhookExample ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </Button>
+                {showQuoteWebhookExample && (
+                  <pre className="bg-gray-100 p-4 rounded-lg text-xs overflow-x-auto max-h-96">
+{`{
+  "action": "send_email",
+  "to": "customer@example.com",
+  "subject": "Your Kitchen Quote - Elite Cabinets",
+  "body_html": "<html>...</html>",
+  "body_text": "plain text version",
+  "customer_name": "John Doe",
+  "reference_number": "REF-12345",
+  "grand_total": "$15,000",
+  "quote_summary": {
+    "cabinets": "$10,000",
+    "countertops": "$4,000",
+    "backsplash": "$1,000",
+    "total": "$15,000"
+  },
+  "showroom_name": "Elite Cabinets"
+}`}
+                  </pre>
+                )}
               </div>
             </>
           ) : (

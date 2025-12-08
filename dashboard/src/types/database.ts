@@ -98,6 +98,7 @@ export type Database = {
           subscription_plan: string | null
           stripe_customer_id: string | null
           webhook_url: string | null
+          quote_webhook_url: string | null
           is_active: boolean
           created_at: string
           updated_at: string
@@ -124,6 +125,7 @@ export type Database = {
           subscription_plan?: string | null
           stripe_customer_id?: string | null
           webhook_url?: string | null
+          quote_webhook_url?: string | null
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -150,6 +152,7 @@ export type Database = {
           subscription_plan?: string | null
           stripe_customer_id?: string | null
           webhook_url?: string | null
+          quote_webhook_url?: string | null
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -613,6 +616,56 @@ export type Database = {
           pricing_unit_snapshot?: 'per_linear_ft' | 'per_sq_ft' | 'per_piece' | 'per_cabinet' | 'flat' | 'none'
           customer_notes?: string | null
           created_at?: string
+        }
+      }
+      quote_emails: {
+        Row: {
+          id: string
+          project_id: string
+          recipient_email: string
+          subject: string
+          body_html: string
+          body_text: string | null
+          customer_name: string | null
+          reference_number: string | null
+          grand_total: string | null
+          quote_summary: Json | null
+          status: string
+          sent_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          recipient_email: string
+          subject: string
+          body_html: string
+          body_text?: string | null
+          customer_name?: string | null
+          reference_number?: string | null
+          grand_total?: string | null
+          quote_summary?: Json | null
+          status?: string
+          sent_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          recipient_email?: string
+          subject?: string
+          body_html?: string
+          body_text?: string | null
+          customer_name?: string | null
+          reference_number?: string | null
+          grand_total?: string | null
+          quote_summary?: Json | null
+          status?: string
+          sent_at?: string | null
+          created_at?: string
+          updated_at?: string
         }
       }
     }

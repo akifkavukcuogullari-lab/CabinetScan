@@ -26,9 +26,9 @@ import {
   Video,
   FileBox,
   FileCode,
-  ImageIcon,
 } from 'lucide-react'
 import { WebhookPayloadViewer } from '@/components/webhook/WebhookPayloadViewer'
+import { QuoteEmailSection } from '@/components/quote/QuoteEmailSection'
 
 interface ProjectDetailPageProps {
   params: Promise<{ id: string }>
@@ -89,6 +89,16 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
       products (name, image_url)
     `)
     .eq('project_id', id)
+
+  // Get quote email (latest one for this project)
+  const { data: quoteEmails } = await supabase
+    .from('quote_emails')
+    .select('*')
+    .eq('project_id', id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  const quoteEmail = quoteEmails && quoteEmails.length > 0 ? quoteEmails[0] : null
 
   const statusColors: Record<string, string> = {
     draft: 'bg-gray-100 text-gray-800',
@@ -293,6 +303,11 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         </Card>
       )}
 
+      {/* Quote Email Preview - AI Generated */}
+      {quoteEmail && (
+        <QuoteEmailSection quoteEmail={quoteEmail} />
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
@@ -462,6 +477,16 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                   </a>
                 </div>
               )}
+              {/* Device Info - small text */}
+              {(project.device_model || project.ios_version || project.app_version) && (
+                <div className="pt-3 mt-3 border-t text-xs text-gray-400 space-y-1">
+                  <div className="flex gap-2 flex-wrap">
+                    {project.device_model && <span>{project.device_model}</span>}
+                    {project.ios_version && <span>iOS {project.ios_version}</span>}
+                    {project.app_version && <span>v{project.app_version}</span>}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -584,35 +609,6 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                     </div>
                     <Download className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
                   </a>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Device Info */}
-          {(project.device_model || project.ios_version || project.app_version) && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Device Info</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {project.device_model && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Device</span>
-                    <span>{project.device_model}</span>
-                  </div>
-                )}
-                {project.ios_version && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">iOS Version</span>
-                    <span>{project.ios_version}</span>
-                  </div>
-                )}
-                {project.app_version && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">App Version</span>
-                    <span>{project.app_version}</span>
-                  </div>
                 )}
               </CardContent>
             </Card>

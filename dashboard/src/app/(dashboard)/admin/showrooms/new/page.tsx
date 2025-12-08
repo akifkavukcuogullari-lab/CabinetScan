@@ -173,10 +173,59 @@ export default function NewShowroomPage() {
 
     // Show loading toast
     const loadingToast = toast.loading('Creating showroom...', {
-      description: 'Setting up your new showroom configuration',
+      description: 'Validating information...',
     })
 
     try {
+      // Check if showroom email already exists
+      const { data: existingShowroom } = await supabase
+        .from('showrooms')
+        .select('id, name')
+        .eq('email', formData.email)
+        .single()
+
+      if (existingShowroom) {
+        toast.dismiss(loadingToast)
+        const formatted: FormattedError = {
+          title: 'Email Already Exists',
+          message: `A showroom with email "${formData.email}" already exists (${existingShowroom.name}). Please use a different email address.`,
+          suggestion: 'Each showroom must have a unique email address.',
+          isRetryable: false,
+        }
+        setError(formatted)
+        toast.error(formatted.title, { description: formatted.message })
+        setLoading(false)
+        return
+      }
+
+      // Check if owner email already exists in showroom_users
+      if (formData.ownerEmail) {
+        const { data: existingUser } = await supabase
+          .from('showroom_users')
+          .select('id, showroom_id')
+          .eq('email', formData.ownerEmail)
+          .single()
+
+        if (existingUser) {
+          toast.dismiss(loadingToast)
+          const formatted: FormattedError = {
+            title: 'Owner Email Already Exists',
+            message: `The email "${formData.ownerEmail}" is already associated with another showroom. Each user can only belong to one showroom.`,
+            suggestion: 'Please use a different email address for the owner.',
+            isRetryable: false,
+          }
+          setError(formatted)
+          toast.error(formatted.title, { description: formatted.message })
+          setLoading(false)
+          return
+        }
+      }
+
+      toast.loading('Creating showroom...', {
+        id: loadingToast,
+        description: 'Setting up your new showroom configuration',
+      })
+
       const showroomCode = generateShowroomCode()
       const slug = generateSlug(formData.name)
 

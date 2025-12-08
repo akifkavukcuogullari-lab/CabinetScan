@@ -1,0 +1,239 @@
+'use client'
+
+import { useState } from 'react'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import {
+  Mail,
+  Send,
+  Edit2,
+  Check,
+  X,
+  DollarSign,
+  Loader2,
+  ChevronDown,
+  ChevronRight
+} from 'lucide-react'
+
+interface QuoteSummary {
+  cabinets?: string
+  countertops?: string
+  backsplash?: string
+  total: string
+}
+
+interface QuoteEmail {
+  id: string
+  recipient_email: string
+  subject: string
+  body_html: string
+  body_text: string | null
+  customer_name: string | null
+  reference_number: string | null
+  grand_total: string | null
+  quote_summary: QuoteSummary | null
+  status: string
+  sent_at: string | null
+  created_at: string
+}
+
+interface QuoteEmailPreviewProps {
+  quoteEmail: QuoteEmail
+  onSend: (data: {
+    quote_email_id: string
+    recipient_email?: string
+    subject?: string
+    body_html?: string
+  }) => Promise<void>
+}
+
+export function QuoteEmailPreview({ quoteEmail, onSend }: QuoteEmailPreviewProps) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [isSending, setIsSending] = useState(false)
+  const [editedEmail, setEditedEmail] = useState({
+    recipient_email: quoteEmail.recipient_email,
+    subject: quoteEmail.subject,
+    body_html: quoteEmail.body_html
+  })
+
+  const isSent = quoteEmail.status === 'sent'
+
+  const handleSend = async () => {
+    setIsSending(true)
+    try {
+      const hasChanges =
+        editedEmail.recipient_email !== quoteEmail.recipient_email ||
+        editedEmail.subject !== quoteEmail.subject ||
+        editedEmail.body_html !== quoteEmail.body_html
+
+      await onSend({
+        quote_email_id: quoteEmail.id,
+        ...(hasChanges ? editedEmail : {})
+      })
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditedEmail({
+      recipient_email: quoteEmail.recipient_email,
+      subject: quoteEmail.subject,
+      body_html: quoteEmail.body_html
+    })
+    setIsEditing(false)
+  }
+
+  return (
+    <Card className="border-blue-200 bg-blue-50/30">
+      <CardHeader className="pb-3">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center justify-between w-full text-left"
+        >
+          <div className="flex items-center gap-2">
+            <Mail className="h-5 w-5 text-blue-600" />
+            <CardTitle className="text-lg">AI-Generated Quote Email</CardTitle>
+            <Badge variant={isSent ? 'default' : 'secondary'}>
+              {isSent ? 'Sent' : 'Pending Review'}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            {quoteEmail.grand_total && (
+              <span className="text-lg font-bold text-green-700 mr-2">
+                {quoteEmail.grand_total}
+              </span>
+            )}
+            {isExpanded ? (
+              <ChevronDown className="h-5 w-5 text-gray-500" />
+            ) : (
+              <ChevronRight className="h-5 w-5 text-gray-500" />
+            )}
+          </div>
+        </button>
+        <CardDescription>
+          Review and send the AI-generated quote to the customer
+        </CardDescription>
+      </CardHeader>
+
+      {isExpanded && (
+        <CardContent className="space-y-4">
+          {/* Edit/Cancel buttons */}
+          {!isSent && (
+            <div className="flex justify-end gap-2">
+              {isEditing ? (
+                <>
+                  <Button variant="ghost" size="sm" onClick={handleCancelEdit}>
+                    <X className="h-4 w-4 mr-1" />
+                    Cancel
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
+                    <Check className="h-4 w-4 mr-1" />
+                    Done Editing
+                  </Button>
+                </>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                  <Edit2 className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Quote Summary Bar */}
+          {quoteEmail.quote_summary && (
+            <div className="flex items-center gap-4 p-3 bg-white rounded-lg border">
+              <DollarSign className="h-5 w-5 text-green-600" />
+              <div className="flex gap-4 text-sm">
+                {quoteEmail.quote_summary.cabinets && (
+                  <span>Cabinets: <strong>{quoteEmail.quote_summary.cabinets}</strong></span>
+                )}
+                {quoteEmail.quote_summary.countertops && (
+                  <span>Countertops: <strong>{quoteEmail.quote_summary.countertops}</strong></span>
+                )}
+                {quoteEmail.quote_summary.backsplash && (
+                  <span>Backsplash: <strong>{quoteEmail.quote_summary.backsplash}</strong></span>
+                )}
+              </div>
+              <div className="ml-auto text-lg font-bold text-green-700">
+                Total: {quoteEmail.grand_total}
+              </div>
+            </div>
+          )}
+
+          {/* Email Fields */}
+          <div className="bg-white rounded-lg border overflow-hidden">
+            {/* To Field */}
+            <div className="flex items-center border-b px-4 py-2">
+              <Label className="w-20 text-sm text-gray-500">To:</Label>
+              {isEditing ? (
+                <Input
+                  value={editedEmail.recipient_email}
+                  onChange={(e) => setEditedEmail({ ...editedEmail, recipient_email: e.target.value })}
+                  className="border-0 shadow-none focus-visible:ring-0"
+                />
+              ) : (
+                <span className="text-sm">{editedEmail.recipient_email}</span>
+              )}
+            </div>
+
+            {/* Subject Field */}
+            <div className="flex items-center border-b px-4 py-2">
+              <Label className="w-20 text-sm text-gray-500">Subject:</Label>
+              {isEditing ? (
+                <Input
+                  value={editedEmail.subject}
+                  onChange={(e) => setEditedEmail({ ...editedEmail, subject: e.target.value })}
+                  className="border-0 shadow-none focus-visible:ring-0"
+                />
+              ) : (
+                <span className="text-sm font-medium">{editedEmail.subject}</span>
+              )}
+            </div>
+
+            {/* Email Body - WYSIWYG Editor */}
+            <div className="p-4">
+              <RichTextEditor
+                content={editedEmail.body_html}
+                onChange={(html) => setEditedEmail({ ...editedEmail, body_html: html })}
+                editable={isEditing}
+                className={isEditing ? '' : 'border-0'}
+              />
+            </div>
+          </div>
+
+          {/* Actions */}
+          {!isSent && (
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                onClick={handleSend}
+                disabled={isSending}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {isSending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                {isSending ? 'Sending...' : 'Send to Customer'}
+              </Button>
+            </div>
+          )}
+
+          {/* Sent info */}
+          {isSent && quoteEmail.sent_at && (
+            <div className="text-sm text-gray-500 text-right">
+              Sent on {new Date(quoteEmail.sent_at).toLocaleString()}
+            </div>
+          )}
+        </CardContent>
+      )}
+    </Card>
+  )
+}

@@ -257,11 +257,12 @@ struct ColorSelectionView: View {
                     AsyncImage(url: url) { image in
                         image
                             .resizable()
-                            .aspectRatio(contentMode: .fill)
+                            .aspectRatio(contentMode: .fit)
                     } placeholder: {
                         ProgressView()
                     }
                     .frame(width: 50, height: 50)
+                    .background(Color(.systemGray6))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
 
@@ -328,10 +329,11 @@ struct ColorOptionCard: View {
                         AsyncImage(url: url) { image in
                             image
                                 .resizable()
-                                .aspectRatio(contentMode: .fill)
+                                .aspectRatio(contentMode: .fit)
                         } placeholder: {
                             ProgressView()
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                     } else if let colorCode = variant.colorCode,
                               let color = Color(hex: colorCode) {
@@ -433,10 +435,11 @@ struct ProductCard: View {
                         AsyncImage(url: url) { image in
                             image
                                 .resizable()
-                                .aspectRatio(contentMode: .fill)
+                                .aspectRatio(contentMode: .fit)
                         } placeholder: {
                             ProgressView()
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                     } else {
                         Image(systemName: "cube")
