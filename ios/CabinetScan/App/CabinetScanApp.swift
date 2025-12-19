@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct NextlynScanApp: App {
+struct CabinetScanApp: App {
     @StateObject private var appState = AppState.shared
 
     var body: some Scene {

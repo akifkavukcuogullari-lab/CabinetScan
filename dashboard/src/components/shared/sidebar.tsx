@@ -99,7 +99,7 @@ export function Sidebar({ userInfo }: SidebarProps) {
   const NavContent = () => (
     <div className="flex flex-col h-full">
       <div className="p-6 border-b">
-        <h1 className="text-xl font-bold">Nextlyn Scan</h1>
+        <h1 className="text-xl font-bold">CabinetScan</h1>
         {userInfo.type === 'showroom' && (
           <p className="text-sm text-gray-500 mt-1">{userInfo.showroomName}</p>
         )}
@@ -193,7 +193,7 @@ export function Sidebar({ userInfo }: SidebarProps) {
             <NavContent />
           </SheetContent>
         </Sheet>
-        <h1 className="ml-4 text-lg font-bold">Nextlyn Scan</h1>
+        <h1 className="ml-4 text-lg font-bold">CabinetScan</h1>
       </div>
 
       {/* Desktop sidebar */}

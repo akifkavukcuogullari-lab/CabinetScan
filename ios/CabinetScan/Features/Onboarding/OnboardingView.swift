@@ -12,7 +12,7 @@ struct OnboardingView: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                // Nextlyn Scan Logo
+                // CabinetScan Logo
                 VStack(spacing: 16) {
                     Image("Logo")
                         .resizable()
@@ -60,15 +60,6 @@ struct OnboardingView: View {
                 }
 
                 Spacer()
-
-                // QR Code Scanner Button
-                Button {
-                    // TODO: Implement QR scanner
-                } label: {
-                    Label("Scan QR Code", systemImage: "qrcode.viewfinder")
-                }
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 32)
             }
             .padding()
             .alert("Error", isPresented: $showError) {

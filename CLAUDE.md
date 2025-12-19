@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-NextLean Scan is a white-label multi-tenant SaaS platform for cabinet showrooms. It consists of three main components:
+CabinetScan is a white-label multi-tenant SaaS platform for cabinet showrooms. It consists of three main components:
 
 1. **iOS App** - Customer-facing SwiftUI app with RoomPlan for 3D room scanning
 2. **Web Dashboard** - Next.js admin portal for showroom owners and super admins

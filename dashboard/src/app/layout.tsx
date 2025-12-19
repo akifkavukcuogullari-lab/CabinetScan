@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Nextlyn Scan Dashboard",
+  title: "CabinetScan Dashboard",
   description: "White-label cabinet scanning platform for showrooms",
 };
 
