@@ -296,17 +296,10 @@ struct ScanningView: View {
             processingStatus = "Creating 3D model..."
         }
         print("Exporting USDZ model...")
-        let (usdzUrl, localUsdzUrl) = await exportAndUploadUSDZ(room, showroomCode: showroomCode)
+        let usdzUrl = await exportAndUploadUSDZ(room, showroomCode: showroomCode)
 
-        // Convert USDZ to GLB and upload
-        var glbUrl: String? = nil
-        if let localUsdzUrl = localUsdzUrl {
-            await MainActor.run {
-                processingStatus = "Optimizing for web viewing..."
-            }
-            print("Converting to GLB for web viewing...")
-            glbUrl = await convertAndUploadGLB(usdzUrl: localUsdzUrl, showroomCode: showroomCode)
-        }
+        // Note: GLB conversion now happens server-side after project submission
+        // This removes the dependency on iOS's limited Model I/O GLB export
 
         // Process and upload video if recorded
         var videoData: UploadedVideoData? = nil
@@ -319,10 +312,11 @@ struct ScanningView: View {
         }
 
         // Extract measurements with URLs
+        // Note: glbUrl is nil here - server converts USDZ to GLB after submission
         await MainActor.run {
             processingStatus = "Finalizing measurements..."
         }
-        let measurements = extractMeasurements(from: room, floorPlanUrl: floorPlanUrl, usdzUrl: usdzUrl, glbUrl: glbUrl, videoData: videoData)
+        let measurements = extractMeasurements(from: room, floorPlanUrl: floorPlanUrl, usdzUrl: usdzUrl, glbUrl: nil, videoData: videoData)
 
         await MainActor.run {
             isProcessing = false
@@ -598,7 +592,7 @@ struct ScanningView: View {
 
     // MARK: - USDZ Export and Upload
 
-    private func exportAndUploadUSDZ(_ room: CapturedRoom, showroomCode: String) async -> (uploadedUrl: String?, localUrl: URL?) {
+    private func exportAndUploadUSDZ(_ room: CapturedRoom, showroomCode: String) async -> String? {
         let tempDir = FileManager.default.temporaryDirectory
         let timestamp = Int(Date().timeIntervalSince1970)
         let randomId = UUID().uuidString.prefix(8)
@@ -620,57 +614,21 @@ struct ScanningView: View {
             )
 
             print("USDZ uploaded: \(uploadedUrl)")
-            // Return both the uploaded URL and local file URL (for GLB conversion)
-            return (uploadedUrl, tempFileURL)
+
+            // Clean up temp file
+            try? FileManager.default.removeItem(at: tempFileURL)
+
+            // Note: GLB conversion now happens server-side after project submission
+            return uploadedUrl
         } catch {
             print("Error exporting/uploading USDZ: \(error.localizedDescription)")
             try? FileManager.default.removeItem(at: tempFileURL)
-            return (nil, nil)
-        }
-    }
-
-    // MARK: - GLB Conversion and Upload
-
-    private func convertAndUploadGLB(usdzUrl: URL, showroomCode: String) async -> String? {
-        // Convert USDZ to GLB using GLBExporter
-        guard let glbUrl = await GLBExporter.convertUSDZToGLB(usdzURL: usdzUrl) else {
-            print("Failed to convert USDZ to GLB")
-            // Clean up USDZ temp file
-            try? FileManager.default.removeItem(at: usdzUrl)
-            return nil
-        }
-
-        do {
-            let fileData = try Data(contentsOf: glbUrl)
-            let fileSizeMB = Double(fileData.count) / (1024 * 1024)
-            print("GLB file created: \(String(format: "%.2f", fileSizeMB)) MB")
-
-            let glbFilename = glbUrl.lastPathComponent
-            let storagePath = "\(showroomCode.lowercased())/\(glbFilename)"
-            let contentType = GLBExporter.contentType(for: glbUrl)
-
-            let uploadedUrl = try await APIService.shared.uploadFile(
-                bucket: "scans",
-                path: storagePath,
-                data: fileData,
-                contentType: contentType
-            )
-
-            print("GLB uploaded: \(uploadedUrl)")
-
-            // Clean up temp files
-            try? FileManager.default.removeItem(at: glbUrl)
-            try? FileManager.default.removeItem(at: usdzUrl)
-
-            return uploadedUrl
-        } catch {
-            print("Error uploading GLB: \(error.localizedDescription)")
-            // Clean up temp files
-            try? FileManager.default.removeItem(at: glbUrl)
-            try? FileManager.default.removeItem(at: usdzUrl)
             return nil
         }
     }
+
+    // Note: GLB conversion has been moved to server-side (Supabase Edge Function)
+    // This enables reliable USDZ to GLB conversion using CloudConvert API
 
     private func extractMeasurements(from room: CapturedRoom, floorPlanUrl: String?, usdzUrl: String?, glbUrl: String?, videoData: UploadedVideoData?) -> MeasurementData {
         // Calculate total linear feet from walls

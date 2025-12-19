@@ -160,6 +160,8 @@ export function ModelViewer({
 
   // If no GLB available, show fallback with preview image and download
   if (!glbUrl) {
+    const hasUsdzFile = !!usdzUrl
+
     return (
       <Card className={className} ref={containerRef}>
         {showTitle && (
@@ -170,7 +172,11 @@ export function ModelViewer({
                   <Box className="h-5 w-5 text-blue-600" />
                   {title}
                 </CardTitle>
-                <CardDescription>{description}</CardDescription>
+                <CardDescription>
+                  {hasUsdzFile
+                    ? 'Download the 3D model or view in AR on Apple devices'
+                    : description}
+                </CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 {usdzUrl && (
@@ -185,51 +191,72 @@ export function ModelViewer({
           </CardHeader>
         )}
         <CardContent className={showTitle ? 'pt-2' : ''}>
-          <div className={`relative ${viewerHeight} w-full rounded-lg overflow-hidden bg-gradient-to-b from-gray-100 to-gray-200`}>
+          <div className={`relative ${viewerHeight} w-full rounded-lg overflow-hidden bg-gradient-to-b from-gray-900 to-gray-800`}>
             {/* Preview image */}
             {previewImageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={previewImageUrl}
                 alt={alt}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-                <Box className="h-20 w-20 text-blue-300" />
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center">
+                  <Box className="h-20 w-20 text-gray-600 mx-auto mb-4" />
+                  <p className="text-gray-400 text-sm">3D Model Preview</p>
+                </div>
               </div>
             )}
 
             {/* Overlay with info and actions */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent flex flex-col justify-end p-6">
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-6">
               <div className="text-white space-y-4">
-                <div className="flex items-center gap-2 text-sm opacity-90">
-                  <Monitor className="h-4 w-4" />
-                  <span>3D model will be available after next scan</span>
-                </div>
-
-                {usdzUrl && (
-                  <div className="flex flex-wrap gap-3">
-                    <a href={usdzUrl} download className="inline-block">
-                      <Button
-                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
-                        size="sm"
+                {hasUsdzFile ? (
+                  <>
+                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
+                      <div className="flex items-start gap-3">
+                        <div className="bg-blue-500/20 rounded-full p-2">
+                          <Smartphone className="h-5 w-5 text-blue-400" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-white mb-1">3D Model Available</p>
+                          <p className="text-sm text-gray-300">
+                            This scan includes a USDZ 3D model. Download to view on Mac, or open directly on iPhone/iPad to see in AR.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <a href={usdzUrl} download className="inline-block">
+                        <Button
+                          className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+                          size="sm"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Download USDZ
+                        </Button>
+                      </a>
+                      <a
+                        href={usdzUrl}
+                        rel="ar"
+                        className="inline-block"
                       >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download USDZ
-                      </Button>
-                    </a>
-
-                    <a href={usdzUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
-                      <Button
-                        variant="outline"
-                        className="bg-white/10 hover:bg-white/20 text-white border-white/30"
-                        size="sm"
-                      >
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        Open in AR (iOS)
-                      </Button>
-                    </a>
+                        <Button
+                          variant="outline"
+                          className="bg-white/10 hover:bg-white/20 text-white border-white/30"
+                          size="sm"
+                        >
+                          <Smartphone className="h-4 w-4 mr-2" />
+                          View in AR (iOS/iPadOS)
+                        </Button>
+                      </a>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2 text-sm opacity-90">
+                    <Monitor className="h-4 w-4" />
+                    <span>No 3D model available for this scan</span>
                   </div>
                 )}
               </div>
