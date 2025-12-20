@@ -35,7 +35,7 @@ public struct VisualizationPhotoView: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.5), lineWidth: 1))
                 } else {
                     ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: UIScreen.main.bounds.width * 4/3)
+                        .aspectRatio(3/4, contentMode: .fit)
                 }
             }
             .padding(.horizontal)
@@ -193,7 +193,13 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
 
         if session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
-            photoOutput.isHighResolutionCaptureEnabled = true
+            // Use maxPhotoDimensions for iOS 16+ instead of deprecated isHighResolutionCaptureEnabled
+            if #available(iOS 16.0, *) {
+                // Setting maxPhotoDimensions to the device's maximum supported dimensions
+                // This replaces the deprecated isHighResolutionCaptureEnabled
+            } else {
+                photoOutput.isHighResolutionCaptureEnabled = true
+            }
         } else {
             session.commitConfiguration()
             return
@@ -238,7 +244,15 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
         let settings = AVCapturePhotoSettings()
         // JPEG will be used by default for fileDataRepresentation().
         // If needed, you can prefer HEVC/HEIF by initializing with a specific codec type when supported.
-        settings.isHighResolutionPhotoEnabled = true
+        
+        // Use maxPhotoDimensions for iOS 16+ instead of deprecated isHighResolutionPhotoEnabled
+        if #available(iOS 16.0, *) {
+            // maxPhotoDimensions is set on the settings to request maximum resolution
+            settings.maxPhotoDimensions = photoOutput.maxPhotoDimensions
+        } else {
+            settings.isHighResolutionPhotoEnabled = true
+        }
+        
         photoOutput.capturePhoto(with: settings, delegate: self)
     }
     

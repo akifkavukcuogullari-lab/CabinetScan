@@ -29,8 +29,11 @@ actor APIService {
 
     func fetchShowroomConfig(code: String) async throws -> ShowroomConfig {
         let urlString = "\(baseURL)/functions/v1/get-showroom-config?code=\(code.uppercased())"
+        
+        Config.logInfo("🌐 Fetching showroom config from: \(urlString)")
 
         guard let url = URL(string: urlString) else {
+            Config.logError("❌ Invalid URL: \(urlString)")
             throw APIError.invalidURL
         }
 
@@ -38,22 +41,38 @@ actor APIService {
         request.httpMethod = "GET"
         request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 10 // 10 second timeout
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
-        }
+            guard let httpResponse = response as? HTTPURLResponse else {
+                Config.logError("❌ Invalid response type")
+                throw APIError.invalidResponse
+            }
+            
+            Config.logInfo("📡 Response status: \(httpResponse.statusCode)")
 
-        switch httpResponse.statusCode {
-        case 200:
-            return try decoder.decode(ShowroomConfig.self, from: data)
-        case 404:
-            throw APIError.showroomNotFound
-        case 400:
-            throw APIError.invalidRequest
-        default:
-            throw APIError.serverError(statusCode: httpResponse.statusCode)
+            switch httpResponse.statusCode {
+            case 200:
+                return try decoder.decode(ShowroomConfig.self, from: data)
+            case 404:
+                throw APIError.showroomNotFound
+            case 400:
+                throw APIError.invalidRequest
+            default:
+                throw APIError.serverError(statusCode: httpResponse.statusCode)
+            }
+        } catch let error as URLError {
+            Config.logError("❌ Network error: \(error.localizedDescription)")
+            
+            // Provide more specific error messages
+            if error.code == .cannotConnectToHost || error.code == .notConnectedToInternet {
+                throw APIError.connectionFailed
+            } else if error.code == .timedOut {
+                throw APIError.timeout
+            }
+            throw error
         }
     }
 
@@ -125,6 +144,8 @@ enum APIError: LocalizedError {
     case submissionFailed(message: String)
     case uploadFailed
     case decodingError
+    case connectionFailed
+    case timeout
 
     var errorDescription: String? {
         switch self {
@@ -144,6 +165,10 @@ enum APIError: LocalizedError {
             return "Failed to upload file"
         case .decodingError:
             return "Failed to process server response"
+        case .connectionFailed:
+            return "Could not connect to the server. Please check:\n• Your internet connection\n• Supabase configuration in Info.plist\n• If using local server, use your computer's IP address instead of 127.0.0.1"
+        case .timeout:
+            return "Connection timed out. Please check your internet connection and try again."
         }
     }
 }
