@@ -122,23 +122,34 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
     let objectWillChange = ObservableObjectPublisher()
 
     func requestPermission(completion: @escaping (Bool) -> Void) {
-        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        print("📸 VisualizationPhoto: Camera permission status: \(status.rawValue)")
+
+        switch status {
         case .authorized:
+            print("✅ VisualizationPhoto: Camera permission already granted")
             permissionGranted = true
             completion(true)
         case .notDetermined:
+            print("⏳ VisualizationPhoto: Requesting camera permission")
             AVCaptureDevice.requestAccess(for: .video) { granted in
+                print(granted ? "✅ VisualizationPhoto: Camera permission granted" : "❌ VisualizationPhoto: Camera permission denied")
                 self.permissionGranted = granted
                 completion(granted)
             }
         default:
+            print("❌ VisualizationPhoto: Camera permission not available")
             permissionGranted = false
             completion(false)
         }
     }
 
     func startSession() {
-        guard permissionGranted, !isSessionRunning else { return }
+        print("📸 VisualizationPhoto: startSession called - permissionGranted: \(permissionGranted), isSessionRunning: \(isSessionRunning)")
+        guard permissionGranted, !isSessionRunning else {
+            print("⚠️ VisualizationPhoto: Cannot start session - permission: \(permissionGranted), running: \(isSessionRunning)")
+            return
+        }
 
         // Enable device orientation monitoring for photo capture
         if !UIDevice.current.isGeneratingDeviceOrientationNotifications {
@@ -147,11 +158,19 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
 
         sessionQueue.async {
             if !self.isConfigured {
+                print("📸 VisualizationPhoto: Session not configured, configuring now")
                 self.configureSession()
             }
-            self.session.startRunning()
-            DispatchQueue.main.async {
-                self.isSessionRunning = self.session.isRunning
+
+            if self.isConfigured {
+                print("📸 VisualizationPhoto: Starting session")
+                self.session.startRunning()
+                DispatchQueue.main.async {
+                    self.isSessionRunning = self.session.isRunning
+                    print(self.isSessionRunning ? "✅ VisualizationPhoto: Session running" : "❌ VisualizationPhoto: Session failed to start")
+                }
+            } else {
+                print("❌ VisualizationPhoto: Session configuration failed, cannot start")
             }
         }
     }
@@ -167,6 +186,7 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
     }
 
     private func configureSession() {
+        print("📸 VisualizationPhoto: Starting session configuration")
         session.beginConfiguration()
         session.sessionPreset = .photo
 
@@ -174,25 +194,31 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
         session.inputs.forEach { session.removeInput($0) }
 
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+            print("❌ VisualizationPhoto: Failed to get camera device")
             session.commitConfiguration()
             return
         }
+        print("✅ VisualizationPhoto: Camera device obtained")
 
         do {
             let cameraInput = try AVCaptureDeviceInput(device: camera)
             if session.canAddInput(cameraInput) {
                 session.addInput(cameraInput)
+                print("✅ VisualizationPhoto: Camera input added")
             } else {
+                print("❌ VisualizationPhoto: Cannot add camera input")
                 session.commitConfiguration()
                 return
             }
         } catch {
+            print("❌ VisualizationPhoto: Error creating camera input: \(error.localizedDescription)")
             session.commitConfiguration()
             return
         }
 
         if session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
+            print("✅ VisualizationPhoto: Photo output added")
             // Use maxPhotoDimensions for iOS 16+ instead of deprecated isHighResolutionCaptureEnabled
             if #available(iOS 16.0, *) {
                 // Setting maxPhotoDimensions to the device's maximum supported dimensions
@@ -201,12 +227,14 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
                 photoOutput.isHighResolutionCaptureEnabled = true
             }
         } else {
+            print("❌ VisualizationPhoto: Cannot add photo output")
             session.commitConfiguration()
             return
         }
 
         session.commitConfiguration()
         isConfigured = true
+        print("✅ VisualizationPhoto: Session configuration complete")
     }
 
     func capturePhoto(completion: @escaping (UIImage?) -> Void) {
