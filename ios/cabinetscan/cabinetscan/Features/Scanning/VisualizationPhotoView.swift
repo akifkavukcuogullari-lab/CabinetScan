@@ -4,73 +4,139 @@ import ImageIO
 import Combine
 
 public struct VisualizationPhotoView: View {
-    let onPhotoTaken: (UIImage) -> Void
+    let onPhotosCompleted: ([UIImage]) -> Void
     let onSkip: () -> Void
 
     @StateObject private var camera = CameraController()
     @State private var isPermissionDenied = false
+    @State private var capturedPhotos: [UIImage] = []
+    @State private var currentPhotoIndex = 0
 
-    public init(onPhotoTaken: @escaping (UIImage) -> Void, onSkip: @escaping () -> Void) {
-        self.onPhotoTaken = onPhotoTaken
+    private let totalPhotos = 5
+
+    public init(onPhotosCompleted: @escaping ([UIImage]) -> Void, onSkip: @escaping () -> Void) {
+        self.onPhotosCompleted = onPhotosCompleted
         self.onSkip = onSkip
     }
 
     public var body: some View {
-        VStack(spacing: 20) {
-            Text("Take a photo of your space for visualization")
-                .font(.headline)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
+        ZStack {
+            // Camera preview (full screen)
             Group {
                 if camera.isSessionRunning {
                     CameraPreviewView(session: camera.session)
-                        .aspectRatio(3/4, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.5), lineWidth: 1))
+                        .ignoresSafeArea()
                 } else if isPermissionDenied {
                     CameraUnavailablePlaceholder()
-                        .aspectRatio(3/4, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.5), lineWidth: 1))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black)
                 } else {
-                    ProgressView()
-                        .aspectRatio(3/4, contentMode: .fit)
+                    ZStack {
+                        Color.black
+                        ProgressView()
+                            .tint(.white)
+                    }
+                    .ignoresSafeArea()
                 }
             }
-            .padding(.horizontal)
 
-            HStack(spacing: 40) {
-                Button(action: {
-                    camera.capturePhoto { image in
-                        if let img = image {
-                            onPhotoTaken(img)
-                        }
-                    }
-                }) {
-                    Text("Take Photo")
+            // UI Overlay
+            VStack {
+                // Top bar with progress and skip
+                HStack {
+                    Text("Photo \(currentPhotoIndex + 1) of \(totalPhotos)")
                         .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(camera.isSessionRunning ? Color.blue : Color.gray)
                         .foregroundColor(.white)
-                        .cornerRadius(10)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(Capsule())
+
+                    Spacer()
+
+                    Button(action: onSkip) {
+                        Text("Skip")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Capsule())
+                    }
+                }
+                .padding()
+
+                Spacer()
+
+                // Instruction text
+                Text(instructionText)
+                    .font(.title3)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 12)
+                    .background(Color.black.opacity(0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.bottom, 20)
+
+                // Photo indicators
+                HStack(spacing: 12) {
+                    ForEach(0..<totalPhotos, id: \.self) { index in
+                        Circle()
+                            .fill(index < capturedPhotos.count ? Color.green : Color.white.opacity(0.3))
+                            .frame(width: 12, height: 12)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white, lineWidth: index == currentPhotoIndex ? 2 : 0)
+                            )
+                    }
+                }
+                .padding(.bottom, 16)
+
+                // Thumbnails of captured photos
+                if !capturedPhotos.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(capturedPhotos.enumerated()), id: \.offset) { index, image in
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 60, height: 60)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.white, lineWidth: 2)
+                                    )
+                                    .overlay(
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.green)
+                                            .background(Circle().fill(Color.white))
+                                            .offset(x: 20, y: -20)
+                                    )
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    .frame(height: 70)
+                    .padding(.bottom, 8)
+                }
+
+                // Capture button
+                Button(action: capturePhoto) {
+                    ZStack {
+                        Circle()
+                            .strokeBorder(Color.white, lineWidth: 4)
+                            .frame(width: 70, height: 70)
+
+                        Circle()
+                            .fill(camera.isSessionRunning ? Color.white : Color.gray)
+                            .frame(width: 60, height: 60)
+                    }
                 }
                 .disabled(!camera.isSessionRunning)
-
-                Button(action: {
-                    onSkip()
-                }) {
-                    Text("Skip")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.secondary.opacity(0.2))
-                        .foregroundColor(.primary)
-                        .cornerRadius(10)
-                }
+                .padding(.bottom, 40)
             }
-            .padding(.horizontal)
         }
         .onAppear {
             camera.requestPermission { granted in
@@ -85,6 +151,31 @@ public struct VisualizationPhotoView: View {
         }
         .onDisappear {
             camera.stopSession()
+        }
+    }
+
+    private var instructionText: String {
+        switch currentPhotoIndex {
+        case 0: return "Take the first photo"
+        case 1: return "Take the second photo"
+        case 2: return "Take the third photo"
+        case 3: return "Take the fourth photo"
+        case 4: return "Take the final photo"
+        default: return "Take photo"
+        }
+    }
+
+    private func capturePhoto() {
+        camera.capturePhoto { image in
+            guard let img = image else { return }
+
+            capturedPhotos.append(img)
+            currentPhotoIndex += 1
+
+            if capturedPhotos.count >= totalPhotos {
+                // All photos captured, complete the flow
+                onPhotosCompleted(capturedPhotos)
+            }
         }
     }
 }
@@ -118,7 +209,7 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
     @Published private(set) var isSessionRunning = false
 
     private var captureCompletion: ((UIImage?) -> Void)?
-    
+
     let objectWillChange = ObservableObjectPublisher()
 
     func requestPermission(completion: @escaping (Bool) -> Void) {
@@ -272,7 +363,7 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
         let settings = AVCapturePhotoSettings()
         // JPEG will be used by default for fileDataRepresentation().
         // If needed, you can prefer HEVC/HEIF by initializing with a specific codec type when supported.
-        
+
         // Use maxPhotoDimensions for iOS 16+ instead of deprecated isHighResolutionPhotoEnabled
         if #available(iOS 16.0, *) {
             // maxPhotoDimensions is set on the settings to request maximum resolution
@@ -280,12 +371,12 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
         } else {
             settings.isHighResolutionPhotoEnabled = true
         }
-        
+
         photoOutput.capturePhoto(with: settings, delegate: self)
     }
-    
+
     // MARK: - AVCapturePhotoCaptureDelegate
-    
+
     func photoOutput(_ output: AVCapturePhotoOutput,
                      didFinishProcessingPhoto photo: AVCapturePhoto,
                      error: Error?) {

@@ -130,11 +130,12 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   const hasGlbFile = measurement?.glb_file_url
   const hasUsdzFile = measurement?.usdz_file_url
   const hasVideoFile = measurement?.video_url
-  const hasVisualizationPhoto = measurement?.visualization_photo_url
+  const visualizationPhotos = measurement?.visualization_photo_urls || []
+  const hasVisualizationPhotos = visualizationPhotos.length > 0
   const hasFloorPlanData = measurement?.measurements?.walls?.length > 0 || measurement?.measurements?.room
   const has3DModel = hasGlbFile || hasUsdzFile
   const hasScanData = has3DModel || hasFloorPlanData
-  const hasDownloadableFiles = hasGlbFile || hasUsdzFile || hasVideoFile || hasVisualizationPhoto
+  const hasDownloadableFiles = hasGlbFile || hasUsdzFile || hasVideoFile || hasVisualizationPhotos
 
   return (
     <div className="space-y-6">
@@ -532,28 +533,37 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                 <CardDescription>Download scan files</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {hasVisualizationPhoto && (
-                  <div className="space-y-2">
-                    <a
-                      href={measurement.visualization_photo_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block rounded-lg overflow-hidden border border-gray-200 hover:border-blue-300 transition-colors"
-                    >
-                      <img
-                        src={measurement.visualization_photo_url}
-                        alt="Kitchen visualization"
-                        className="w-full h-32 object-cover [image-orientation:from-image]"
-                      />
-                    </a>
-                    <a
-                      href={measurement.visualization_photo_url}
-                      download
-                      className="flex items-center justify-center gap-2 p-2 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm"
-                    >
-                      <Download className="h-4 w-4" />
-                      Download Photo
-                    </a>
+                {hasVisualizationPhotos && (
+                  <div className="space-y-3">
+                    <div className="text-sm font-medium text-gray-700">
+                      Visualization Photos ({visualizationPhotos.length})
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {visualizationPhotos.map((photoUrl: string, index: number) => (
+                        <div key={index} className="space-y-2">
+                          <a
+                            href={photoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block rounded-lg overflow-hidden border border-gray-200 hover:border-blue-300 transition-colors"
+                          >
+                            <img
+                              src={photoUrl}
+                              alt={`Visualization photo ${index + 1}`}
+                              className="w-full h-32 object-cover [image-orientation:from-image]"
+                            />
+                          </a>
+                          <a
+                            href={photoUrl}
+                            download={`visualization_${index + 1}.jpg`}
+                            className="flex items-center justify-center gap-2 p-2 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-xs"
+                          >
+                            <Download className="h-3 w-3" />
+                            Photo {index + 1}
+                          </a>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {hasVideoFile && (

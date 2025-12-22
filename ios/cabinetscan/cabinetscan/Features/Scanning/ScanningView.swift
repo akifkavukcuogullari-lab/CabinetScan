@@ -23,8 +23,8 @@ struct ScanningView: View {
             VStack(spacing: 24) {
                 if showVisualizationPhoto {
                     VisualizationPhotoView(
-                        onPhotoTaken: { image in
-                            handleVisualizationPhoto(image)
+                        onPhotosCompleted: { images in
+                            handleVisualizationPhotos(images)
                         },
                         onSkip: {
                             handleVisualizationPhotoSkipped()
@@ -334,10 +334,10 @@ struct ScanningView: View {
 
     // MARK: - Visualization Photo Handling
 
-    private func handleVisualizationPhoto(_ image: UIImage) {
+    private func handleVisualizationPhotos(_ images: [UIImage]) {
         showVisualizationPhoto = false
         isProcessing = true
-        processingStatus = "Uploading visualization photo..."
+        processingStatus = "Uploading photos..."
 
         Task {
             guard var measurements = pendingMeasurements,
@@ -351,9 +351,10 @@ struct ScanningView: View {
                 return
             }
 
-            // Upload the visualization photo
-            if let photoUrl = await uploadVisualizationPhoto(image, showroomCode: showroomCode) {
-                measurements.visualizationPhotoUrl = photoUrl
+            // Upload all visualization photos
+            let photoUrls = await uploadVisualizationPhotos(images, showroomCode: showroomCode)
+            if !photoUrls.isEmpty {
+                measurements.visualizationPhotoUrls = photoUrls
             }
 
             await MainActor.run {
@@ -373,35 +374,39 @@ struct ScanningView: View {
         }
     }
 
-    private func uploadVisualizationPhoto(_ image: UIImage, showroomCode: String) async -> String? {
-        // Normalize image orientation before saving
-        // Camera photos may have EXIF orientation that needs to be applied
-        let normalizedImage = normalizeImageOrientation(image)
+    private func uploadVisualizationPhotos(_ images: [UIImage], showroomCode: String) async -> [String] {
+        var uploadedUrls: [String] = []
 
-        // Compress image to reasonable size (max 2MB)
-        guard let imageData = normalizedImage.jpegData(compressionQuality: 0.7) else {
-            print("Failed to convert visualization photo to JPEG")
-            return nil
+        for (index, image) in images.enumerated() {
+            // Normalize image orientation before saving
+            let normalizedImage = normalizeImageOrientation(image)
+
+            // Compress image to reasonable size (max 2MB)
+            guard let imageData = normalizedImage.jpegData(compressionQuality: 0.7) else {
+                print("Failed to convert visualization photo \(index + 1) to JPEG")
+                continue
+            }
+
+            let timestamp = Int(Date().timeIntervalSince1970)
+            let randomId = UUID().uuidString.prefix(8)
+            let filename = "visualization_\(timestamp)_\(randomId)_\(index + 1).jpg"
+            let storagePath = "\(showroomCode.lowercased())/\(filename)"
+
+            do {
+                let uploadedUrl = try await APIService.shared.uploadFile(
+                    bucket: "scans",
+                    path: storagePath,
+                    data: imageData,
+                    contentType: "image/jpeg"
+                )
+                print("Visualization photo \(index + 1) uploaded: \(uploadedUrl)")
+                uploadedUrls.append(uploadedUrl)
+            } catch {
+                print("Failed to upload visualization photo \(index + 1): \(error.localizedDescription)")
+            }
         }
 
-        let timestamp = Int(Date().timeIntervalSince1970)
-        let randomId = UUID().uuidString.prefix(8)
-        let filename = "visualization_\(timestamp)_\(randomId).jpg"
-        let storagePath = "\(showroomCode.lowercased())/\(filename)"
-
-        do {
-            let uploadedUrl = try await APIService.shared.uploadFile(
-                bucket: "scans",
-                path: storagePath,
-                data: imageData,
-                contentType: "image/jpeg"
-            )
-            print("Visualization photo uploaded: \(uploadedUrl)")
-            return uploadedUrl
-        } catch {
-            print("Failed to upload visualization photo: \(error.localizedDescription)")
-            return nil
-        }
+        return uploadedUrls
     }
 
     /// Normalize image orientation by redrawing with correct transform applied
