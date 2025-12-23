@@ -540,11 +540,11 @@ struct ScanningView: View {
         var uploadedUrls: [String] = []
 
         for (index, image) in images.enumerated() {
-            // Normalize image orientation before saving
-            let normalizedImage = normalizeImageOrientation(image)
+            // Images are already normalized in VisualizationPhotoView.forceNormalizeOrientation()
+            // at full pixel resolution - no need to normalize again (would degrade quality)
 
             // Compress image to reasonable size with high quality (0.85)
-            guard let imageData = normalizedImage.jpegData(compressionQuality: 0.85) else {
+            guard let imageData = image.jpegData(compressionQuality: 0.85) else {
                 print("Failed to convert visualization photo \(index + 1) to JPEG")
                 continue
             }
@@ -571,88 +571,6 @@ struct ScanningView: View {
         return uploadedUrls
     }
 
-    /// Normalize image orientation by redrawing with correct transform applied
-    /// This ensures the image pixels match the visual orientation
-    private func normalizeImageOrientation(_ image: UIImage) -> UIImage {
-        // If already upright, no need to redraw
-        guard image.imageOrientation != .up else {
-            return image
-        }
-
-        guard let cgImage = image.cgImage else {
-            return image
-        }
-
-        let width = cgImage.width
-        let height = cgImage.height
-
-        var transform = CGAffineTransform.identity
-        var outputWidth = width
-        var outputHeight = height
-
-        // Determine the transform based on orientation
-        switch image.imageOrientation {
-        case .down, .downMirrored:
-            transform = transform.translatedBy(x: CGFloat(width), y: CGFloat(height))
-            transform = transform.rotated(by: .pi)
-        case .left, .leftMirrored:
-            outputWidth = height
-            outputHeight = width
-            transform = transform.translatedBy(x: CGFloat(height), y: 0)
-            transform = transform.rotated(by: .pi / 2)
-        case .right, .rightMirrored:
-            outputWidth = height
-            outputHeight = width
-            transform = transform.translatedBy(x: 0, y: CGFloat(width))
-            transform = transform.rotated(by: -.pi / 2)
-        case .up, .upMirrored:
-            break
-        @unknown default:
-            break
-        }
-
-        // Handle mirrored orientations
-        switch image.imageOrientation {
-        case .upMirrored, .downMirrored:
-            transform = transform.translatedBy(x: CGFloat(width), y: 0)
-            transform = transform.scaledBy(x: -1, y: 1)
-        case .leftMirrored, .rightMirrored:
-            transform = transform.translatedBy(x: CGFloat(height), y: 0)
-            transform = transform.scaledBy(x: -1, y: 1)
-        default:
-            break
-        }
-
-        // Create a context with the correct output size
-        guard let colorSpace = cgImage.colorSpace,
-              let context = CGContext(
-                  data: nil,
-                  width: outputWidth,
-                  height: outputHeight,
-                  bitsPerComponent: cgImage.bitsPerComponent,
-                  bytesPerRow: 0,
-                  space: colorSpace,
-                  bitmapInfo: cgImage.bitmapInfo.rawValue
-              ) else {
-            // Fallback: use UIGraphicsImageRenderer
-            let outputSize = CGSize(width: outputWidth, height: outputHeight)
-            let format = UIGraphicsImageRendererFormat()
-            format.scale = 1.0
-            let renderer = UIGraphicsImageRenderer(size: outputSize, format: format)
-            return renderer.image { _ in
-                image.draw(in: CGRect(origin: .zero, size: outputSize))
-            }
-        }
-
-        context.concatenate(transform)
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-
-        guard let normalizedCGImage = context.makeImage() else {
-            return image
-        }
-
-        return UIImage(cgImage: normalizedCGImage, scale: image.scale, orientation: .up)
-    }
 
     // MARK: - Video Processing and Upload
 
