@@ -42,8 +42,8 @@ struct ScanningView: View {
                     })
                 } else if isScanning && !showVisualizationPhoto && !showPhotoIntro {
                     // CRITICAL: Only show if NOT transitioning to photo views
-                    // CRITICAL: Don't wrap in ZStack - it breaks RoomPlan's Metal rendering
-                    // Use overlays exclusively to avoid view hierarchy conflicts
+                    // CRITICAL: NO loading overlay - any overlay causes Metal texture errors with RoomPlan
+                    // Let RoomPlan show its own black screen during initialization (only a few seconds)
                     RoomCaptureViewRepresentable(
                         isScanning: $isScanning,
                         capturedRoom: $capturedRoom,
@@ -53,32 +53,6 @@ struct ScanningView: View {
                     )
                     .ignoresSafeArea()
                     .id("roomcapture_\(scanSessionId)") // Force complete destruction when ID changes
-                    .overlay {
-                        // Loading overlay while RoomPlan initializes
-                        // CRITICAL: Use overlay, not ZStack, to avoid Metal errors
-                        if !isRoomPlanReady {
-                            ZStack {
-                                Color.black
-                                    .ignoresSafeArea()
-
-                                VStack(spacing: 20) {
-                                    ProgressView()
-                                        .scaleEffect(1.5)
-                                        .tint(.white)
-
-                                    Text("Initializing Camera...")
-                                        .font(.headline)
-                                        .foregroundColor(.white)
-
-                                    Text("Please wait while we prepare the scanner")
-                                        .font(.caption)
-                                        .foregroundColor(.white.opacity(0.7))
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 40)
-                                }
-                            }
-                        }
-                    }
                     .overlay(alignment: .top) {
                         // Video recording indicator at top (only show when ready)
                         if isRoomPlanReady && videoRecorder != nil {
@@ -503,12 +477,15 @@ struct ScanningView: View {
         Task {
             guard var measurements = pendingMeasurements,
                   let showroomCode = appState.showroomConfig?.showroomCode else {
+                // Replace the entire await MainActor.run block here per instructions
+                // Keep processing UI visible until navigation happens
                 await MainActor.run {
-                    // Keep processing UI visible until navigation happens
                     isProcessing = true
-                    if let measurements = pendingMeasurements {
-                        // Give a small delay to ensure UI stays stable
-                        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+                }
+                if let measurements = pendingMeasurements {
+                    // Give a small delay to ensure UI stays stable
+                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+                    await MainActor.run {
                         appState.setMeasurementData(measurements)
                     }
                 }
@@ -533,8 +510,10 @@ struct ScanningView: View {
 
                 // Small delay before navigation to ensure UI stability
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    pendingMeasurements = nil
-                    appState.setMeasurementData(measurements)
+                    Task { @MainActor in
+                        pendingMeasurements = nil
+                        appState.setMeasurementData(measurements)
+                    }
                 }
             }
         }
@@ -548,9 +527,11 @@ struct ScanningView: View {
 
         // Small delay to ensure smooth transition
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            if let measurements = pendingMeasurements {
-                pendingMeasurements = nil
-                appState.setMeasurementData(measurements)
+            Task { @MainActor in
+                if let measurements = pendingMeasurements {
+                    pendingMeasurements = nil
+                    appState.setMeasurementData(measurements)
+                }
             }
         }
     }
@@ -1469,4 +1450,3 @@ struct PhotoIntroView: View {
     ScanningView()
         .environmentObject(AppState.shared)
 }
-
