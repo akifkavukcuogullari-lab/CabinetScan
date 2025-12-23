@@ -54,7 +54,7 @@ public struct VisualizationPhotoView: View {
 
                     Spacer()
 
-                    Button(action: onSkip) {
+                    Button(action: handleSkip) {
                         Text("Skip")
                             .font(.headline)
                             .foregroundColor(.white)
@@ -179,6 +179,18 @@ public struct VisualizationPhotoView: View {
                 // All photos captured, complete the flow
                 onPhotosCompleted(capturedPhotos)
             }
+        }
+    }
+
+    private func handleSkip() {
+        // If any photos were captured, save them
+        if !capturedPhotos.isEmpty {
+            print("📸 [VisualizationPhotoView] Skipped after taking \(capturedPhotos.count) photos - saving them")
+            onPhotosCompleted(capturedPhotos)
+        } else {
+            // No photos taken, skip entirely
+            print("📸 [VisualizationPhotoView] Skipped without taking any photos")
+            onSkip()
         }
     }
 }
