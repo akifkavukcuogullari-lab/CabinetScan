@@ -494,6 +494,7 @@ struct ScanningView: View {
     // MARK: - Visualization Photo Handling
 
     private func handleVisualizationPhotos(_ images: [UIImage]) {
+        // CRITICAL: Set all flags to prevent showing start screen during transition
         showVisualizationPhoto = false
         showPhotoIntro = false
         isProcessing = true
@@ -504,7 +505,10 @@ struct ScanningView: View {
                   let showroomCode = appState.showroomConfig?.showroomCode else {
                 await MainActor.run {
                     // Keep processing UI visible until navigation happens
+                    isProcessing = true
                     if let measurements = pendingMeasurements {
+                        // Give a small delay to ensure UI stays stable
+                        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
                         appState.setMeasurementData(measurements)
                     }
                 }
@@ -522,12 +526,17 @@ struct ScanningView: View {
             }
 
             await MainActor.run {
-                // Don't set isProcessing = false here - keep showing processing UI
-                // until AppState navigates to next screen (product selection)
-                // This prevents briefly showing "Scan Your Space" screen
+                // CRITICAL: Keep isProcessing = true and pendingMeasurements intact
+                // until navigation completes. This prevents "Scan Your Space" from appearing
+                processingStatus = "Finalizing..."
                 print("📤 [ScanningView] About to call setMeasurementData with \(measurements.visualizationPhotoUrls?.count ?? 0) photos")
-                pendingMeasurements = nil
-                appState.setMeasurementData(measurements)
+
+                // Small delay before navigation to ensure UI stability
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+                    pendingMeasurements = nil
+                    appState.setMeasurementData(measurements)
+                }
             }
         }
     }
@@ -535,10 +544,16 @@ struct ScanningView: View {
     private func handleVisualizationPhotoSkipped() {
         showVisualizationPhoto = false
         showPhotoIntro = false
+        isProcessing = true
+        processingStatus = "Finalizing..."
 
-        if let measurements = pendingMeasurements {
-            pendingMeasurements = nil
-            appState.setMeasurementData(measurements)
+        // Small delay to ensure smooth transition
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+            if let measurements = pendingMeasurements {
+                pendingMeasurements = nil
+                appState.setMeasurementData(measurements)
+            }
         }
     }
 
