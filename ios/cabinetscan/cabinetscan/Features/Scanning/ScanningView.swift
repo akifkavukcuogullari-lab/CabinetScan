@@ -20,6 +20,7 @@ struct ScanningView: View {
     @State private var pendingMeasurements: MeasurementData?
     @State private var manuallyStopped = false // Track if user clicked Done button
     @State private var scanSessionId = UUID() // Unique ID to force view recreation
+    @State private var isRoomPlanReady = false // Track if RoomPlan camera is ready
 
     var body: some View {
         NavigationStack {
@@ -42,17 +43,42 @@ struct ScanningView: View {
                 } else if isScanning && !showVisualizationPhoto && !showPhotoIntro {
                     // CRITICAL: Only show if NOT transitioning to photo views
                     // This ensures complete removal from hierarchy
-                    RoomCaptureViewRepresentable(
-                        isScanning: $isScanning,
-                        capturedRoom: $capturedRoom,
-                        videoRecorder: videoRecorder,
-                        onComplete: handleScanComplete
-                    )
-                    .ignoresSafeArea()
-                    .id("roomcapture_\(scanSessionId)") // Force complete destruction when ID changes
+                    ZStack {
+                        RoomCaptureViewRepresentable(
+                            isScanning: $isScanning,
+                            capturedRoom: $capturedRoom,
+                            videoRecorder: videoRecorder,
+                            isRoomPlanReady: $isRoomPlanReady,
+                            onComplete: handleScanComplete
+                        )
+                        .ignoresSafeArea()
+                        .id("roomcapture_\(scanSessionId)") // Force complete destruction when ID changes
+
+                        // Loading overlay while RoomPlan initializes
+                        if !isRoomPlanReady {
+                            Color.black
+                                .ignoresSafeArea()
+
+                            VStack(spacing: 20) {
+                                ProgressView()
+                                    .scaleEffect(1.5)
+                                    .tint(.white)
+
+                                Text("Initializing Camera...")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+
+                                Text("Please wait while we prepare the scanner")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 40)
+                            }
+                        }
+                    }
                     .overlay(alignment: .top) {
-                        // Video recording indicator at top
-                        if videoRecorder != nil {
+                        // Video recording indicator at top (only show when ready)
+                        if isRoomPlanReady && videoRecorder != nil {
                             HStack(spacing: 8) {
                                 Circle()
                                     .fill(Color.red)
@@ -69,20 +95,22 @@ struct ScanningView: View {
                         }
                     }
                     .overlay(alignment: .bottomTrailing) {
-                        // Done button at bottom right
-                        Button {
-                            stopScanning()
-                        } label: {
-                            Text("Done")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 10)
-                                .background(Color.black.opacity(0.5))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        // Done button at bottom right (only show when ready)
+                        if isRoomPlanReady {
+                            Button {
+                                stopScanning()
+                            } label: {
+                                Text("Done")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 10)
+                                    .background(Color.black.opacity(0.5))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                            }
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 40)
                         }
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 40)
                     }
                 } else if isProcessing {
                     // Processing view - shown after scan, before navigation
@@ -126,6 +154,20 @@ struct ScanningView: View {
                         Text("This may take a moment...")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
+
+                        Spacer()
+                    }
+                } else if pendingMeasurements != nil {
+                    // CRITICAL: If we have pending measurements, show processing - never show start screen
+                    // This prevents brief flash of start screen when transitioning from photos
+                    VStack(spacing: 32) {
+                        Spacer()
+
+                        ProgressView()
+                            .scaleEffect(1.5)
+
+                        Text("Processing...")
+                            .font(.headline)
 
                         Spacer()
                     }
@@ -194,6 +236,7 @@ struct ScanningView: View {
                 manuallyStopped = false
                 capturedRoom = nil
                 recordedVideoURL = nil
+                isRoomPlanReady = false
             }
         }
     }
@@ -253,6 +296,7 @@ struct ScanningView: View {
     private func startScanning() {
         // Reset state for new scan
         manuallyStopped = false
+        isRoomPlanReady = false // Reset ready state
         scanSessionId = UUID() // Generate new session ID for clean state
 
         // Initialize video recorder if enabled
@@ -1184,6 +1228,7 @@ struct RoomCaptureViewRepresentable: UIViewRepresentable {
     @Binding var isScanning: Bool
     @Binding var capturedRoom: CapturedRoom?
     var videoRecorder: VideoRecorder?
+    @Binding var isRoomPlanReady: Bool
     let onComplete: (CapturedRoom) -> Void
 
     func makeUIView(context: Context) -> RoomCaptureView {
@@ -1263,6 +1308,7 @@ struct RoomCaptureViewRepresentable: UIViewRepresentable {
         var videoRecorder: VideoRecorder?
         private var sessionStartTime: TimeInterval?
         private var completionHandled = false // Prevent double-calling onComplete
+        private var hasReceivedFirstFrame = false // Track if camera is ready
 
         init(parent: RoomCaptureViewRepresentable) {
             self.parent = parent
@@ -1301,6 +1347,15 @@ struct RoomCaptureViewRepresentable: UIViewRepresentable {
         // MARK: - ARSessionDelegate
 
         func session(_ session: ARSession, didUpdate frame: ARFrame) {
+            // Mark RoomPlan as ready when first frame is received (camera is working)
+            if !hasReceivedFirstFrame {
+                hasReceivedFirstFrame = true
+                DispatchQueue.main.async {
+                    self.parent.isRoomPlanReady = true
+                }
+                print("[RoomCaptureView] First ARFrame received - camera is ready")
+            }
+
             guard let recorder = videoRecorder, recorder.isCurrentlyRecording else { return }
 
             // Initialize session start time on first frame
