@@ -134,6 +134,9 @@ class AppState: ObservableObject {
                 )
             )
 
+            print("🚀 [AppState] Submitting project with \(measurements.visualizationPhotoUrls?.count ?? 0) visualization photos")
+            print("🚀 [AppState] Photo URLs: \(measurements.visualizationPhotoUrls ?? [])")
+
             let response = try await APIService.shared.submitProject(submission)
 
             if let referenceNumber = response.referenceNumber {

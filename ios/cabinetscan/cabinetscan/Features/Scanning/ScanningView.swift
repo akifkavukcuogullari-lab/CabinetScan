@@ -16,7 +16,10 @@ struct ScanningView: View {
     @State private var videoRecorderDelegate: VideoRecorderDelegateHandler?
     // Visualization photo state
     @State private var showVisualizationPhoto = false
+    @State private var showPhotoIntro = false // Show intro before camera (during 5s wait)
     @State private var pendingMeasurements: MeasurementData?
+    @State private var manuallyStopped = false // Track if user clicked Done button
+    @State private var scanSessionId = UUID() // Unique ID to force view recreation
 
     var body: some View {
         NavigationStack {
@@ -30,17 +33,25 @@ struct ScanningView: View {
                             handleVisualizationPhotoSkipped()
                         }
                     )
-                } else if isScanning {
-                    ZStack(alignment: .top) {
-                        RoomCaptureViewRepresentable(
-                            isScanning: $isScanning,
-                            capturedRoom: $capturedRoom,
-                            videoRecorder: videoRecorder,
-                            onComplete: handleScanComplete
-                        )
-                        .ignoresSafeArea()
-
-                        // Video recording indicator
+                } else if showPhotoIntro {
+                    // Photo intro screen (shown during 5s camera release wait)
+                    // CRITICAL: RoomCaptureView is NOT rendered at all - completely removed from hierarchy
+                    PhotoIntroView(onContinue: {
+                        // This won't be called - intro auto-transitions after 5s
+                    })
+                } else if isScanning && !showVisualizationPhoto && !showPhotoIntro {
+                    // CRITICAL: Only show if NOT transitioning to photo views
+                    // This ensures complete removal from hierarchy
+                    RoomCaptureViewRepresentable(
+                        isScanning: $isScanning,
+                        capturedRoom: $capturedRoom,
+                        videoRecorder: videoRecorder,
+                        onComplete: handleScanComplete
+                    )
+                    .ignoresSafeArea()
+                    .id("roomcapture_\(scanSessionId)") // Force complete destruction when ID changes
+                    .overlay(alignment: .top) {
+                        // Video recording indicator at top
                         if videoRecorder != nil {
                             HStack(spacing: 8) {
                                 Circle()
@@ -56,6 +67,22 @@ struct ScanningView: View {
                             .clipShape(Capsule())
                             .padding(.top, 60)
                         }
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        // Done button at bottom right
+                        Button {
+                            stopScanning()
+                        } label: {
+                            Text("Done")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 10)
+                                .background(Color.black.opacity(0.5))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 40)
                     }
                 } else if isProcessing {
                     // Processing view - shown after scan, before navigation
@@ -147,21 +174,13 @@ struct ScanningView: View {
                     }
                 }
             }
-            .navigationTitle(isScanning ? "Scanning" : (isProcessing ? "Processing" : "Room Scan"))
+            .navigationTitle(showVisualizationPhoto ? "Photos" : (isScanning ? "Scanning" : (isProcessing ? "Processing" : "Room Scan")))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     if !isScanning && !isProcessing {
                         Button("Back") {
                             appState.currentScreen = .customerInfo
-                        }
-                    }
-                }
-
-                if isScanning {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Done") {
-                            isScanning = false
                         }
                     }
                 }
@@ -175,7 +194,57 @@ struct ScanningView: View {
         appState.showroomConfig?.subscription?.videoCapture?.enabled ?? false
     }
 
+    private func stopScanning() {
+        manuallyStopped = true
+
+        // CRITICAL: Stop video recorder FIRST to prevent race condition
+        if let recorder = videoRecorder {
+            recorder.stopRecording()
+        }
+
+        // CRITICAL: Wait for video to fully release camera before stopping RoomPlan
+        // This prevents camera conflicts and ensures clean shutdown
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+
+            // Set processing state BEFORE setting isScanning to false
+            // This prevents the view from showing "Start Scanning" screen while waiting for delegate callback
+            self.isProcessing = true
+            self.processingStatus = "Finalizing scan..."
+
+            self.isScanning = false
+
+            // Safety timeout: If delegate doesn't call within 10 seconds, handle it manually
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+                if self.isProcessing && self.capturedRoom == nil {
+                    print("[ScanningView] ⚠️ Timeout waiting for RoomPlan delegate - handling manually")
+                    // The delegate never called back, but we need to continue
+                    // Check if we have a valid capturedRoom from the delegate
+                    if let room = self.capturedRoom {
+                        self.handleScanComplete(room: room)
+                    } else {
+                        // No room data - skip to photo capture anyway
+                        print("[ScanningView] ⚠️ No room data available - this might be a very short scan")
+                        // Create empty measurements and continue
+                        Task { @MainActor in
+                            self.isProcessing = false
+                            self.showPhotoIntro = true
+
+                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+
+                            self.showPhotoIntro = false
+                            self.showVisualizationPhoto = true
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private func startScanning() {
+        // Reset state for new scan
+        manuallyStopped = false
+        scanSessionId = UUID() // Generate new session ID for clean state
+
         // Initialize video recorder if enabled
         print("[ScanningView] isVideoCaptureEnabled: \(isVideoCaptureEnabled)")
         print("[ScanningView] subscription: \(String(describing: appState.showroomConfig?.subscription))")
@@ -237,17 +306,41 @@ struct ScanningView: View {
         isProcessing = true
         processingStatus = "Analyzing room data..."
 
-        // Stop video recording and wait for it to complete before processing
+        // Check if scan was manually stopped (Done button) - video already stopped
+        if manuallyStopped {
+            print("[ScanningView] Scan was manually stopped, video already stopped")
+            Task {
+                // Wait for video file to finish writing
+                var waitTime = 0.0
+                while recordedVideoURL == nil && waitTime < 5.0 {
+                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second
+                    waitTime += 0.1
+                }
+                if recordedVideoURL != nil {
+                    print("[ScanningView] Video recording finished, URL: \(recordedVideoURL!)")
+                }
+                await processScanData(room: room)
+            }
+            return
+        }
+
+        // Scan completed naturally (not via Done button) - need to stop video
         if let recorder = videoRecorder {
-            print("[ScanningView] Stopping video recording...")
+            print("[ScanningView] Scan complete naturally - stopping video recording...")
             processingStatus = "Finalizing video..."
 
-            // Stop recording - the delegate callback will set recordedVideoURL
+            // CRITICAL: Stop recording first
             recorder.stopRecording()
+            print("[ScanningView] Video recorder stopped")
 
-            // Wait a bit for the video to finish writing, then process
+            // CRITICAL: Wait for ARSession to stop delivering frames and video to finish writing
+            // This prevents race condition between ARSession frame delivery and video recorder shutdown
             Task {
-                // Wait for up to 5 seconds for video to finish
+                // First wait 0.5s for ARSession to fully stop delivering frames
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second
+                print("[ScanningView] Waited for ARSession to stop frame delivery")
+
+                // Then wait for up to 5 seconds for video file to finish writing
                 var waitTime = 0.0
                 while recordedVideoURL == nil && waitTime < 5.0 {
                     try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second
@@ -326,8 +419,20 @@ struct ScanningView: View {
             recordedVideoURL = nil
             recordingDuration = 0
 
-            // Store measurements and show visualization photo capture
+            // Store measurements
             pendingMeasurements = measurements
+
+            // Show intro screen immediately (hides "Processing" UI)
+            showPhotoIntro = true
+        }
+
+        // Wait 2 seconds for initial camera release while showing intro
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+
+        await MainActor.run {
+            // Change scanSessionId to force complete destruction of RoomCaptureView
+            scanSessionId = UUID()
+            showPhotoIntro = false
             showVisualizationPhoto = true
         }
     }
@@ -336,6 +441,7 @@ struct ScanningView: View {
 
     private func handleVisualizationPhotos(_ images: [UIImage]) {
         showVisualizationPhoto = false
+        showPhotoIntro = false
         isProcessing = true
         processingStatus = "Uploading photos..."
 
@@ -343,7 +449,7 @@ struct ScanningView: View {
             guard var measurements = pendingMeasurements,
                   let showroomCode = appState.showroomConfig?.showroomCode else {
                 await MainActor.run {
-                    isProcessing = false
+                    // Keep processing UI visible until navigation happens
                     if let measurements = pendingMeasurements {
                         appState.setMeasurementData(measurements)
                     }
@@ -353,12 +459,19 @@ struct ScanningView: View {
 
             // Upload all visualization photos
             let photoUrls = await uploadVisualizationPhotos(images, showroomCode: showroomCode)
+            print("📸 [ScanningView] Uploaded \(photoUrls.count) photos: \(photoUrls)")
             if !photoUrls.isEmpty {
                 measurements.visualizationPhotoUrls = photoUrls
+                print("✅ [ScanningView] Set visualizationPhotoUrls on measurements: \(photoUrls)")
+            } else {
+                print("⚠️ [ScanningView] No photos were uploaded!")
             }
 
             await MainActor.run {
-                isProcessing = false
+                // Don't set isProcessing = false here - keep showing processing UI
+                // until AppState navigates to next screen (product selection)
+                // This prevents briefly showing "Scan Your Space" screen
+                print("📤 [ScanningView] About to call setMeasurementData with \(measurements.visualizationPhotoUrls?.count ?? 0) photos")
                 pendingMeasurements = nil
                 appState.setMeasurementData(measurements)
             }
@@ -367,6 +480,7 @@ struct ScanningView: View {
 
     private func handleVisualizationPhotoSkipped() {
         showVisualizationPhoto = false
+        showPhotoIntro = false
 
         if let measurements = pendingMeasurements {
             pendingMeasurements = nil
@@ -381,8 +495,8 @@ struct ScanningView: View {
             // Normalize image orientation before saving
             let normalizedImage = normalizeImageOrientation(image)
 
-            // Compress image to reasonable size (max 2MB)
-            guard let imageData = normalizedImage.jpegData(compressionQuality: 0.7) else {
+            // Compress image to reasonable size with high quality (0.85)
+            guard let imageData = normalizedImage.jpegData(compressionQuality: 0.85) else {
                 print("Failed to convert visualization photo \(index + 1) to JPEG")
                 continue
             }
@@ -821,53 +935,6 @@ struct ScanningView: View {
         var applianceIndex = 1
         var sinkIndex = 1
 
-        // DEBUG: Print ALL data from RoomPlan
-        print("\n========== ROOMPLAN COMPLETE DEBUG ==========")
-        print("Walls: \(room.walls.count)")
-        print("Doors: \(room.doors.count)")
-        print("Windows: \(room.windows.count)")
-        print("Objects: \(room.objects.count)")
-        print("Sections: \(room.sections.count)")
-
-        // Print all sections
-        print("\n--- SECTIONS ---")
-        for (idx, section) in room.sections.enumerated() {
-            print("Section[\(idx)]: \(section)")
-        }
-
-        // Print all objects with details
-        print("\n--- ALL OBJECTS ---")
-        var storageCount = 0
-        var storageAbove09m = 0
-        for (idx, obj) in room.objects.enumerated() {
-            let pos = obj.transform.columns.3
-            let dim = obj.dimensions
-            print("Object[\(idx)]: category=\(obj.category)")
-            print("  - Position: x=\(String(format: "%.2f", pos.x))m, y=\(String(format: "%.2f", pos.y))m, z=\(String(format: "%.2f", pos.z))m")
-            print("  - Dimensions: w=\(String(format: "%.2f", dim.x))m, h=\(String(format: "%.2f", dim.y))m, d=\(String(format: "%.2f", dim.z))m")
-            print("  - Y position (height): \(String(format: "%.2f", pos.y))m = \(String(format: "%.1f", pos.y * 3.28084))ft")
-
-            if obj.category == .storage {
-                storageCount += 1
-                if pos.y >= 0.9 {
-                    storageAbove09m += 1
-                    print("  *** THIS SHOULD BE UPPER CABINET (y >= 0.9m) ***")
-                }
-            }
-        }
-        // Calculate floor level for summary
-        let allStorageY = room.objects.filter { $0.category == .storage }.map { $0.transform.columns.3.y }
-        let detectedFloorLevel = allStorageY.min() ?? 0
-        let upperCabCount = allStorageY.filter { ($0 - detectedFloorLevel) > 1.0 }.count
-        let lowerCabCount = allStorageY.filter { ($0 - detectedFloorLevel) <= 1.0 }.count
-
-        print("\n--- STORAGE SUMMARY ---")
-        print("Total storage objects: \(storageCount)")
-        print("Detected floor level: \(String(format: "%.2f", detectedFloorLevel))m")
-        print("Lower cabinets (height above floor <= 1.0m): \(lowerCabCount)")
-        print("Upper cabinets (height above floor > 1.0m): \(upperCabCount)")
-        print("=============================================\n")
-
         for object in room.objects {
             let transform = object.transform
             let position = transform.columns.3
@@ -928,8 +995,6 @@ struct ScanningView: View {
                 // (Lower cabinet centers are ~0.45m above floor, upper cabinet centers are ~1.5m+ above floor)
                 let heightAboveFloor = position.y - floorLevel
                 let isUpperCabinet = heightAboveFloor > 1.0
-
-                print("Storage object: y=\(position.y), floorLevel=\(floorLevel), heightAboveFloor=\(heightAboveFloor), isUpper=\(isUpperCabinet)")
 
                 if isUpperCabinet {
                     var cabinetData = baseObjectData
@@ -1132,18 +1197,37 @@ struct RoomCaptureViewRepresentable: UIViewRepresentable {
             uiView.captureSession.run(configuration: config)
             context.coordinator.isSessionRunning = true
 
-            // Start video recording
+            // CRITICAL: Delay video recording to let RoomPlan fully initialize ARSession first
+            // Even though VideoRecorder uses ARSession frames (not camera), starting too early
+            // interferes with RoomPlan's ARSession initialization causing 10s black screen
             if let recorder = videoRecorder {
-                do {
-                    try recorder.startRecording()
-                    print("[RoomCaptureView] Video recording started")
-                } catch {
-                    print("[RoomCaptureView] Failed to start video recording: \(error)")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    do {
+                        try recorder.startRecording()
+                        print("[RoomCaptureView] Video recording started (delayed 0.5s)")
+                    } catch {
+                        print("[RoomCaptureView] Failed to start video recording: \(error)")
+                    }
                 }
             }
         } else if !isScanning && context.coordinator.isSessionRunning {
+            // CRITICAL: Stop session but KEEP delegates so RoomPlan can call completion callback
+            print("[RoomCaptureView] Stopping RoomPlan - waiting for completion callback")
+
+            // Clear video recorder to stop receiving frames
+            context.coordinator.videoRecorder = nil
+
+            // Pause ARSession to halt frame delivery
+            uiView.captureSession.arSession.pause()
+
+            // Stop the RoomPlan session - this triggers delegate callback
             uiView.captureSession.stop()
+
             context.coordinator.isSessionRunning = false
+            print("[RoomCaptureView] RoomPlan session stopped - delegate will receive completion callback")
+
+            // NOTE: We do NOT remove delegates here - they're needed for the completion callback
+            // Delegates will be removed in dismantleUIView when the view is fully removed
         }
     }
 
@@ -1151,11 +1235,25 @@ struct RoomCaptureViewRepresentable: UIViewRepresentable {
         Coordinator(parent: self)
     }
 
+    // CRITICAL: Clean up when view is removed from hierarchy
+    static func dismantleUIView(_ uiView: RoomCaptureView, coordinator: Coordinator) {
+        // Remove all delegates
+        uiView.captureSession.delegate = nil
+        uiView.captureSession.arSession.delegate = nil
+        coordinator.videoRecorder = nil
+
+        // Force stop sessions
+        uiView.captureSession.arSession.pause()
+        uiView.captureSession.stop()
+        coordinator.isSessionRunning = false
+    }
+
     class Coordinator: NSObject, RoomCaptureSessionDelegate, ARSessionDelegate {
         let parent: RoomCaptureViewRepresentable
         var isSessionRunning = false
         var videoRecorder: VideoRecorder?
         private var sessionStartTime: TimeInterval?
+        private var completionHandled = false // Prevent double-calling onComplete
 
         init(parent: RoomCaptureViewRepresentable) {
             self.parent = parent
@@ -1164,16 +1262,29 @@ struct RoomCaptureViewRepresentable: UIViewRepresentable {
         // MARK: - RoomCaptureSessionDelegate
 
         func captureSession(_ session: RoomCaptureSession, didEndWith data: CapturedRoomData, error: Error?) {
-            guard error == nil else {
-                print("Room capture error: \(error!.localizedDescription)")
+            guard !completionHandled else {
+                print("[RoomCaptureSession] Completion callback already handled, ignoring duplicate")
                 return
             }
 
+            if let error = error {
+                print("[RoomCaptureSession] Room capture error: \(error.localizedDescription)")
+                // Even with error, try to build room from partial data
+            }
+
+            print("[RoomCaptureSession] Delegate callback received - building room")
+            completionHandled = true
+
             Task { @MainActor in
                 let roomBuilder = RoomBuilder(options: [.beautifyObjects])
-                if let room = try? await roomBuilder.capturedRoom(from: data) {
+                do {
+                    let room = try await roomBuilder.capturedRoom(from: data)
+                    print("[RoomCaptureSession] Room built successfully")
                     parent.capturedRoom = room
                     parent.onComplete(room)
+                } catch {
+                    print("[RoomCaptureSession] Failed to build room: \(error.localizedDescription)")
+                    // Still call onComplete with nil to unblock UI
                 }
             }
         }
@@ -1220,6 +1331,60 @@ class VideoRecorderDelegateHandler: VideoRecorderDelegate {
 
     func videoRecorderDidUpdateDuration(_ recorder: VideoRecorder, duration: TimeInterval) {
         onDurationUpdate(duration)
+    }
+}
+
+// MARK: - Photo Intro View
+struct PhotoIntroView: View {
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(spacing: 32) {
+            Spacer()
+
+            // Camera icon with animation
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.1))
+                    .frame(width: 120, height: 120)
+
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 50))
+                    .foregroundStyle(.blue)
+            }
+
+            VStack(spacing: 16) {
+                Text("Time for Photos!")
+                    .font(.title)
+                    .fontWeight(.bold)
+
+                Text("We'll take 5 photos from different angles to help visualize your space")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+
+            VStack(alignment: .leading, spacing: 16) {
+                InstructionRow(icon: "camera.viewfinder", text: "Capture from multiple angles")
+                InstructionRow(icon: "hand.tap", text: "Tap to take each photo")
+                InstructionRow(icon: "arrow.clockwise", text: "You can skip if needed")
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal)
+
+            HStack(spacing: 8) {
+                ProgressView()
+                    .tint(.blue)
+                Text("Preparing camera...")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
     }
 }
 

@@ -45,8 +45,8 @@ interface ProjectSubmission {
     video_size_bytes?: number
     video_resolution?: string
     video_format?: string
-    // Visualization photo (wide-angle corner shot)
-    visualization_photo_url?: string
+    // Visualization photos (multiple angles - up to 5 photos)
+    visualization_photo_urls?: string[]
   }
   selections: Array<{
     category_id: string
@@ -311,7 +311,7 @@ async function buildWebhookPayload(
           floor_plan: measurements.preview_image_url,
           video: measurements.video_url || null,
           video_thumbnail: measurements.video_thumbnail_url || null,
-          visualization_photo: measurements.visualization_photo_url || null,
+          visualization_photos: measurements.visualization_photo_urls || [],
         }
       : null,
     video: measurements?.video_url
@@ -324,12 +324,13 @@ async function buildWebhookPayload(
           format: measurements.video_format,
         }
       : null,
-    visualization_photo: measurements?.visualization_photo_url
-      ? {
-          url: measurements.visualization_photo_url,
-          description: 'Wide-angle corner photo for visualization',
-        }
-      : null,
+    visualization_photos: measurements?.visualization_photo_urls && measurements.visualization_photo_urls.length > 0
+      ? measurements.visualization_photo_urls.map((url, index) => ({
+          url,
+          index: index + 1,
+          description: `Visualization photo ${index + 1} of ${measurements.visualization_photo_urls!.length}`,
+        }))
+      : [],
     selections: (() => {
       // Create selections object with ALL categories (null for unselected)
       const selectionsObj: Record<string, any> = {}
@@ -652,9 +653,9 @@ serve(async (req) => {
         measurementData.video_uploaded_at = new Date().toISOString()
       }
 
-      // Add visualization photo if provided
-      if (submission.measurements.visualization_photo_url) {
-        measurementData.visualization_photo_url = submission.measurements.visualization_photo_url
+      // Add visualization photos if provided
+      if (submission.measurements.visualization_photo_urls && submission.measurements.visualization_photo_urls.length > 0) {
+        measurementData.visualization_photo_urls = submission.measurements.visualization_photo_urls
       }
 
       const { data: measurementResult, error: measurementError } = await supabaseAdmin

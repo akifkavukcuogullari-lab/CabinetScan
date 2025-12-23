@@ -27,7 +27,7 @@ public struct VisualizationPhotoView: View {
                     CameraPreviewView(session: camera.session)
                         .ignoresSafeArea()
                 } else if isPermissionDenied {
-                    CameraUnavailablePlaceholder()
+                    CameraUnavailablePlaceholder(message: "Camera unavailable")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color.black)
                 } else {
@@ -151,6 +151,9 @@ public struct VisualizationPhotoView: View {
         }
         .onDisappear {
             camera.stopSession()
+            if UIDevice.current.isGeneratingDeviceOrientationNotifications {
+                UIDevice.current.endGeneratingDeviceOrientationNotifications()
+            }
         }
     }
 
@@ -181,6 +184,8 @@ public struct VisualizationPhotoView: View {
 }
 
 private struct CameraUnavailablePlaceholder: View {
+    let message: String
+
     var body: some View {
         ZStack {
             Color(.systemGray5)
@@ -190,9 +195,11 @@ private struct CameraUnavailablePlaceholder: View {
                     .scaledToFit()
                     .frame(width: 64, height: 64)
                     .foregroundColor(.secondary)
-                Text("Camera unavailable")
+                Text(message)
                     .foregroundColor(.secondary)
                     .font(.subheadline)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
             }
         }
     }
@@ -202,66 +209,101 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
     let session = AVCaptureSession()
     private let photoOutput = AVCapturePhotoOutput()
     private let sessionQueue = DispatchQueue(label: "camera.session.queue")
+    private var videoDeviceInput: AVCaptureDeviceInput?
 
     private var permissionGranted = false
     private var isConfigured = false
 
-    @Published private(set) var isSessionRunning = false
+    @Published private(set) var isSessionRunning = false {
+        didSet {
+            // CRITICAL: Manually trigger objectWillChange since we have a custom publisher
+            DispatchQueue.main.async {
+                self.objectWillChange.send()
+            }
+        }
+    }
 
     private var captureCompletion: ((UIImage?) -> Void)?
 
-    let objectWillChange = ObservableObjectPublisher()
+    // Zoom control
+    func setZoom(factor: CGFloat) {
+        guard let device = videoDeviceInput?.device else { return }
+
+        sessionQueue.async {
+            do {
+                try device.lockForConfiguration()
+                // Clamp zoom factor between min and max
+                let maxZoom = min(device.activeFormat.videoMaxZoomFactor, 5.0) // Cap at 5x
+                let clampedZoom = max(1.0, min(factor, maxZoom))
+                device.videoZoomFactor = clampedZoom
+                device.unlockForConfiguration()
+            } catch {
+                // Silently fail if unable to set zoom
+            }
+        }
+    }
 
     func requestPermission(completion: @escaping (Bool) -> Void) {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
-        print("📸 VisualizationPhoto: Camera permission status: \(status.rawValue)")
 
         switch status {
         case .authorized:
-            print("✅ VisualizationPhoto: Camera permission already granted")
             permissionGranted = true
             completion(true)
         case .notDetermined:
-            print("⏳ VisualizationPhoto: Requesting camera permission")
             AVCaptureDevice.requestAccess(for: .video) { granted in
-                print(granted ? "✅ VisualizationPhoto: Camera permission granted" : "❌ VisualizationPhoto: Camera permission denied")
                 self.permissionGranted = granted
                 completion(granted)
             }
         default:
-            print("❌ VisualizationPhoto: Camera permission not available")
             permissionGranted = false
             completion(false)
         }
     }
 
     func startSession() {
-        print("📸 VisualizationPhoto: startSession called - permissionGranted: \(permissionGranted), isSessionRunning: \(isSessionRunning)")
-        guard permissionGranted, !isSessionRunning else {
-            print("⚠️ VisualizationPhoto: Cannot start session - permission: \(permissionGranted), running: \(isSessionRunning)")
-            return
-        }
+        guard permissionGranted, !isSessionRunning else { return }
 
-        // Enable device orientation monitoring for photo capture
         if !UIDevice.current.isGeneratingDeviceOrientationNotifications {
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         }
 
         sessionQueue.async {
             if !self.isConfigured {
-                print("📸 VisualizationPhoto: Session not configured, configuring now")
                 self.configureSession()
             }
 
             if self.isConfigured {
-                print("📸 VisualizationPhoto: Starting session")
                 self.session.startRunning()
-                DispatchQueue.main.async {
-                    self.isSessionRunning = self.session.isRunning
-                    print(self.isSessionRunning ? "✅ VisualizationPhoto: Session running" : "❌ VisualizationPhoto: Session failed to start")
+
+                // Wait and verify session actually started
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if self.session.isRunning {
+                        self.isSessionRunning = true
+                    } else {
+                        // Retry after 1 second
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            self.retryStartSession(attempt: 1)
+                        }
+                    }
                 }
-            } else {
-                print("❌ VisualizationPhoto: Session configuration failed, cannot start")
+            }
+        }
+    }
+
+    private func retryStartSession(attempt: Int) {
+        sessionQueue.async {
+            self.session.startRunning()
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if self.session.isRunning {
+                    self.isSessionRunning = true
+                } else if attempt < 8 {
+                    // Try up to 8 times with 1 second intervals
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        self.retryStartSession(attempt: attempt + 1)
+                    }
+                }
             }
         }
     }
@@ -277,55 +319,43 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
     }
 
     private func configureSession() {
-        print("📸 VisualizationPhoto: Starting session configuration")
         session.beginConfiguration()
         session.sessionPreset = .photo
-
-        // Remove existing inputs if any
         session.inputs.forEach { session.removeInput($0) }
 
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
-            print("❌ VisualizationPhoto: Failed to get camera device")
             session.commitConfiguration()
             return
         }
-        print("✅ VisualizationPhoto: Camera device obtained")
 
         do {
             let cameraInput = try AVCaptureDeviceInput(device: camera)
             if session.canAddInput(cameraInput) {
                 session.addInput(cameraInput)
-                print("✅ VisualizationPhoto: Camera input added")
+                videoDeviceInput = cameraInput // Save reference for zoom control
             } else {
-                print("❌ VisualizationPhoto: Cannot add camera input")
                 session.commitConfiguration()
                 return
             }
         } catch {
-            print("❌ VisualizationPhoto: Error creating camera input: \(error.localizedDescription)")
             session.commitConfiguration()
             return
         }
 
         if session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
-            print("✅ VisualizationPhoto: Photo output added")
-            // Use maxPhotoDimensions for iOS 16+ instead of deprecated isHighResolutionCaptureEnabled
             if #available(iOS 16.0, *) {
-                // Setting maxPhotoDimensions to the device's maximum supported dimensions
-                // This replaces the deprecated isHighResolutionCaptureEnabled
+                // maxPhotoDimensions used automatically
             } else {
                 photoOutput.isHighResolutionCaptureEnabled = true
             }
         } else {
-            print("❌ VisualizationPhoto: Cannot add photo output")
             session.commitConfiguration()
             return
         }
 
         session.commitConfiguration()
         isConfigured = true
-        print("✅ VisualizationPhoto: Session configuration complete")
     }
 
     func capturePhoto(completion: @escaping (UIImage?) -> Void) {
@@ -401,7 +431,7 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
             return
         }
 
-        // Create UIImage with correct orientation from metadata
+        // Create UIImage with scale 1.0 to preserve full pixel resolution
         let uiOrientation = UIImage.Orientation(cgImageOrientation)
         let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: uiOrientation)
 
@@ -414,16 +444,21 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
     /// Force normalize image orientation by redrawing - always applies transform
     /// This ensures the image pixels match the visual orientation regardless of metadata
     private func forceNormalizeOrientation(_ image: UIImage) -> UIImage {
-        // Use UIGraphicsImageRenderer which properly handles orientation
-        let size = CGSize(width: image.size.width, height: image.size.height)
+        // CRITICAL: Render at ACTUAL PIXEL dimensions, not point dimensions
+        // This preserves the full camera resolution
+        let pixelSize = CGSize(
+            width: image.size.width * image.scale,
+            height: image.size.height * image.scale
+        )
 
         let format = UIGraphicsImageRendererFormat()
-        format.scale = 1.0
+        format.scale = 1.0 // Always use 1.0 scale to work in pixels, not points
         format.opaque = true
 
-        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        let renderer = UIGraphicsImageRenderer(size: pixelSize, format: format)
         let normalizedImage = renderer.image { context in
-            image.draw(at: .zero)
+            // Draw the image at full pixel resolution
+            image.draw(in: CGRect(origin: .zero, size: pixelSize))
         }
 
         return normalizedImage

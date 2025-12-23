@@ -37,6 +37,38 @@ struct CustomerInfoView: View {
         !zipCode.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    // Validation error message
+    private var validationMessage: String? {
+        if firstName.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "First Name is required"
+        }
+        if lastName.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Last Name is required"
+        }
+        if email.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Email is required"
+        }
+        if !isValidEmail(email) {
+            return "Please enter a valid email (e.g., name@example.com)"
+        }
+        if phone.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Phone is required"
+        }
+        if addressLine1.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Street Address is required"
+        }
+        if city.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "City is required"
+        }
+        if state.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "State is required"
+        }
+        if zipCode.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Zip Code is required"
+        }
+        return nil
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -97,6 +129,10 @@ struct CustomerInfoView: View {
                         .autocorrectionDisabled()
                         .focused($focusedField, equals: .email)
                         .submitLabel(.next)
+                        .onChange(of: email) { oldValue, newValue in
+                            // Auto-trim spaces from email
+                            email = newValue.trimmingCharacters(in: .whitespaces)
+                        }
 
                     TextField("Phone *", text: $phone)
                         .textContentType(.telephoneNumber)
@@ -176,6 +212,20 @@ struct CustomerInfoView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .listRowBackground(Color.clear)
+                }
+
+                // Validation message
+                if let message = validationMessage {
+                    Section {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text(message)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .listRowBackground(Color(.systemOrange).opacity(0.1))
+                    }
                 }
 
                 // Start Scanning button

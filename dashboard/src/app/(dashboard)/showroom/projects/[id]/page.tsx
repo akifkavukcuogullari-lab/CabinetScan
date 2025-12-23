@@ -137,6 +137,13 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   const hasScanData = has3DModel || hasFloorPlanData
   const hasDownloadableFiles = hasGlbFile || hasUsdzFile || hasVideoFile || hasVisualizationPhotos
 
+  // DEBUG: Log photo data
+  console.log('📸 [Dashboard] measurement:', measurement)
+  console.log('📸 [Dashboard] visualization_photo_urls:', measurement?.visualization_photo_urls)
+  console.log('📸 [Dashboard] visualizationPhotos:', visualizationPhotos)
+  console.log('📸 [Dashboard] hasVisualizationPhotos:', hasVisualizationPhotos)
+  console.log('📸 [Dashboard] hasDownloadableFiles:', hasDownloadableFiles)
+
   return (
     <div className="space-y-6">
       {/* Header */}
