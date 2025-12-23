@@ -477,15 +477,17 @@ struct ScanningView: View {
         Task {
             guard var measurements = pendingMeasurements,
                   let showroomCode = appState.showroomConfig?.showroomCode else {
-                // Replace the entire await MainActor.run block here per instructions
                 // Keep processing UI visible until navigation happens
                 await MainActor.run {
                     isProcessing = true
                 }
-                if let measurements = pendingMeasurements {
-                    // Give a small delay to ensure UI stays stable
-                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
-                    await MainActor.run {
+
+                // Give a small delay to ensure UI stays stable
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+
+                await MainActor.run {
+                    if let measurements = pendingMeasurements {
+                        pendingMeasurements = nil
                         appState.setMeasurementData(measurements)
                     }
                 }
@@ -502,19 +504,19 @@ struct ScanningView: View {
                 print("⚠️ [ScanningView] No photos were uploaded!")
             }
 
+            // CRITICAL: Keep isProcessing = true and pendingMeasurements intact
+            // until navigation completes. This prevents "Scan Your Space" from appearing
             await MainActor.run {
-                // CRITICAL: Keep isProcessing = true and pendingMeasurements intact
-                // until navigation completes. This prevents "Scan Your Space" from appearing
                 processingStatus = "Finalizing..."
                 print("📤 [ScanningView] About to call setMeasurementData with \(measurements.visualizationPhotoUrls?.count ?? 0) photos")
+            }
 
-                // Small delay before navigation to ensure UI stability
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    Task { @MainActor in
-                        pendingMeasurements = nil
-                        appState.setMeasurementData(measurements)
-                    }
-                }
+            // Small delay before navigation to ensure UI stability
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+
+            await MainActor.run {
+                pendingMeasurements = nil
+                appState.setMeasurementData(measurements)
             }
         }
     }
@@ -526,8 +528,9 @@ struct ScanningView: View {
         processingStatus = "Finalizing..."
 
         // Small delay to ensure smooth transition
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            Task { @MainActor in
+        Task {
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+            await MainActor.run {
                 if let measurements = pendingMeasurements {
                     pendingMeasurements = nil
                     appState.setMeasurementData(measurements)
