@@ -185,6 +185,16 @@ struct ScanningView: View {
                     }
                 }
             }
+            .onAppear {
+                // Reset state when view appears (e.g., starting a new project)
+                isProcessing = false
+                showVisualizationPhoto = false
+                showPhotoIntro = false
+                pendingMeasurements = nil
+                manuallyStopped = false
+                capturedRoom = nil
+                recordedVideoURL = nil
+            }
         }
     }
 
