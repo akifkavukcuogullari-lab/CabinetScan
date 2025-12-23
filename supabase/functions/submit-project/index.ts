@@ -655,7 +655,10 @@ serve(async (req) => {
 
       // Add visualization photos if provided
       if (submission.measurements.visualization_photo_urls && submission.measurements.visualization_photo_urls.length > 0) {
+        console.log(`📸 [submit-project] Received ${submission.measurements.visualization_photo_urls.length} visualization photos:`, submission.measurements.visualization_photo_urls)
         measurementData.visualization_photo_urls = submission.measurements.visualization_photo_urls
+      } else {
+        console.log('⚠️ [submit-project] No visualization photos in submission')
       }
 
       const { data: measurementResult, error: measurementError } = await supabaseAdmin
