@@ -1208,13 +1208,12 @@ struct RoomCaptureViewRepresentable: UIViewRepresentable {
             context.coordinator.isSessionRunning = true
 
             // CRITICAL: Delay video recording to let RoomPlan fully initialize ARSession first
-            // Even though VideoRecorder uses ARSession frames (not camera), starting too early
-            // interferes with RoomPlan's ARSession initialization causing 10s black screen
+            // The 2s delay ensures camera is ready and prevents black screen
             if let recorder = videoRecorder {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                     do {
                         try recorder.startRecording()
-                        print("[RoomCaptureView] Video recording started (delayed 0.5s)")
+                        print("[RoomCaptureView] Video recording started (delayed 2s)")
                     } catch {
                         print("[RoomCaptureView] Failed to start video recording: \(error)")
                     }
