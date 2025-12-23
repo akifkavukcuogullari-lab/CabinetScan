@@ -42,37 +42,40 @@ struct ScanningView: View {
                     })
                 } else if isScanning && !showVisualizationPhoto && !showPhotoIntro {
                     // CRITICAL: Only show if NOT transitioning to photo views
-                    // This ensures complete removal from hierarchy
-                    ZStack {
-                        RoomCaptureViewRepresentable(
-                            isScanning: $isScanning,
-                            capturedRoom: $capturedRoom,
-                            videoRecorder: videoRecorder,
-                            isRoomPlanReady: $isRoomPlanReady,
-                            onComplete: handleScanComplete
-                        )
-                        .ignoresSafeArea()
-                        .id("roomcapture_\(scanSessionId)") // Force complete destruction when ID changes
-
+                    // CRITICAL: Don't wrap in ZStack - it breaks RoomPlan's Metal rendering
+                    // Use overlays exclusively to avoid view hierarchy conflicts
+                    RoomCaptureViewRepresentable(
+                        isScanning: $isScanning,
+                        capturedRoom: $capturedRoom,
+                        videoRecorder: videoRecorder,
+                        isRoomPlanReady: $isRoomPlanReady,
+                        onComplete: handleScanComplete
+                    )
+                    .ignoresSafeArea()
+                    .id("roomcapture_\(scanSessionId)") // Force complete destruction when ID changes
+                    .overlay {
                         // Loading overlay while RoomPlan initializes
+                        // CRITICAL: Use overlay, not ZStack, to avoid Metal errors
                         if !isRoomPlanReady {
-                            Color.black
-                                .ignoresSafeArea()
+                            ZStack {
+                                Color.black
+                                    .ignoresSafeArea()
 
-                            VStack(spacing: 20) {
-                                ProgressView()
-                                    .scaleEffect(1.5)
-                                    .tint(.white)
+                                VStack(spacing: 20) {
+                                    ProgressView()
+                                        .scaleEffect(1.5)
+                                        .tint(.white)
 
-                                Text("Initializing Camera...")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
+                                    Text("Initializing Camera...")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
 
-                                Text("Please wait while we prepare the scanner")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 40)
+                                    Text("Please wait while we prepare the scanner")
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.7))
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 40)
+                                }
                             }
                         }
                     }
@@ -278,12 +281,9 @@ struct ScanningView: View {
                         // No room data - skip to photo capture anyway
                         print("[ScanningView] ⚠️ No room data available - this might be a very short scan")
                         // Create empty measurements and continue
-                        Task { @MainActor in
-                            self.isProcessing = false
-                            self.showPhotoIntro = true
-
-                            try? await Task.sleep(nanoseconds: 2_000_000_000)
-
+                        self.isProcessing = false
+                        self.showPhotoIntro = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                             self.showPhotoIntro = false
                             self.showVisualizationPhoto = true
                         }
@@ -532,8 +532,7 @@ struct ScanningView: View {
                 print("📤 [ScanningView] About to call setMeasurementData with \(measurements.visualizationPhotoUrls?.count ?? 0) photos")
 
                 // Small delay before navigation to ensure UI stability
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     pendingMeasurements = nil
                     appState.setMeasurementData(measurements)
                 }
@@ -548,8 +547,7 @@ struct ScanningView: View {
         processingStatus = "Finalizing..."
 
         // Small delay to ensure smooth transition
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             if let measurements = pendingMeasurements {
                 pendingMeasurements = nil
                 appState.setMeasurementData(measurements)
@@ -1471,3 +1469,4 @@ struct PhotoIntroView: View {
     ScanningView()
         .environmentObject(AppState.shared)
 }
+
