@@ -120,11 +120,20 @@ actor APIService {
         request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.httpBody = data
+        // CRITICAL: Set longer timeout for large file uploads (3 minutes)
+        request.timeoutInterval = 180
 
-        let (responseData, response) = try await URLSession.shared.data(for: request)
+        // Use custom session with longer timeout to prevent network timeouts
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 180  // 3 minutes per request
+        config.timeoutIntervalForResource = 300  // 5 minutes total
+        let session = URLSession(configuration: config)
+
+        let (responseData, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
+            print("❌ [APIService] Upload failed with status: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
             throw APIError.uploadFailed
         }
 

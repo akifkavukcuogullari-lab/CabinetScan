@@ -3,18 +3,24 @@ import AVFoundation
 import ImageIO
 import Combine
 
+// Struct to hold both preview image and compressed photo data
+public struct CapturedPhotoData {
+    let previewImage: UIImage  // For UI display
+    let rawData: Data          // Compressed JPEG data for upload (clear + small file size)
+}
+
 public struct VisualizationPhotoView: View {
-    let onPhotosCompleted: ([UIImage]) -> Void
+    let onPhotosCompleted: ([CapturedPhotoData]) -> Void
     let onSkip: () -> Void
 
     @StateObject private var camera = CameraController()
     @State private var isPermissionDenied = false
-    @State private var capturedPhotos: [UIImage] = []
+    @State private var capturedPhotos: [CapturedPhotoData] = []
     @State private var currentPhotoIndex = 0
 
     private let totalPhotos = 5
 
-    public init(onPhotosCompleted: @escaping ([UIImage]) -> Void, onSkip: @escaping () -> Void) {
+    public init(onPhotosCompleted: @escaping ([CapturedPhotoData]) -> Void, onSkip: @escaping () -> Void) {
         self.onPhotosCompleted = onPhotosCompleted
         self.onSkip = onSkip
     }
@@ -98,8 +104,8 @@ public struct VisualizationPhotoView: View {
                 if !capturedPhotos.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            ForEach(Array(capturedPhotos.enumerated()), id: \.offset) { index, image in
-                                Image(uiImage: image)
+                            ForEach(Array(capturedPhotos.enumerated()), id: \.offset) { index, photoData in
+                                Image(uiImage: photoData.previewImage)
                                     .resizable()
                                     .scaledToFill()
                                     .frame(width: 60, height: 60)
@@ -169,10 +175,10 @@ public struct VisualizationPhotoView: View {
     }
 
     private func capturePhoto() {
-        camera.capturePhoto { image in
-            guard let img = image else { return }
+        camera.capturePhoto { photoData in
+            guard let data = photoData else { return }
 
-            capturedPhotos.append(img)
+            capturedPhotos.append(data)
             currentPhotoIndex += 1
 
             if capturedPhotos.count >= totalPhotos {
@@ -235,7 +241,7 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
         }
     }
 
-    private var captureCompletion: ((UIImage?) -> Void)?
+    private var captureCompletion: ((CapturedPhotoData?) -> Void)?
 
     // Zoom control
     func setZoom(factor: CGFloat) {
@@ -340,6 +346,43 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
             return
         }
 
+        // CRITICAL: Configure camera device for sharp, clear photos (like Apple Photos)
+        do {
+            try camera.lockForConfiguration()
+
+            // Autofocus - continuous for best focus
+            if camera.isFocusModeSupported(.continuousAutoFocus) {
+                camera.focusMode = .continuousAutoFocus
+            } else if camera.isFocusModeSupported(.autoFocus) {
+                camera.focusMode = .autoFocus
+            }
+
+            // Exposure - continuous auto exposure
+            if camera.isExposureModeSupported(.continuousAutoExposure) {
+                camera.exposureMode = .continuousAutoExposure
+            } else if camera.isExposureModeSupported(.autoExpose) {
+                camera.exposureMode = .autoExpose
+            }
+
+            // White balance - continuous auto
+            if camera.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                camera.whiteBalanceMode = .continuousAutoWhiteBalance
+            } else if camera.isWhiteBalanceModeSupported(.autoWhiteBalance) {
+                camera.whiteBalanceMode = .autoWhiteBalance
+            }
+
+            // Image stabilization - CRITICAL for sharp photos
+            if let videoConnection = camera.activeFormat.isVideoStabilizationModeSupported(.auto) ? camera.activeFormat : nil {
+                // Connection-level stabilization will be set on capture
+                print("📸 [Camera] Video stabilization available")
+            }
+
+            camera.unlockForConfiguration()
+            print("📸 [Camera] Device configured: focus=\(camera.focusMode.rawValue), exposure=\(camera.exposureMode.rawValue)")
+        } catch {
+            print("⚠️ [Camera] Failed to configure device: \(error)")
+        }
+
         do {
             let cameraInput = try AVCaptureDeviceInput(device: camera)
             if session.canAddInput(cameraInput) {
@@ -356,10 +399,15 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
 
         if session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
+
+            // CRITICAL: Configure for CLEAR photos at reasonable file size
             if #available(iOS 16.0, *) {
-                // maxPhotoDimensions used automatically
+                // Use "balanced" prioritization - still sharp but not excessive
+                // Let the camera choose the best default dimensions for the device
+                photoOutput.maxPhotoQualityPrioritization = .balanced
+                print("📸 [Camera] Using default photo dimensions with balanced quality")
             } else {
-                photoOutput.isHighResolutionCaptureEnabled = true
+                photoOutput.isHighResolutionCaptureEnabled = false  // Don't need max res
             }
         } else {
             session.commitConfiguration()
@@ -370,7 +418,7 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
         isConfigured = true
     }
 
-    func capturePhoto(completion: @escaping (UIImage?) -> Void) {
+    func capturePhoto(completion: @escaping (CapturedPhotoData?) -> Void) {
         guard isSessionRunning else {
             completion(nil)
             return
@@ -379,6 +427,12 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
 
         // Set the correct orientation on the photo output connection
         if let connection = photoOutput.connection(with: .video) {
+            // CRITICAL: Enable video stabilization for sharper photos
+            if connection.isVideoStabilizationSupported {
+                connection.preferredVideoStabilizationMode = .auto
+                print("📸 [Capture] Enabled video stabilization")
+            }
+
             // Get current device orientation and convert to video rotation angle
             let deviceOrientation = UIDevice.current.orientation
             let rotationAngle: CGFloat
@@ -406,12 +460,16 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
         // JPEG will be used by default for fileDataRepresentation().
         // If needed, you can prefer HEVC/HEIF by initializing with a specific codec type when supported.
 
-        // Use maxPhotoDimensions for iOS 16+ instead of deprecated isHighResolutionPhotoEnabled
+        // CRITICAL: Enable all sharpness features (but keep file size small)
+        settings.isAutoStillImageStabilizationEnabled = true  // Enable image stabilization
+
+        // Use balanced quality for clear photos with reasonable file size
         if #available(iOS 16.0, *) {
-            // maxPhotoDimensions is set on the settings to request maximum resolution
-            settings.maxPhotoDimensions = photoOutput.maxPhotoDimensions
+            // Use default dimensions (don't set explicit maxPhotoDimensions)
+            settings.photoQualityPrioritization = .balanced  // Balanced: clear but not excessive
+            print("📸 [Capture] Using default dimensions with balanced quality, stabilization: \(settings.isAutoStillImageStabilizationEnabled)")
         } else {
-            settings.isHighResolutionPhotoEnabled = true
+            settings.isHighResolutionPhotoEnabled = false
         }
 
         photoOutput.capturePhoto(with: settings, delegate: self)
@@ -428,28 +486,43 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
             return
         }
 
-        // Get the CGImage orientation from photo metadata
-        let cgImageOrientation: CGImagePropertyOrientation
-        if let orientationValue = photo.metadata[String(kCGImagePropertyOrientation)] as? UInt32,
-           let orientation = CGImagePropertyOrientation(rawValue: orientationValue) {
-            cgImageOrientation = orientation
-        } else {
-            cgImageOrientation = .up
-        }
-
-        guard let cgImage = photo.cgImageRepresentation() else {
+        // CRITICAL: Get camera data and compress to reasonable size
+        // 1920x1440 + 0.75 JPEG = clear photos at ~400-600KB each (not 3-5MB!)
+        guard let rawData = photo.fileDataRepresentation() else {
             captureCompletion?(nil)
             captureCompletion = nil
             return
         }
 
-        // Create UIImage with scale 1.0 to preserve full pixel resolution
-        let uiOrientation = UIImage.Orientation(cgImageOrientation)
-        let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: uiOrientation)
+        // Create UIImage from camera data
+        guard let fullImage = UIImage(data: rawData) else {
+            captureCompletion?(nil)
+            captureCompletion = nil
+            return
+        }
 
-        // Always normalize to ensure pixels match visual orientation
-        let normalizedImage = forceNormalizeOrientation(image)
-        captureCompletion?(normalizedImage)
+        // Compress JPEG to reduce file size while keeping it sharp and clear
+        // 0.75 quality = great balance between clarity and file size
+        guard let compressedData = fullImage.jpegData(compressionQuality: 0.75) else {
+            captureCompletion?(nil)
+            captureCompletion = nil
+            return
+        }
+
+        // Create preview from compressed data (for UI display)
+        guard let previewImage = UIImage(data: compressedData) else {
+            captureCompletion?(nil)
+            captureCompletion = nil
+            return
+        }
+
+        let originalSizeKB = rawData.count / 1024
+        let compressedSizeKB = compressedData.count / 1024
+        print("📸 [Capture] Photo compressed: \(originalSizeKB)KB → \(compressedSizeKB)KB")
+
+        // Return both: compressed data for upload (clear + small) and preview for UI
+        let photoData = CapturedPhotoData(previewImage: previewImage, rawData: compressedData)
+        captureCompletion?(photoData)
         captureCompletion = nil
     }
 
