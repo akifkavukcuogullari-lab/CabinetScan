@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react'
+import { Loader2, AlertCircle, Eye, EyeOff, Info } from 'lucide-react'
 
 // Map common auth error messages to user-friendly versions
 function formatAuthError(errorMessage: string): FormattedError {
@@ -325,6 +325,13 @@ export default function LoginPage() {
                 Contact support
               </Link>
             </p>
+            <Link
+              href="/intro"
+              className="inline-flex items-center justify-center gap-2 text-sm text-purple-600 hover:text-purple-700 transition-colors"
+            >
+              <Info className="h-4 w-4" />
+              Learn more about CabinetScan
+            </Link>
           </CardFooter>
         </form>
       </Card>

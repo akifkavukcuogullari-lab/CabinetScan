@@ -9,7 +9,7 @@ export default async function Home() {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect('/login')
+    redirect('/intro')
   }
 
   // Check if user is admin
