@@ -39,17 +39,8 @@ export default function IntroPage() {
       {/* Hero Section */}
       <section className="pt-32 pb-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-pink-50 via-purple-50 to-indigo-50 text-purple-700 text-sm font-medium">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
-              </span>
-              Powered by Apple RoomPlan & LiDAR
-            </div>
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-50 text-green-700 text-sm font-medium">
-              1 Week Free Trial
-            </div>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-50 text-green-700 text-sm font-medium mb-8">
+            1 Week Free Trial
           </div>
 
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight mb-6">
