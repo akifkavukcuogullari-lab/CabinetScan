@@ -1,0 +1,13 @@
+// QA Configuration
+// Used for TestFlight internal testing builds from develop branch
+
+// Supabase QA Credentials
+SUPABASE_URL = https:/$()/lhldqenpllbfxjkburzr.supabase.co
+SUPABASE_ANON_KEY = sb_publishable_JErsXU5JSjlY5hvfmvuCGg_eIDYaiy2
+
+// App Identity (different bundle ID for QA)
+PRODUCT_BUNDLE_IDENTIFIER = ai.nextlyn.cabinetscan.qa
+PRODUCT_NAME = Cabinet Scan QA
+
+// Environment Flag
+IS_QA_BUILD = YES

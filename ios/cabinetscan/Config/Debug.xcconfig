@@ -1,0 +1,8 @@
+// Debug Configuration
+// Used for local development - inherits QA settings
+
+#include "QA.xcconfig"
+
+// Override for local development if needed
+// Uncomment to use local Supabase:
+// SUPABASE_URL = http:/$()/127.0.0.1:54321
