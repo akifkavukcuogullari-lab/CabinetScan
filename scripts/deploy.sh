@@ -6,8 +6,8 @@
 set -e
 
 # Project References
-PROD_PROJECT_REF="wnyrnpeabhxdqvcpofmb"
-QA_PROJECT_REF="lhldqenpllbfxjkburzr"
+PROD_PROJECT_REF="lhldqenpllbfxjkburzr"
+QA_PROJECT_REF="wnyrnpeabhxdqvcpofmb"
 
 # Colors for output
 RED='\033[0;31m'

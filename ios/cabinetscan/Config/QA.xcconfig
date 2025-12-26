@@ -2,8 +2,8 @@
 // Used for TestFlight internal testing builds from develop branch
 
 // Supabase QA Credentials
-SUPABASE_URL = https:/$()/lhldqenpllbfxjkburzr.supabase.co
-SUPABASE_ANON_KEY = sb_publishable_JErsXU5JSjlY5hvfmvuCGg_eIDYaiy2
+SUPABASE_URL = https:/$()/wnyrnpeabhxdqvcpofmb.supabase.co
+SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndueXJucGVhYmh4ZHF2Y3BvZm1iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNDYzNTgsImV4cCI6MjA3OTgyMjM1OH0.OOangh4u0sy7oHFQl1pFv6ldNPlN201uY774gpyQlHc
 
 // App Identity (different bundle ID for QA)
 PRODUCT_BUNDLE_IDENTIFIER = ai.nextlyn.cabinetscan.qa
