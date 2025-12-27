@@ -376,15 +376,13 @@ export function InteractiveFloorPlan({
 
     // Snap to nearest 90 degree increment and return the correction needed
     const snapped = Math.round(angle / 90) * 90
-    return -(snapped - angle) // Negative because we're rotating the view, not the content
+    return snapped - angle // Same formula as DXF preview
   }, [walls])
 
   // Set initial rotation to auto-straighten when measurements load
   useEffect(() => {
-    if (dominantAngle !== 0) {
-      setRotation(dominantAngle)
-      setTargetRotation(dominantAngle)
-    }
+    setRotation(dominantAngle)
+    setTargetRotation(dominantAngle)
   }, [dominantAngle])
 
   // Calculate room center

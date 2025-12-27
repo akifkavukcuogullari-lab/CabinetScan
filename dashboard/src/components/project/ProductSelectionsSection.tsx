@@ -25,10 +25,6 @@ interface ProductSelectionsSectionProps {
   defaultOpen?: boolean
 }
 
-function formatPricingUnit(unit: string): string {
-  return unit.replace(/_/g, ' ')
-}
-
 export function ProductSelectionsSection({
   selections,
   defaultOpen = false
@@ -47,11 +43,6 @@ export function ProductSelectionsSection({
     return acc
   }, {} as Record<string, Selection[]>)
 
-  // Calculate total estimate
-  const totalEstimate = selections.reduce((sum, selection) => {
-    return sum + (selection.product_price_snapshot || 0)
-  }, 0)
-
   return (
     <Accordion type="single" collapsible defaultValue={defaultOpen ? 'selections' : undefined}>
       <AccordionItem value="selections" className="border rounded-lg">
@@ -64,14 +55,6 @@ export function ProductSelectionsSection({
                 {selections.length} products selected
               </div>
             </div>
-            {totalEstimate > 0 && (
-              <div className="text-right mr-2">
-                <div className="text-lg font-bold text-green-600">
-                  ${totalEstimate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-                <div className="text-xs text-gray-500">Est. Total</div>
-              </div>
-            )}
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-4 pb-4">
@@ -108,31 +91,11 @@ export function ProductSelectionsSection({
                           </p>
                         )}
                       </div>
-                      <div className="text-right flex-shrink-0">
-                        {selection.product_price_snapshot !== null && (
-                          <p className="font-medium text-sm">
-                            ${selection.product_price_snapshot.toFixed(2)}
-                          </p>
-                        )}
-                        <p className="text-xs text-gray-500">
-                          {formatPricingUnit(selection.pricing_unit_snapshot)}
-                        </p>
-                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             ))}
-
-            {/* Total */}
-            {totalEstimate > 0 && (
-              <div className="pt-3 mt-3 border-t flex items-center justify-between">
-                <span className="font-medium">Estimated Total</span>
-                <span className="text-xl font-bold text-green-600">
-                  ${totalEstimate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            )}
           </div>
         </AccordionContent>
       </AccordionItem>

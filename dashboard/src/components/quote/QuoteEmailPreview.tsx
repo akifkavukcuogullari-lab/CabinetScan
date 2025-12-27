@@ -1,7 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,8 +20,6 @@ import {
   X,
   DollarSign,
   Loader2,
-  ChevronDown,
-  ChevronRight
 } from 'lucide-react'
 
 interface QuoteSummary {
@@ -49,10 +52,10 @@ interface QuoteEmailPreviewProps {
     subject?: string
     body_html?: string
   }) => Promise<void>
+  defaultOpen?: boolean
 }
 
-export function QuoteEmailPreview({ quoteEmail, onSend }: QuoteEmailPreviewProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
+export function QuoteEmailPreview({ quoteEmail, onSend, defaultOpen = false }: QuoteEmailPreviewProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [editedEmail, setEditedEmail] = useState({
@@ -90,150 +93,143 @@ export function QuoteEmailPreview({ quoteEmail, onSend }: QuoteEmailPreviewProps
   }
 
   return (
-    <Card className="border-blue-200 bg-blue-50/30">
-      <CardHeader className="pb-3">
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center justify-between w-full text-left"
-        >
-          <div className="flex items-center gap-2">
+    <Accordion type="single" collapsible defaultValue={defaultOpen ? 'quote-email' : undefined}>
+      <AccordionItem value="quote-email" className="border rounded-lg border-blue-200 bg-blue-50/30">
+        <AccordionTrigger className="px-4 py-3 hover:no-underline">
+          <div className="flex items-center gap-3 flex-1">
             <Mail className="h-5 w-5 text-blue-600" />
-            <CardTitle className="text-lg">AI-Generated Quote Email</CardTitle>
-            <Badge variant={isSent ? 'default' : 'secondary'}>
-              {isSent ? 'Sent' : 'Pending Review'}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-2">
+            <div className="text-left flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">AI-Generated Quote Email</span>
+                <Badge variant={isSent ? 'default' : 'secondary'} className="text-xs">
+                  {isSent ? 'Sent' : 'Pending'}
+                </Badge>
+              </div>
+              <div className="text-sm text-gray-500 font-normal">
+                Review and send the quote to the customer
+              </div>
+            </div>
             {quoteEmail.grand_total && (
               <span className="text-lg font-bold text-green-700 mr-2">
                 {quoteEmail.grand_total}
               </span>
             )}
-            {isExpanded ? (
-              <ChevronDown className="h-5 w-5 text-gray-500" />
-            ) : (
-              <ChevronRight className="h-5 w-5 text-gray-500" />
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="px-4 pb-4">
+          <div className="space-y-4">
+            {/* Edit/Cancel buttons */}
+            {!isSent && (
+              <div className="flex justify-end gap-2">
+                {isEditing ? (
+                  <>
+                    <Button variant="ghost" size="sm" onClick={handleCancelEdit}>
+                      <X className="h-4 w-4 mr-1" />
+                      Cancel
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
+                      <Check className="h-4 w-4 mr-1" />
+                      Done Editing
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                    <Edit2 className="h-4 w-4 mr-1" />
+                    Edit
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Quote Summary Bar */}
+            {quoteEmail.quote_summary && (
+              <div className="flex items-center gap-4 p-3 bg-white rounded-lg border">
+                <DollarSign className="h-5 w-5 text-green-600" />
+                <div className="flex gap-4 text-sm">
+                  {quoteEmail.quote_summary.cabinets && (
+                    <span>Cabinets: <strong>{quoteEmail.quote_summary.cabinets}</strong></span>
+                  )}
+                  {quoteEmail.quote_summary.countertops && (
+                    <span>Countertops: <strong>{quoteEmail.quote_summary.countertops}</strong></span>
+                  )}
+                  {quoteEmail.quote_summary.backsplash && (
+                    <span>Backsplash: <strong>{quoteEmail.quote_summary.backsplash}</strong></span>
+                  )}
+                </div>
+                <div className="ml-auto text-lg font-bold text-green-700">
+                  Total: {quoteEmail.grand_total}
+                </div>
+              </div>
+            )}
+
+            {/* Email Fields */}
+            <div className="bg-white rounded-lg border overflow-hidden">
+              {/* To Field */}
+              <div className="flex items-center border-b px-4 py-2">
+                <Label className="w-20 text-sm text-gray-500">To:</Label>
+                {isEditing ? (
+                  <Input
+                    value={editedEmail.recipient_email}
+                    onChange={(e) => setEditedEmail({ ...editedEmail, recipient_email: e.target.value })}
+                    className="border-0 shadow-none focus-visible:ring-0"
+                  />
+                ) : (
+                  <span className="text-sm">{editedEmail.recipient_email}</span>
+                )}
+              </div>
+
+              {/* Subject Field */}
+              <div className="flex items-center border-b px-4 py-2">
+                <Label className="w-20 text-sm text-gray-500">Subject:</Label>
+                {isEditing ? (
+                  <Input
+                    value={editedEmail.subject}
+                    onChange={(e) => setEditedEmail({ ...editedEmail, subject: e.target.value })}
+                    className="border-0 shadow-none focus-visible:ring-0"
+                  />
+                ) : (
+                  <span className="text-sm font-medium">{editedEmail.subject}</span>
+                )}
+              </div>
+
+              {/* Email Body - WYSIWYG Editor */}
+              <div className="p-4">
+                <RichTextEditor
+                  content={editedEmail.body_html}
+                  onChange={(html) => setEditedEmail({ ...editedEmail, body_html: html })}
+                  editable={isEditing}
+                  className={isEditing ? '' : 'border-0'}
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            {!isSent && (
+              <div className="flex justify-end gap-3 pt-2">
+                <Button
+                  onClick={handleSend}
+                  disabled={isSending}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {isSending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  {isSending ? 'Sending...' : 'Send to Customer'}
+                </Button>
+              </div>
+            )}
+
+            {/* Sent info */}
+            {isSent && quoteEmail.sent_at && (
+              <div className="text-sm text-gray-500 text-right">
+                Sent on {new Date(quoteEmail.sent_at).toLocaleString()}
+              </div>
             )}
           </div>
-        </button>
-        <CardDescription>
-          Review and send the AI-generated quote to the customer
-        </CardDescription>
-      </CardHeader>
-
-      {isExpanded && (
-        <CardContent className="space-y-4">
-          {/* Edit/Cancel buttons */}
-          {!isSent && (
-            <div className="flex justify-end gap-2">
-              {isEditing ? (
-                <>
-                  <Button variant="ghost" size="sm" onClick={handleCancelEdit}>
-                    <X className="h-4 w-4 mr-1" />
-                    Cancel
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
-                    <Check className="h-4 w-4 mr-1" />
-                    Done Editing
-                  </Button>
-                </>
-              ) : (
-                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-                  <Edit2 className="h-4 w-4 mr-1" />
-                  Edit
-                </Button>
-              )}
-            </div>
-          )}
-
-          {/* Quote Summary Bar */}
-          {quoteEmail.quote_summary && (
-            <div className="flex items-center gap-4 p-3 bg-white rounded-lg border">
-              <DollarSign className="h-5 w-5 text-green-600" />
-              <div className="flex gap-4 text-sm">
-                {quoteEmail.quote_summary.cabinets && (
-                  <span>Cabinets: <strong>{quoteEmail.quote_summary.cabinets}</strong></span>
-                )}
-                {quoteEmail.quote_summary.countertops && (
-                  <span>Countertops: <strong>{quoteEmail.quote_summary.countertops}</strong></span>
-                )}
-                {quoteEmail.quote_summary.backsplash && (
-                  <span>Backsplash: <strong>{quoteEmail.quote_summary.backsplash}</strong></span>
-                )}
-              </div>
-              <div className="ml-auto text-lg font-bold text-green-700">
-                Total: {quoteEmail.grand_total}
-              </div>
-            </div>
-          )}
-
-          {/* Email Fields */}
-          <div className="bg-white rounded-lg border overflow-hidden">
-            {/* To Field */}
-            <div className="flex items-center border-b px-4 py-2">
-              <Label className="w-20 text-sm text-gray-500">To:</Label>
-              {isEditing ? (
-                <Input
-                  value={editedEmail.recipient_email}
-                  onChange={(e) => setEditedEmail({ ...editedEmail, recipient_email: e.target.value })}
-                  className="border-0 shadow-none focus-visible:ring-0"
-                />
-              ) : (
-                <span className="text-sm">{editedEmail.recipient_email}</span>
-              )}
-            </div>
-
-            {/* Subject Field */}
-            <div className="flex items-center border-b px-4 py-2">
-              <Label className="w-20 text-sm text-gray-500">Subject:</Label>
-              {isEditing ? (
-                <Input
-                  value={editedEmail.subject}
-                  onChange={(e) => setEditedEmail({ ...editedEmail, subject: e.target.value })}
-                  className="border-0 shadow-none focus-visible:ring-0"
-                />
-              ) : (
-                <span className="text-sm font-medium">{editedEmail.subject}</span>
-              )}
-            </div>
-
-            {/* Email Body - WYSIWYG Editor */}
-            <div className="p-4">
-              <RichTextEditor
-                content={editedEmail.body_html}
-                onChange={(html) => setEditedEmail({ ...editedEmail, body_html: html })}
-                editable={isEditing}
-                className={isEditing ? '' : 'border-0'}
-              />
-            </div>
-          </div>
-
-          {/* Actions */}
-          {!isSent && (
-            <div className="flex justify-end gap-3 pt-2">
-              <Button
-                onClick={handleSend}
-                disabled={isSending}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                {isSending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4 mr-2" />
-                )}
-                {isSending ? 'Sending...' : 'Send to Customer'}
-              </Button>
-            </div>
-          )}
-
-          {/* Sent info */}
-          {isSent && quoteEmail.sent_at && (
-            <div className="text-sm text-gray-500 text-right">
-              Sent on {new Date(quoteEmail.sent_at).toLocaleString()}
-            </div>
-          )}
-        </CardContent>
-      )}
-    </Card>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   )
 }

@@ -1,54 +1,70 @@
 'use client'
 
-import { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
+import { Webhook, Copy, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Webhook, ChevronDown, ChevronRight } from 'lucide-react'
+import { useState } from 'react'
 
 interface WebhookPayloadViewerProps {
   payload: Record<string, unknown>
+  defaultOpen?: boolean
 }
 
-export function WebhookPayloadViewer({ payload }: WebhookPayloadViewerProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
-
+export function WebhookPayloadViewer({ payload, defaultOpen = false }: WebhookPayloadViewerProps) {
+  const [copied, setCopied] = useState(false)
   const jsonString = JSON.stringify(payload, null, 2)
 
+  const copyToClipboard = async () => {
+    await navigator.clipboard.writeText(jsonString)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center justify-between w-full text-left"
-        >
-          <div className="flex items-center gap-2">
+    <Accordion type="single" collapsible defaultValue={defaultOpen ? 'webhook' : undefined}>
+      <AccordionItem value="webhook" className="border rounded-lg">
+        <AccordionTrigger className="px-4 py-3 hover:no-underline">
+          <div className="flex items-center gap-3">
             <Webhook className="h-5 w-5 text-purple-600" />
-            <CardTitle>Webhook Payload</CardTitle>
+            <div className="text-left">
+              <div className="font-medium">Webhook Payload</div>
+              <div className="text-sm text-gray-500 font-normal">
+                JSON data sent to the showroom&apos;s webhook URL
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            {isExpanded ? (
-              <ChevronDown className="h-5 w-5 text-gray-500" />
-            ) : (
-              <ChevronRight className="h-5 w-5 text-gray-500" />
-            )}
+        </AccordionTrigger>
+        <AccordionContent className="px-4 pb-4">
+          <div className="relative">
+            <Button
+              variant="outline"
+              size="sm"
+              className="absolute top-2 right-2 z-10"
+              onClick={copyToClipboard}
+            >
+              {copied ? (
+                <>
+                  <Check className="h-4 w-4 mr-1" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4 mr-1" />
+                  Copy
+                </>
+              )}
+            </Button>
+            <pre className="bg-gray-50 border rounded-lg p-4 pr-24 overflow-x-auto text-xs font-mono max-h-[400px] overflow-y-auto">
+              {jsonString}
+            </pre>
           </div>
-        </button>
-        <CardDescription>
-          JSON data sent to the showroom&apos;s webhook URL when this project was submitted
-        </CardDescription>
-      </CardHeader>
-      {isExpanded && (
-        <CardContent>
-          <pre
-            className="bg-gray-50 border rounded-lg p-4 overflow-x-auto text-xs font-mono max-h-[600px] overflow-y-auto select-all cursor-text"
-          >
-            {jsonString}
-          </pre>
-          <p className="text-xs text-gray-500 mt-2">
-            Tip: Select all text (Cmd+A / Ctrl+A) and copy (Cmd+C / Ctrl+C)
-          </p>
-        </CardContent>
-      )}
-    </Card>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   )
 }
