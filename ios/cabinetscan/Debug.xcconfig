@@ -1,0 +1,13 @@
+// Debug Configuration
+// Used for local development - uses QA Supabase with test data
+
+// Supabase QA Credentials (same as QA.xcconfig)
+SUPABASE_URL = https:/$()/wnyrnpeabhxdqvcpofmb.supabase.co
+SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndueXJucGVhYmh4ZHF2Y3BvZm1iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNDYzNTgsImV4cCI6MjA3OTgyMjM1OH0.OOangh4u0sy7oHFQl1pFv6ldNPlN201uY774gpyQlHc
+
+// Keep production bundle ID for local debugging
+PRODUCT_BUNDLE_IDENTIFIER = ai.nextlyn.cabinetscan
+PRODUCT_NAME = Cabinet Scan
+
+// Environment Flag
+IS_QA_BUILD = YES
