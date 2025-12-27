@@ -246,13 +246,13 @@ export default function ProjectsPage() {
           </CardContent>
         </Card>
       ) : filteredProjects.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
           {filteredProjects.map((project: any) => {
-            // Extract measurement data for preview
+            // Extract measurement data
             const measurement = project.project_measurements?.[0]
             const hasUsdzFile = measurement?.usdz_file_url
-            const hasFloorPlanImage = measurement?.preview_image_url
-            const hasScanData = hasUsdzFile || hasFloorPlanImage
+            const hasFloorPlanData = measurement?.measurements?.walls?.length > 0
+            const hasScanData = hasUsdzFile || hasFloorPlanData
 
             return (
               <Link
@@ -260,127 +260,58 @@ export default function ProjectsPage() {
                 href={`/showroom/projects/${project.id}`}
                 className="group"
               >
-                <Card className="h-full overflow-hidden hover:shadow-lg transition-all duration-200 hover:border-blue-400">
-                  {/* Visual Preview Section */}
-                  <div className="relative h-40 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
-                    {hasUsdzFile ? (
-                      // 3D model preview - use floor plan image as preview
-                      <div className="relative w-full h-full">
-                        {hasFloorPlanImage ? (
-                          <img
-                            src={measurement.preview_image_url}
-                            alt={`${project.project_name} scan preview`}
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center h-full bg-blue-50">
-                            <Rotate3d className="h-12 w-12 text-blue-300" />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                        {/* 3D badge */}
-                        <div className="absolute top-3 right-3 bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1">
-                          <Rotate3d className="h-3 w-3" />
-                          3D Scan
-                        </div>
-                      </div>
-                    ) : hasFloorPlanImage ? (
-                      // 2D floor plan image
-                      <div className="relative w-full h-full">
-                        <img
-                          src={measurement.preview_image_url}
-                          alt={`${project.project_name} floor plan`}
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                        {/* 2D badge */}
-                        <div className="absolute top-3 right-3 bg-gray-700 text-white text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1">
-                          <Layers className="h-3 w-3" />
-                          Floor Plan
-                        </div>
-                      </div>
-                    ) : (
-                      // No scan data placeholder
-                      <div className="flex flex-col items-center justify-center h-full">
-                        <Box className="h-12 w-12 text-gray-300 mb-2" />
-                        <span className="text-sm text-gray-400">No scan data</span>
-                      </div>
-                    )}
-
-                    {/* Measurements overlay */}
-                    {hasScanData && (measurement?.total_linear_ft || measurement?.total_sq_ft) && (
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 pt-8">
-                        <div className="flex items-center gap-4 text-white text-sm">
-                          {measurement.total_sq_ft && (
-                            <span className="flex items-center gap-1.5">
-                              <Ruler className="h-3.5 w-3.5" />
-                              {measurement.total_sq_ft.toFixed(0)} sq ft
-                            </span>
-                          )}
-                          {measurement.total_linear_ft && (
-                            <span className="flex items-center gap-1.5">
-                              <Ruler className="h-3.5 w-3.5" />
-                              {measurement.total_linear_ft.toFixed(0)} linear ft
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Project Info Section */}
+                <Card className="h-full hover:shadow-md transition-all duration-200 hover:border-blue-400">
                   <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-3">
+                    {/* Header: Customer Name + Status */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-lg truncate group-hover:text-blue-600 transition-colors">
-                          {project.project_name}
+                        <h3 className="font-semibold truncate group-hover:text-blue-600 transition-colors">
+                          {project.customer_first_name} {project.customer_last_name}
                         </h3>
-                        <code className="text-xs px-1.5 py-0.5 bg-gray-100 rounded text-gray-600 font-mono">
-                          {project.reference_number}
-                        </code>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <code className="font-mono">{project.reference_number}</code>
+                          <span>|</span>
+                          <span>
+                            {project.submitted_at
+                              ? new Date(project.submitted_at).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric'
+                                })
+                              : '-'}
+                          </span>
+                        </div>
                       </div>
-                      <Badge className={`${statusColors[project.status]} shrink-0 ml-2`}>
+                      <Badge className={`${statusColors[project.status]} shrink-0 text-xs`}>
                         {project.status.replace('_', ' ')}
                       </Badge>
                     </div>
 
-                    <div className="space-y-2 text-sm text-gray-600">
-                      {/* Customer */}
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-gray-400" />
-                        <span className="truncate">
-                          {project.customer_first_name} {project.customer_last_name}
-                        </span>
-                      </div>
-
-                      {/* Date */}
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-400" />
-                        <span>
-                          {project.submitted_at
-                            ? new Date(project.submitted_at).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric'
-                              })
-                            : 'Not submitted'}
-                        </span>
-                      </div>
+                    {/* Email Row */}
+                    <div className="text-sm text-gray-600 mb-3 truncate">
+                      {project.customer_email}
                     </div>
 
-                    {/* View button */}
-                    <div className="mt-4 pt-3 border-t flex items-center justify-between">
-                      <span className="text-sm text-gray-500">
-                        {project.customer_email}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 -mr-2"
-                      >
-                        View
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
+                    {/* Scan Info & Measurements */}
+                    <div className="flex items-center justify-between pt-3 border-t">
+                      <div className="flex items-center gap-3 text-xs text-gray-500">
+                        {hasScanData && (
+                          <span className="flex items-center gap-1">
+                            {hasUsdzFile ? (
+                              <Rotate3d className="h-3.5 w-3.5 text-blue-500" />
+                            ) : (
+                              <Layers className="h-3.5 w-3.5 text-gray-400" />
+                            )}
+                            {hasUsdzFile ? '3D' : '2D'}
+                          </span>
+                        )}
+                        {measurement?.total_sq_ft && (
+                          <span className="flex items-center gap-1">
+                            <Ruler className="h-3.5 w-3.5" />
+                            {measurement.total_sq_ft.toFixed(0)} sqft
+                          </span>
+                        )}
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
                     </div>
                   </CardContent>
                 </Card>

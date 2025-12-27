@@ -102,6 +102,7 @@ interface InteractiveFloorPlanProps {
   measurements: MeasurementsData | null | undefined
   className?: string
   isLoading?: boolean
+  minimal?: boolean
 }
 
 interface SelectedObject {
@@ -165,7 +166,8 @@ function resolveCollisions(labels: LabelPosition[]): LabelPosition[] {
 export function InteractiveFloorPlan({
   measurements,
   className = '',
-  isLoading = false
+  isLoading = false,
+  minimal = false
 }: InteractiveFloorPlanProps) {
   const [selectedObject, setSelectedObject] = useState<SelectedObject | null>(null)
   const [hoveredObject, setHoveredObject] = useState<string | null>(null)
@@ -350,6 +352,41 @@ export function InteractiveFloorPlan({
   const hasData = walls.length > 0 || lowerCabinets.length > 0 || upperCabinets.length > 0 ||
                   appliances.length > 0 || doors.length > 0 || windows.length > 0
 
+  // Calculate dominant angle from walls to auto-straighten the view
+  const dominantAngle = useMemo(() => {
+    if (walls.length === 0) return 0
+
+    // Find the longest wall and calculate its angle
+    let longestWall: WallData | null = null
+    let maxLength = 0
+
+    for (const wall of walls) {
+      if (wall.linear_ft > maxLength) {
+        maxLength = wall.linear_ft
+        longestWall = wall
+      }
+    }
+
+    if (!longestWall || !longestWall.start || !longestWall.end) return 0
+
+    // Calculate angle of longest wall
+    const dx = longestWall.end.x - longestWall.start.x
+    const dz = longestWall.end.z - longestWall.start.z
+    let angle = Math.atan2(dz, dx) * (180 / Math.PI)
+
+    // Snap to nearest 90 degree increment and return the correction needed
+    const snapped = Math.round(angle / 90) * 90
+    return -(snapped - angle) // Negative because we're rotating the view, not the content
+  }, [walls])
+
+  // Set initial rotation to auto-straighten when measurements load
+  useEffect(() => {
+    if (dominantAngle !== 0) {
+      setRotation(dominantAngle)
+      setTargetRotation(dominantAngle)
+    }
+  }, [dominantAngle])
+
   // Calculate room center
   const roomCenter = useMemo(() => {
     if (room) {
@@ -376,7 +413,7 @@ export function InteractiveFloorPlan({
   const viewConfig = useMemo(() => {
     const viewWidth = 700
     const viewHeight = 550
-    const margin = 100
+    const margin = minimal ? 40 : 60 // Reduced margin for better auto-fit
 
     if (room && room.min_x !== undefined) {
       const padding = 4
@@ -425,7 +462,7 @@ export function InteractiveFloorPlan({
     const scale = Math.min(scaleX, scaleZ) * zoom
 
     return { minX, maxX, minZ, maxZ, scale, padding: margin, viewWidth, viewHeight, roomWidth, roomDepth }
-  }, [walls, room, zoom])
+  }, [walls, room, zoom, minimal])
 
   const { viewWidth, viewHeight } = viewConfig
 
@@ -633,11 +670,11 @@ export function InteractiveFloorPlan({
     return `${Math.round(feet * 12)}"`
   }
 
-  // Reset view with animation
+  // Reset view with animation (resets to auto-straightened angle)
   const resetView = useCallback(() => {
-    setTargetRotation(0)
+    setTargetRotation(dominantAngle)
     setTargetZoom(1)
-  }, [])
+  }, [dominantAngle])
 
   // Toggle fullscreen
   const toggleFullscreen = useCallback(async () => {
@@ -910,6 +947,14 @@ export function InteractiveFloorPlan({
 
   // Render loading state
   if (isLoading) {
+    if (minimal) {
+      return (
+        <div className={`flex flex-col items-center justify-center h-[60vh] gap-4 bg-gray-50 rounded-lg ${className}`}>
+          <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
+          <p className="text-gray-500 text-sm">Loading floor plan data...</p>
+        </div>
+      )
+    }
     return (
       <Card className={className}>
         <CardContent className="flex flex-col items-center justify-center h-96 gap-4">
@@ -922,6 +967,21 @@ export function InteractiveFloorPlan({
 
   // Render empty state
   if (!measurements || !hasData) {
+    if (minimal) {
+      return (
+        <div className={`flex flex-col items-center justify-center h-[60vh] gap-4 bg-gray-50 rounded-lg ${className}`}>
+          <div className="p-4 bg-white rounded-full shadow-sm">
+            <Square className="h-12 w-12 text-gray-300" />
+          </div>
+          <div className="text-center">
+            <p className="text-gray-600 font-medium">No floor plan data available</p>
+            <p className="text-gray-400 text-sm mt-1">
+              Scan measurements will appear here once processed
+            </p>
+          </div>
+        </div>
+      )
+    }
     return (
       <Card className={className}>
         <CardHeader className="pb-2">
@@ -948,6 +1008,579 @@ export function InteractiveFloorPlan({
   const roomArea = room
     ? ((room.max_x - room.min_x) * (room.max_z - room.min_z)).toFixed(0)
     : null
+
+  // Render the SVG content (shared between minimal and full versions)
+  const renderSvgContent = () => (
+    <>
+      {/* Gradient definitions for shadows and effects */}
+      <defs>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e5e7eb" strokeWidth="0.5" />
+        </pattern>
+
+        {/* Drop shadow filter */}
+        <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.15"/>
+        </filter>
+
+        {/* Glow filter for selection */}
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+          <feMerge>
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+
+        {/* Cabinet gradient */}
+        <linearGradient id="cabinetGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#fafafa"/>
+          <stop offset="100%" stopColor="#f0f0f0"/>
+        </linearGradient>
+
+        {/* Selected cabinet gradient */}
+        <linearGradient id="cabinetSelectedGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#dcfce7"/>
+          <stop offset="100%" stopColor="#bbf7d0"/>
+        </linearGradient>
+      </defs>
+
+      {/* Background with subtle gradient */}
+      <rect width="100%" height="100%" fill="#fafafa" />
+      <rect width="100%" height="100%" fill="url(#grid)" />
+    </>
+  )
+
+  // Minimal render mode
+  if (minimal) {
+    return (
+      <div className={`relative bg-gray-50 ${className}`}>
+        {/* Floating controls */}
+        <div className="absolute top-3 right-3 z-20 flex gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-sm border border-gray-200/50">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={resetView}
+            title="Reset view"
+            className="h-8 w-8 hover:bg-gray-100"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowLabels(!showLabels)}
+            title={showLabels ? "Hide labels" : "Show labels"}
+            className="h-8 w-8 hover:bg-gray-100"
+          >
+            {showLabels ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleFullscreen}
+            title="Fullscreen"
+            className="h-8 w-8 hover:bg-gray-100"
+          >
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </Button>
+        </div>
+
+        {/* Rotation slider (compact, at bottom) */}
+        <div className="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-full px-3 py-1.5 shadow-sm border border-gray-200/50">
+          <Move className="h-3 w-3 text-gray-400 flex-shrink-0" />
+          <input
+            type="range"
+            min={0}
+            max={360}
+            step={1}
+            value={targetRotation}
+            onChange={(e) => setTargetRotation(Number(e.target.value))}
+            className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+          />
+          <span className="text-xs text-gray-500 w-8 text-right font-mono">{Math.round(rotation)}°</span>
+        </div>
+
+        <div
+          ref={containerRef}
+          className="relative bg-white rounded-lg border border-gray-200 overflow-hidden"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={{ touchAction: 'none' }}
+        >
+          <svg
+            ref={svgRef}
+            viewBox={`0 0 ${viewWidth} ${viewHeight}`}
+            className="w-full"
+            style={{
+              height: isFullscreen ? '100vh' : '60vh',
+              minHeight: '400px'
+            }}
+            role="img"
+            aria-label="Interactive floor plan showing room layout with walls, cabinets, and appliances"
+          >
+            {renderSvgContent()}
+
+            {/* Lower Cabinets */}
+            {lowerCabinets.map((cabinet, idx) => {
+              const id = `cabinet-lower-${idx}`
+              const isHovered = hoveredObject === id
+              const isSelected = selectedObject?.data?.id === cabinet.id
+
+              if (cabinet.corners && cabinet.corners.length >= 4) {
+                const screenCorners = cabinet.corners.map(c => toScreen(c.x, c.z))
+                const points = screenCorners.map(s => `${s.x},${s.y}`).join(' ')
+
+                const centerX = screenCorners.reduce((sum, c) => sum + c.x, 0) / screenCorners.length
+                const centerY = screenCorners.reduce((sum, c) => sum + c.y, 0) / screenCorners.length
+
+                return (
+                  <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                    <polygon
+                      points={points}
+                      fill={isSelected ? 'url(#cabinetSelectedGradient)' : isHovered ? '#f0fdf4' : 'url(#cabinetGradient)'}
+                      stroke={isSelected ? '#16a34a' : isHovered ? '#22c55e' : '#374151'}
+                      strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 1.5}
+                      className="cursor-pointer"
+                      style={{ transition: 'all 0.2s ease-out' }}
+                      onMouseEnter={(e) => handleHover(e, id, `Lower Cabinet: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)}
+                      onMouseLeave={handleHoverEnd}
+                      onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Lower Cabinet' })}
+                    />
+                    {showLabels && (
+                      <text
+                        x={centerX}
+                        y={centerY}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fontSize="9"
+                        fill="#374151"
+                        className="pointer-events-none font-medium"
+                        style={{ transition: 'opacity 0.2s' }}
+                      >
+                        {formatInches(cabinet.width_ft)}
+                      </text>
+                    )}
+                  </g>
+                )
+              }
+
+              const screen = toScreen(cabinet.position.x, cabinet.position.z)
+              const w = cabinet.width_ft * viewConfig.scale
+              const d = cabinet.depth_ft * viewConfig.scale
+
+              return (
+                <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                  <rect
+                    x={screen.x - w / 2}
+                    y={screen.y - d / 2}
+                    width={w}
+                    height={d}
+                    fill={isSelected ? 'url(#cabinetSelectedGradient)' : isHovered ? '#f0fdf4' : 'url(#cabinetGradient)'}
+                    stroke={isSelected ? '#16a34a' : isHovered ? '#22c55e' : '#374151'}
+                    strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 1.5}
+                    rx="2"
+                    className="cursor-pointer"
+                    style={{ transition: 'all 0.2s ease-out' }}
+                    onMouseEnter={(e) => handleHover(e, id, `Lower Cabinet: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)}
+                    onMouseLeave={handleHoverEnd}
+                    onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Lower Cabinet' })}
+                  />
+                  {showLabels && (
+                    <text
+                      x={screen.x}
+                      y={screen.y}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize="9"
+                      fill="#374151"
+                      className="pointer-events-none font-medium"
+                    >
+                      {formatInches(cabinet.width_ft)}
+                    </text>
+                  )}
+                </g>
+              )
+            })}
+
+            {/* Appliances */}
+            {appliances.map((appliance, idx) => {
+              const id = `appliance-${idx}`
+              const isHovered = hoveredObject === id
+              const isSelected = selectedObject?.data?.id === appliance.id
+              const applianceType = appliance.type || 'Appliance'
+
+              if (appliance.corners && appliance.corners.length >= 4) {
+                const screenCorners = appliance.corners.map(c => toScreen(c.x, c.z))
+                const points = screenCorners.map(s => `${s.x},${s.y}`).join(' ')
+
+                const centerX = screenCorners.reduce((sum, c) => sum + c.x, 0) / screenCorners.length
+                const centerY = screenCorners.reduce((sum, c) => sum + c.y, 0) / screenCorners.length
+
+                const xs = screenCorners.map(c => c.x)
+                const ys = screenCorners.map(c => c.y)
+                const boxWidth = Math.max(...xs) - Math.min(...xs)
+                const boxHeight = Math.max(...ys) - Math.min(...ys)
+
+                return (
+                  <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                    <polygon
+                      points={points}
+                      fill={isSelected ? '#fef3c7' : isHovered ? '#fffbeb' : '#fffef5'}
+                      stroke={isSelected ? '#d97706' : isHovered ? '#f59e0b' : '#f59e0b'}
+                      strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 1.5}
+                      className="cursor-pointer"
+                      style={{ transition: 'all 0.2s ease-out' }}
+                      onMouseEnter={(e) => handleHover(e, id, `${applianceType}: ${formatInches(appliance.width_ft)} x ${formatInches(appliance.depth_ft)}`)}
+                      onMouseLeave={handleHoverEnd}
+                      onClick={() => setSelectedObject({ type: 'appliance', data: appliance, label: applianceType })}
+                    />
+                    {renderApplianceIcon(applianceType, centerX, centerY, boxWidth, boxHeight, false)}
+                  </g>
+                )
+              }
+
+              const screen = toScreen(appliance.position.x, appliance.position.z)
+              const w = appliance.width_ft * viewConfig.scale
+              const d = appliance.depth_ft * viewConfig.scale
+
+              return (
+                <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                  <rect
+                    x={screen.x - w / 2}
+                    y={screen.y - d / 2}
+                    width={w}
+                    height={d}
+                    fill={isSelected ? '#fef3c7' : isHovered ? '#fffbeb' : '#fffef5'}
+                    stroke={isSelected ? '#d97706' : isHovered ? '#f59e0b' : '#f59e0b'}
+                    strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 1.5}
+                    rx="2"
+                    className="cursor-pointer"
+                    style={{ transition: 'all 0.2s ease-out' }}
+                    onMouseEnter={(e) => handleHover(e, id, `${applianceType}: ${formatInches(appliance.width_ft)} x ${formatInches(appliance.depth_ft)}`)}
+                    onMouseLeave={handleHoverEnd}
+                    onClick={() => setSelectedObject({ type: 'appliance', data: appliance, label: applianceType })}
+                  />
+                  {renderApplianceIcon(applianceType, screen.x, screen.y, w, d, false)}
+                </g>
+              )
+            })}
+
+            {/* Walls */}
+            {walls.map((wall, idx) => {
+              const id = `wall-${idx}`
+              const isHovered = hoveredObject === id
+              const isSelected = selectedObject?.data?.id === wall.id
+
+              if (!wall.start || !wall.end) return null
+
+              const start = toScreen(wall.start.x, wall.start.z)
+              const end = toScreen(wall.end.x, wall.end.z)
+              const lengthFt = wall.width_ft || wall.linear_ft || 0
+
+              return (
+                <g key={id}>
+                  {/* Wall shadow for depth */}
+                  <line
+                    x1={start.x + 2}
+                    y1={start.y + 2}
+                    x2={end.x + 2}
+                    y2={end.y + 2}
+                    stroke="rgba(0,0,0,0.1)"
+                    strokeWidth={8}
+                    strokeLinecap="round"
+                    className="pointer-events-none"
+                  />
+                  {/* Main wall */}
+                  <line
+                    x1={start.x}
+                    y1={start.y}
+                    x2={end.x}
+                    y2={end.y}
+                    stroke={isSelected ? '#1e40af' : isHovered ? '#3b82f6' : '#1f2937'}
+                    strokeWidth={isSelected ? 8 : isHovered ? 7 : 6}
+                    strokeLinecap="round"
+                    className="cursor-pointer"
+                    style={{ transition: 'stroke 0.2s ease-out, stroke-width 0.2s ease-out' }}
+                    onMouseEnter={(e) => handleHover(e, id, `Wall: ${formatFeetInches(lengthFt)} x ${formatFeetInches(wall.height_ft)}`)}
+                    onMouseLeave={handleHoverEnd}
+                    onClick={() => setSelectedObject({ type: 'wall', data: wall, label: `Wall ${idx + 1}` })}
+                  />
+                </g>
+              )
+            })}
+
+            {/* Wall labels with collision avoidance */}
+            {wallLabels.map((label) => (
+              <g key={label.id}>
+                <rect
+                  x={label.x - label.width / 2}
+                  y={label.y - label.height / 2}
+                  width={label.width}
+                  height={label.height}
+                  fill="white"
+                  fillOpacity="0.95"
+                  rx="4"
+                  filter="url(#dropShadow)"
+                  transform={`rotate(${label.rotation}, ${label.x}, ${label.y})`}
+                  className="pointer-events-none"
+                />
+                <text
+                  x={label.x}
+                  y={label.y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize="11"
+                  fontWeight="600"
+                  fill="#1f2937"
+                  transform={`rotate(${label.rotation}, ${label.x}, ${label.y})`}
+                  className="pointer-events-none"
+                >
+                  {label.text}
+                </text>
+              </g>
+            ))}
+
+            {/* Upper Cabinets (dashed purple outline with subtle fill) */}
+            {upperCabinets.map((cabinet, idx) => {
+              const id = `cabinet-upper-${idx}`
+              const isHovered = hoveredObject === id
+              const isSelected = selectedObject?.data?.id === cabinet.id
+
+              if (cabinet.corners && cabinet.corners.length >= 4) {
+                const screenCorners = cabinet.corners.map(c => toScreen(c.x, c.z))
+                const points = screenCorners.map(s => `${s.x},${s.y}`).join(' ')
+
+                const centerX = screenCorners.reduce((sum, c) => sum + c.x, 0) / screenCorners.length
+                const centerY = screenCorners.reduce((sum, c) => sum + c.y, 0) / screenCorners.length
+
+                return (
+                  <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                    <polygon
+                      points={points}
+                      fill={isSelected ? 'rgba(139, 92, 246, 0.15)' : isHovered ? 'rgba(139, 92, 246, 0.1)' : 'rgba(139, 92, 246, 0.05)'}
+                      stroke={isSelected ? '#7c3aed' : isHovered ? '#8b5cf6' : '#a78bfa'}
+                      strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 1.5}
+                      strokeDasharray="6,3"
+                      className="cursor-pointer"
+                      style={{ transition: 'all 0.2s ease-out' }}
+                      onMouseEnter={(e) => handleHover(e, id, `Upper Cabinet: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)}
+                      onMouseLeave={handleHoverEnd}
+                      onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Upper Cabinet' })}
+                    />
+                    {showLabels && (
+                      <text
+                        x={centerX}
+                        y={centerY}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fontSize="8"
+                        fill="#7c3aed"
+                        className="pointer-events-none font-medium"
+                        style={{ transition: 'opacity 0.2s' }}
+                      >
+                        U
+                      </text>
+                    )}
+                  </g>
+                )
+              }
+
+              const screen = toScreen(cabinet.position.x, cabinet.position.z)
+              const w = cabinet.width_ft * viewConfig.scale
+              const d = cabinet.depth_ft * viewConfig.scale
+
+              return (
+                <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                  <rect
+                    x={screen.x - w / 2}
+                    y={screen.y - d / 2}
+                    width={w}
+                    height={d}
+                    fill={isSelected ? 'rgba(139, 92, 246, 0.15)' : isHovered ? 'rgba(139, 92, 246, 0.1)' : 'rgba(139, 92, 246, 0.05)'}
+                    stroke={isSelected ? '#7c3aed' : isHovered ? '#8b5cf6' : '#a78bfa'}
+                    strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 1.5}
+                    strokeDasharray="6,3"
+                    rx="2"
+                    className="cursor-pointer"
+                    style={{ transition: 'all 0.2s ease-out' }}
+                    onMouseEnter={(e) => handleHover(e, id, `Upper Cabinet: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)}
+                    onMouseLeave={handleHoverEnd}
+                    onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Upper Cabinet' })}
+                  />
+                  {showLabels && (
+                    <text
+                      x={screen.x}
+                      y={screen.y}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize="8"
+                      fill="#7c3aed"
+                      className="pointer-events-none font-medium"
+                    >
+                      U
+                    </text>
+                  )}
+                </g>
+              )
+            })}
+
+            {/* Windows */}
+            {windows.map((windowItem, idx) => {
+              const id = `window-${idx}`
+              const isHovered = hoveredObject === id
+              const isSelected = selectedObject?.data?.id === windowItem.id
+              const screen = toScreen(windowItem.position.x, windowItem.position.z)
+              const w = windowItem.width_ft * viewConfig.scale
+              const windowColor = isSelected ? '#0284c7' : isHovered ? '#0ea5e9' : '#38bdf8'
+
+              const nearestWall = findNearestWall(windowItem.position)
+              let wallAngle = 0
+
+              if (nearestWall && nearestWall.start && nearestWall.end) {
+                const wallDx = nearestWall.end.x - nearestWall.start.x
+                const wallDz = nearestWall.end.z - nearestWall.start.z
+                wallAngle = Math.atan2(wallDz, wallDx)
+              }
+
+              const totalAngle = (wallAngle * 180 / Math.PI) + rotation
+
+              return (
+                <g key={id} transform={`rotate(${totalAngle}, ${screen.x}, ${screen.y})`}>
+                  <line
+                    x1={screen.x - w / 2}
+                    y1={screen.y - 3}
+                    x2={screen.x + w / 2}
+                    y2={screen.y - 3}
+                    stroke={windowColor}
+                    strokeWidth={isSelected ? 4 : isHovered ? 3.5 : 3}
+                    className="cursor-pointer"
+                    style={{ transition: 'all 0.2s ease-out' }}
+                    onMouseEnter={(e) => handleHover(e, id, `Window: ${formatFeetInches(windowItem.width_ft)} wide`)}
+                    onMouseLeave={handleHoverEnd}
+                    onClick={() => setSelectedObject({ type: 'window', data: windowItem, label: 'Window' })}
+                  />
+                  <line
+                    x1={screen.x - w / 2}
+                    y1={screen.y + 3}
+                    x2={screen.x + w / 2}
+                    y2={screen.y + 3}
+                    stroke={windowColor}
+                    strokeWidth={isSelected ? 4 : isHovered ? 3.5 : 3}
+                    className="cursor-pointer"
+                    style={{ transition: 'all 0.2s ease-out' }}
+                    onMouseEnter={(e) => handleHover(e, id, `Window: ${formatFeetInches(windowItem.width_ft)} wide`)}
+                    onMouseLeave={handleHoverEnd}
+                    onClick={() => setSelectedObject({ type: 'window', data: windowItem, label: 'Window' })}
+                  />
+                </g>
+              )
+            })}
+
+            {/* Doors */}
+            {doors.map((door, idx) => {
+              const id = `door-${idx}`
+              const isHovered = hoveredObject === id
+              const isSelected = selectedObject?.data?.id === door.id
+              const screen = toScreen(door.position.x, door.position.z)
+              const w = door.width_ft * viewConfig.scale
+              const doorColor = isSelected ? '#374151' : isHovered ? '#6b7280' : '#4b5563'
+
+              const nearestWall = findNearestWall(door.position)
+              let wallAngle = 0
+
+              if (nearestWall && nearestWall.start && nearestWall.end) {
+                const wallDx = nearestWall.end.x - nearestWall.start.x
+                const wallDz = nearestWall.end.z - nearestWall.start.z
+                wallAngle = Math.atan2(wallDz, wallDx)
+              }
+
+              const totalAngle = (wallAngle * 180 / Math.PI) + rotation
+
+              return (
+                <g key={id} transform={`rotate(${totalAngle}, ${screen.x}, ${screen.y})`}>
+                  {/* Gap in wall */}
+                  <rect
+                    x={screen.x - w / 2}
+                    y={screen.y - 4}
+                    width={w}
+                    height={8}
+                    fill="#fafafa"
+                    className="pointer-events-none"
+                  />
+                  {/* Door leaf */}
+                  <line
+                    x1={screen.x - w / 2}
+                    y1={screen.y}
+                    x2={screen.x + w / 2 - 2}
+                    y2={screen.y}
+                    stroke={doorColor}
+                    strokeWidth={isSelected ? 3 : isHovered ? 2.5 : 2}
+                    className="cursor-pointer"
+                    style={{ transition: 'all 0.2s ease-out' }}
+                    onMouseEnter={(e) => handleHover(e, id, `Door: ${formatFeetInches(door.width_ft)} wide`)}
+                    onMouseLeave={handleHoverEnd}
+                    onClick={() => setSelectedObject({ type: 'door', data: door, label: 'Door' })}
+                  />
+                  {/* Swing arc */}
+                  <path
+                    d={`M ${screen.x + w / 2 - 2} ${screen.y} A ${w - 2} ${w - 2} 0 0 0 ${screen.x - w / 2} ${screen.y - w + 2}`}
+                    fill="none"
+                    stroke={doorColor}
+                    strokeWidth={1}
+                    strokeDasharray="3,2"
+                    className="pointer-events-none"
+                  />
+                  <circle cx={screen.x - w / 2} cy={screen.y} r="2" fill={doorColor} />
+                </g>
+              )
+            })}
+
+            {/* Room info card */}
+            <g filter="url(#dropShadow)">
+              <rect x="12" y="12" width="110" height="50" fill="white" stroke="#e5e7eb" rx="8" />
+              <text x="20" y="32" fontSize="14" fontWeight="bold" fill="#374151">Kitchen</text>
+              {roomArea && (
+                <text x="20" y="50" fontSize="12" fill="#6b7280">{roomArea} sq ft</text>
+              )}
+            </g>
+
+            {/* Compass indicator */}
+            <g transform={`translate(${viewWidth - 50}, 50)`}>
+              <circle cx="0" cy="0" r="28" fill="white" stroke="#e5e7eb" strokeWidth="1" filter="url(#dropShadow)" />
+              <g transform={`rotate(${-rotation})`}>
+                {/* North arrow */}
+                <polygon points="0,-18 -5,-8 5,-8" fill="#ef4444" />
+                <polygon points="0,18 -5,8 5,8" fill="#9ca3af" />
+                <text x="0" y="-7" textAnchor="middle" fontSize="8" fontWeight="bold" fill="white">N</text>
+              </g>
+              <circle cx="0" cy="0" r="4" fill="#374151" />
+            </g>
+          </svg>
+
+          {/* Hover tooltip */}
+          {tooltipData && (
+            <div
+              className="absolute pointer-events-none z-40 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-xl animate-in fade-in-0 duration-150"
+              style={{
+                left: tooltipData.x,
+                top: tooltipData.y,
+                transform: 'translateX(-50%)'
+              }}
+            >
+              {tooltipData.content}
+              <div
+                className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-3 h-3 bg-gray-900 rotate-45"
+              />
+            </div>
+          )}
+
+          {renderDetailPanel()}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <Card className={className}>

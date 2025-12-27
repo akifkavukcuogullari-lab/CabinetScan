@@ -26,6 +26,8 @@ interface ModelViewerProps {
   title?: string
   description?: string
   compact?: boolean
+  minimal?: boolean      // Clean mode with floating controls for embedded views
+  rotationAngle?: number // Auto-straightening rotation angle in degrees
   onError?: () => void
 }
 
@@ -39,6 +41,8 @@ export function ModelViewer({
   title = '3D Room Scan',
   description = 'Interactive 3D model captured with LiDAR',
   compact = false,
+  minimal = false,
+  rotationAngle = 0,
   onError
 }: ModelViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -156,10 +160,53 @@ export function ModelViewer({
     }
   }
 
-  const viewerHeight = compact ? 'h-64' : 'h-[400px]'
+  const viewerHeight = minimal ? 'h-[60vh] min-h-[400px]' : compact ? 'h-64' : 'h-[400px]'
 
-  // If no GLB available, show fallback with preview image and download
+  // If no GLB available, show fallback with preview image
   if (!glbUrl) {
+    // Minimal mode - clean viewer without Card wrapper
+    if (minimal) {
+      return (
+        <div className={`relative ${className}`} ref={containerRef}>
+          <div
+            ref={viewerContainerRef}
+            className={`relative ${viewerHeight} w-full rounded-lg overflow-hidden bg-gray-50`}
+          >
+            {/* Preview image */}
+            {previewImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={previewImageUrl}
+                alt={alt}
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center">
+                  <Box className="h-16 w-16 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-400 text-sm">No 3D model available</p>
+                </div>
+              </div>
+            )}
+
+            {/* Floating controls */}
+            <div className="absolute top-3 right-3 z-20 flex gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-sm border border-gray-200/50">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={toggleFullscreen}
+                title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              >
+                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // Standard fallback with Card wrapper
     const hasUsdzFile = !!usdzUrl
 
     return (
@@ -268,6 +315,8 @@ export function ModelViewer({
   }
 
   // GLB is available - show full 3D viewer
+  // Apply rotation angle to camera orbit for auto-straightening
+  const initialOrbitAngle = 45 + rotationAngle
   const modelViewerHTML = isScriptLoaded ? `
     <model-viewer
       src="${glbUrl}"
@@ -280,13 +329,12 @@ export function ModelViewer({
       shadow-intensity="1"
       shadow-softness="0.5"
       exposure="1"
-      ${isIOS && usdzUrl ? 'ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed"' : ''}
       environment-image="neutral"
       loading="eager"
       interaction-prompt="auto"
       interaction-prompt-style="wiggle"
       interaction-prompt-threshold="3000"
-      camera-orbit="45deg 55deg auto"
+      camera-orbit="${initialOrbitAngle}deg 55deg auto"
       field-of-view="45deg"
       min-camera-orbit="auto auto auto"
       max-camera-orbit="auto auto auto"
@@ -296,6 +344,69 @@ export function ModelViewer({
     ></model-viewer>
   ` : ''
 
+  // Minimal mode with floating controls and light background
+  if (minimal) {
+    return (
+      <div className={`relative ${className}`} ref={containerRef}>
+        <div
+          ref={viewerContainerRef}
+          className={`relative ${isFullscreen ? 'h-screen w-screen' : viewerHeight + ' w-full'} rounded-lg overflow-hidden bg-gray-50`}
+        >
+          {/* Floating controls */}
+          <div className="absolute top-3 right-3 z-20 flex gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-sm border border-gray-200/50">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={resetCamera}
+              title="Reset camera position"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
+          </div>
+
+          {/* Loading overlay */}
+          {isLoading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/90 z-10">
+              <Loader2 className="h-8 w-8 text-blue-500 animate-spin mb-2" />
+              <p className="text-gray-600 text-sm">Loading 3D Model...</p>
+            </div>
+          )}
+
+          {/* Model viewer container */}
+          {isScriptLoaded && (
+            <div
+              ref={(el) => {
+                if (el) {
+                  modelViewerRef.current = el.querySelector('model-viewer')
+                }
+              }}
+              className="w-full h-full"
+              dangerouslySetInnerHTML={{ __html: modelViewerHTML }}
+            />
+          )}
+
+          {/* Interaction hint - subtle */}
+          {!isLoading && !hasError && (
+            <div className="absolute bottom-3 left-3 z-20 text-xs text-gray-500 bg-white/80 backdrop-blur-sm px-2 py-1 rounded-full border border-gray-200/50">
+              Drag to rotate | Scroll to zoom
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Standard mode with Card wrapper
   return (
     <Card className={className} ref={containerRef}>
       {showTitle && (
