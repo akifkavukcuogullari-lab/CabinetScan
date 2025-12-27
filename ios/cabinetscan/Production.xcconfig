@@ -1,0 +1,13 @@
+// Production Configuration
+// Used for App Store builds from main branch
+
+// Supabase Production Credentials
+SUPABASE_URL = https:/$()/lhldqenpllbfxjkburzr.supabase.co
+SUPABASE_ANON_KEY = sb_secret_seHfh_KkLF2wvyMlz9h66Q_uoW1QIeS
+
+// App Identity
+PRODUCT_BUNDLE_IDENTIFIER = ai.nextlyn.cabinetscan
+PRODUCT_NAME = Cabinet Scan
+
+// Environment Flag
+IS_QA_BUILD = NO
