@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { revalidatePath } from 'next/cache'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -124,6 +125,8 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         reviewed_at: newStatus === 'in_review' ? new Date().toISOString() : undefined,
       })
       .eq('id', id)
+
+    revalidatePath(`/showroom/projects/${id}`)
   }
 
   // Extract scan data
