@@ -12,7 +12,7 @@
 
 /* Begin PBXFileReference section */
 		2AD9A07C2EF50813005EB90A /* cabinetscan.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = cabinetscan.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AE8406E2EFF87F30061E0C9 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		2AE8406E2EFF87F30061E0C9 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Debug.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */

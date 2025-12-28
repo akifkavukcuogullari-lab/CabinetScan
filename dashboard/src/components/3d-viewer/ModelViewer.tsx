@@ -316,7 +316,7 @@ export function ModelViewer({
 
   // GLB is available - show full 3D viewer
   // Apply rotation angle to camera orbit for auto-straightening
-  const initialOrbitAngle = 45 + rotationAngle
+  const initialOrbitAngle = 45 - rotationAngle
   const modelViewerHTML = isScriptLoaded ? `
     <model-viewer
       src="${glbUrl}"
