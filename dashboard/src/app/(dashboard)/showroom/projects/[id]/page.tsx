@@ -6,20 +6,25 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ModelViewer } from '@/components/3d-viewer/ModelViewer'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
 import { InteractiveFloorPlan } from '@/components/floor-plan/InteractiveFloorPlan'
 import { DxfPreview } from '@/components/dxf-preview/DxfPreview'
-import { ProjectSidebar } from '@/components/project/ProjectSidebar'
+import { ProjectSidebarWrapper } from '@/components/project/ProjectSidebarWrapper'
 import { RoomMeasurementsSection } from '@/components/project/RoomMeasurementsSection'
 import { ProductSelectionsSection } from '@/components/project/ProductSelectionsSection'
+import { LockedDxfTab } from '@/components/project/LockedDxfTab'
 import { hasFeature, SubscriptionPlan } from '@/lib/subscription'
 import {
   ArrowLeft,
   Layers,
-  Rotate3d,
   FileCode,
-  Lock,
-  Sparkles
+  FileText,
+  Lock
 } from 'lucide-react'
 import { WebhookPayloadViewer } from '@/components/webhook/WebhookPayloadViewer'
 import { QuoteEmailSection } from '@/components/quote/QuoteEmailSection'
@@ -51,11 +56,9 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     .eq('id', showroomUser.showroom_id)
     .single()
 
-  // Check if 3D viewer is available based on plan
-  // Trial users get Pro features, so check if trial is active
-  const isTrial = showroom?.subscription_status === 'trial'
-  const can3DView = isTrial || hasFeature(showroom?.subscription_plan as SubscriptionPlan | null, 'viewer3D')
-  const canExportDxf = isTrial || hasFeature(showroom?.subscription_plan as SubscriptionPlan | null, 'autocadExport')
+  // Check if DXF export is available based on plan
+  const hasAutocadExport = hasFeature(showroom?.subscription_plan as SubscriptionPlan | null, 'autocadExport')
+  const canExportDxf = hasAutocadExport
 
   // Get project with measurements and selections
   const { data: project, error } = await supabase
@@ -122,42 +125,38 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     revalidatePath(`/showroom/projects/${id}`)
   }
 
-  // Extract scan data
-  const measurement = measurements && measurements.length > 0 ? measurements[0] : null
-  const hasGlbFile = measurement?.glb_file_url
-  const hasUsdzFile = measurement?.usdz_file_url
-  const hasFloorPlanData = measurement?.measurements?.walls?.length > 0 || measurement?.measurements?.room
-  const has3DModel = hasGlbFile || hasUsdzFile
-  const hasScanData = has3DModel || hasFloorPlanData
+  const createQuote = async () => {
+    'use server'
 
-  // Calculate dominant angle from walls to auto-straighten all views
-  const calculateDominantAngle = () => {
-    const walls = measurement?.measurements?.walls
-    if (!walls || walls.length === 0) return 0
-
-    // Find the longest wall
-    let longestWall = null
-    let maxLength = 0
-    for (const wall of walls) {
-      if (wall.linear_ft > maxLength) {
-        maxLength = wall.linear_ft
-        longestWall = wall
+    // Call the Edge Function to generate the quote email
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/generate-quote-email`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ project_id: id })
       }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      console.error('Failed to generate quote:', error)
+      throw new Error('Failed to generate quote email')
     }
 
-    if (!longestWall?.start || !longestWall?.end) return 0
-
-    // Calculate angle and snap to nearest 90 degrees
-    const dx = longestWall.end.x - longestWall.start.x
-    const dz = longestWall.end.z - longestWall.start.z
-    const angle = Math.atan2(dz, dx) * (180 / Math.PI)
-    const snapped = Math.round(angle / 90) * 90
-    return snapped - angle
+    revalidatePath(`/showroom/projects/${id}`)
   }
-  const dominantAngle = calculateDominantAngle()
+
+  // Extract scan data
+  const measurement = measurements && measurements.length > 0 ? measurements[0] : null
+  const hasFloorPlanData = measurement?.measurements?.walls?.length > 0 || measurement?.measurements?.room
+  const hasScanData = hasFloorPlanData
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-full space-y-6">
       {/* Header - Compact */}
       <div className="flex items-center gap-4">
         <Link href="/showroom/projects">
@@ -181,189 +180,40 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
       </div>
 
       {/* Two-Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 max-w-full overflow-hidden">
         {/* Left Column - Main Content */}
-        <div className="space-y-4">
-          {/* Unified Viewer with Tabs */}
+        <div className="space-y-4 min-w-0">
+          {/* Floor Plan Viewer */}
           {hasScanData ? (
             <Card className="overflow-hidden">
-              {/* Three-tab viewer: 2D, 3D, DXF */}
-              {has3DModel && hasFloorPlanData && can3DView ? (
-                <Tabs defaultValue="2d" className="w-full">
-                  <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50/50">
-                    <TabsList>
-                      <TabsTrigger value="2d" className="gap-2">
-                        <Layers className="h-4 w-4" />
-                        2D Floor Plan
+              <Tabs defaultValue="2d" className="w-full">
+                <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50/50">
+                  <TabsList>
+                    <TabsTrigger value="2d" className="gap-2">
+                      <Layers className="h-4 w-4" />
+                      2D Floor Plan
+                    </TabsTrigger>
+                    {canExportDxf ? (
+                      <TabsTrigger value="dxf" className="gap-2">
+                        <FileCode className="h-4 w-4" />
+                        DXF Preview
                       </TabsTrigger>
-                      <TabsTrigger value="3d" className="gap-2">
-                        <Rotate3d className="h-4 w-4" />
-                        3D Model
-                      </TabsTrigger>
-                      {canExportDxf && (
-                        <TabsTrigger value="dxf" className="gap-2">
-                          <FileCode className="h-4 w-4" />
-                          DXF Preview
-                        </TabsTrigger>
-                      )}
-                    </TabsList>
-                  </div>
+                    ) : (
+                      <LockedDxfTab />
+                    )}
+                  </TabsList>
+                </div>
 
-                  <TabsContent value="2d" className="m-0">
-                    <InteractiveFloorPlan measurements={measurement?.measurements} minimal />
+                <TabsContent value="2d" className="m-0">
+                  <InteractiveFloorPlan measurements={measurement?.measurements} minimal />
+                </TabsContent>
+
+                {canExportDxf && (
+                  <TabsContent value="dxf" className="m-0">
+                    <DxfPreview measurements={measurement?.measurements} />
                   </TabsContent>
-
-                  <TabsContent value="3d" className="m-0">
-                    <ModelViewer
-                      glbUrl={measurement?.glb_file_url}
-                      usdzUrl={measurement?.usdz_file_url}
-                      previewImageUrl={measurement?.preview_image_url}
-                      rotationAngle={dominantAngle}
-                      minimal
-                    />
-                  </TabsContent>
-
-                  {canExportDxf && (
-                    <TabsContent value="dxf" className="m-0">
-                      <DxfPreview measurements={measurement?.measurements} />
-                    </TabsContent>
-                  )}
-                </Tabs>
-              ) : has3DModel && hasFloorPlanData && !can3DView ? (
-                // Both available but user can't view 3D - show 2D with tabs including DXF
-                <Tabs defaultValue="2d" className="w-full">
-                  <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50/50">
-                    <TabsList>
-                      <TabsTrigger value="2d" className="gap-2">
-                        <Layers className="h-4 w-4" />
-                        2D Floor Plan
-                      </TabsTrigger>
-                      <TabsTrigger value="3d" className="gap-2" disabled>
-                        <Lock className="h-3 w-3 mr-1" />
-                        3D Model
-                        <Badge variant="secondary" className="ml-1 text-xs py-0 px-1">Pro</Badge>
-                      </TabsTrigger>
-                      {canExportDxf && (
-                        <TabsTrigger value="dxf" className="gap-2">
-                          <FileCode className="h-4 w-4" />
-                          DXF Preview
-                        </TabsTrigger>
-                      )}
-                    </TabsList>
-                  </div>
-
-                  <TabsContent value="2d" className="m-0">
-                    <InteractiveFloorPlan measurements={measurement?.measurements} minimal />
-                  </TabsContent>
-
-                  <TabsContent value="3d" className="m-0">
-                    <CardContent className="py-12">
-                      <div className="flex flex-col items-center text-center">
-                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
-                          <Rotate3d className="h-8 w-8 text-blue-600" />
-                        </div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="text-lg font-medium">3D Model Available</h3>
-                          <Badge variant="secondary" className="gap-1">
-                            <Lock className="h-3 w-3" />
-                            Pro
-                          </Badge>
-                        </div>
-                        <p className="text-gray-600 max-w-md mb-4">
-                          Upgrade to Pro to view the interactive 3D model captured with LiDAR technology.
-                        </p>
-                        <Link href="/showroom/billing">
-                          <Button className="gap-2">
-                            <Sparkles className="h-4 w-4" />
-                            Upgrade to Pro
-                          </Button>
-                        </Link>
-                      </div>
-                    </CardContent>
-                  </TabsContent>
-
-                  {canExportDxf && (
-                    <TabsContent value="dxf" className="m-0">
-                      <DxfPreview measurements={measurement?.measurements} />
-                    </TabsContent>
-                  )}
-                </Tabs>
-              ) : has3DModel && can3DView ? (
-                // Only 3D model file available and user can view
-                <Tabs defaultValue="3d" className="w-full">
-                  <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50/50">
-                    <TabsList>
-                      <TabsTrigger value="3d" className="gap-2">
-                        <Rotate3d className="h-4 w-4" />
-                        3D Model
-                      </TabsTrigger>
-                    </TabsList>
-                  </div>
-
-                  <TabsContent value="3d" className="m-0">
-                    <ModelViewer
-                      glbUrl={measurement?.glb_file_url}
-                      usdzUrl={measurement?.usdz_file_url}
-                      previewImageUrl={measurement?.preview_image_url}
-                      rotationAngle={dominantAngle}
-                      minimal
-                    />
-                  </TabsContent>
-                </Tabs>
-              ) : has3DModel && !can3DView ? (
-                // Only 3D model available but user can't view
-                <CardContent className="py-12">
-                  <div className="flex flex-col items-center text-center">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
-                      <Rotate3d className="h-8 w-8 text-blue-600" />
-                    </div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="text-lg font-medium">3D Model Available</h3>
-                      <Badge variant="secondary" className="gap-1">
-                        <Lock className="h-3 w-3" />
-                        Pro
-                      </Badge>
-                    </div>
-                    <p className="text-gray-600 max-w-md mb-4">
-                      Upgrade to Pro to view the interactive 3D model captured with LiDAR technology.
-                    </p>
-                    <Link href="/showroom/billing">
-                      <Button className="gap-2">
-                        <Sparkles className="h-4 w-4" />
-                        Upgrade to Pro
-                      </Button>
-                    </Link>
-                  </div>
-                </CardContent>
-              ) : hasFloorPlanData ? (
-                // Only 2D floor plan data available
-                <Tabs defaultValue="2d" className="w-full">
-                  <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50/50">
-                    <TabsList>
-                      <TabsTrigger value="2d" className="gap-2">
-                        <Layers className="h-4 w-4" />
-                        2D Floor Plan
-                      </TabsTrigger>
-                      {canExportDxf && (
-                        <TabsTrigger value="dxf" className="gap-2">
-                          <FileCode className="h-4 w-4" />
-                          DXF Preview
-                        </TabsTrigger>
-                      )}
-                    </TabsList>
-                  </div>
-
-                  <TabsContent value="2d" className="m-0">
-                    <InteractiveFloorPlan measurements={measurement?.measurements} minimal />
-                  </TabsContent>
-
-                  {canExportDxf && (
-                    <TabsContent value="dxf" className="m-0">
-                      <DxfPreview measurements={measurement?.measurements} />
-                    </TabsContent>
-                  )}
-                </Tabs>
-              ) : null}
+                )}
+              </Tabs>
             </Card>
           ) : (
             // No scan data available
@@ -371,7 +221,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
               <CardContent className="py-12">
                 <div className="flex flex-col items-center justify-center text-center">
                   <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-                    <Rotate3d className="h-8 w-8 text-gray-400" />
+                    <Layers className="h-8 w-8 text-gray-400" />
                   </div>
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No Scan Data Available</h3>
                   <p className="text-gray-500 max-w-md">
@@ -392,7 +242,10 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
 
             {/* Quote Email Preview */}
             {quoteEmail && (
-              <QuoteEmailSection quoteEmail={quoteEmail} />
+              <QuoteEmailSection
+                quoteEmail={quoteEmail}
+                currentPlan={showroom?.subscription_plan as SubscriptionPlan | null}
+              />
             )}
 
             {/* Webhook Payload */}
@@ -402,19 +255,30 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
 
             {/* Customer Notes */}
             {project.project_notes && (
-              <Card>
-                <CardContent className="py-4">
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">Customer Notes</h3>
-                  <p className="text-gray-600">{project.project_notes}</p>
-                </CardContent>
-              </Card>
+              <Accordion type="single" collapsible>
+                <AccordionItem value="notes" className="border rounded-lg px-4">
+                  <AccordionTrigger className="hover:no-underline py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <FileText className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div className="text-left">
+                        <h3 className="font-semibold text-gray-900">Customer Notes</h3>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-1 pb-4">
+                    <p className="text-gray-600 whitespace-pre-wrap">{project.project_notes}</p>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             )}
           </div>
         </div>
 
         {/* Right Column - Sidebar */}
-        <div className="lg:sticky lg:top-6 lg:self-start">
-          <ProjectSidebar
+        <div className="lg:sticky lg:top-6 lg:self-start min-w-0">
+          <ProjectSidebarWrapper
             project={project}
             measurement={measurement}
             canExportDxf={canExportDxf}
@@ -424,6 +288,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
               formData.set('status', status)
               await updateStatus(formData)
             }}
+            onCreateQuote={createQuote}
           />
         </div>
       </div>

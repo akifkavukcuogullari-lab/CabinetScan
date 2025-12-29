@@ -3,22 +3,20 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
+import { LockedFeature } from '@/components/subscription/LockedFeature'
+import { hasFeature, SubscriptionPlan } from '@/lib/subscription'
 import {
   User,
   Mail,
   Phone,
-  Calendar,
   Download,
   Video,
   FileCode,
   FileBox,
   Image,
-  FileText,
   Send,
-  CheckCircle,
-  Clock,
-  ChevronDown
+  ChevronDown,
+  Sparkles
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -58,8 +56,10 @@ interface ProjectSidebarProps {
   project: Project
   measurement?: Measurement | null
   canExportDxf?: boolean
+  currentPlan?: SubscriptionPlan | null
   onStatusChange?: (status: string) => void
-  onSendQuote?: () => void
+  onCreateQuote?: () => void
+  onVisualizeKitchen?: () => void
   className?: string
 }
 
@@ -72,39 +72,21 @@ const statusOptions = [
   { value: 'completed', label: 'Completed', color: 'bg-green-100 text-green-800' },
 ]
 
-function formatDate(dateString?: string): string {
-  if (!dateString) return '-'
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
-}
-
-function formatRelativeTime(dateString?: string): string {
-  if (!dateString) return ''
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-  if (diffDays === 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7) return `${diffDays} days ago`
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
-  return `${Math.floor(diffDays / 30)} months ago`
-}
-
 export function ProjectSidebar({
   project,
   measurement,
   canExportDxf = true,
+  currentPlan = null,
   onStatusChange,
-  onSendQuote,
+  onCreateQuote,
+  onVisualizeKitchen,
   className = ''
 }: ProjectSidebarProps) {
   const currentStatus = statusOptions.find(s => s.value === project.status) || statusOptions[0]
+
+  // Check feature access
+  const hasAutocadExport = hasFeature(currentPlan, 'autocadExport')
+  const hasAiAgent = hasFeature(currentPlan, 'aiAgent')
 
   const hasGlbFile = measurement?.glb_file_url
   const hasUsdzFile = measurement?.usdz_file_url
@@ -115,15 +97,15 @@ export function ProjectSidebar({
   const hasDownloadableFiles = hasGlbFile || hasUsdzFile || hasVideoFile || hasVisualizationPhotos || hasFloorPlanData
 
   return (
-    <div className={`space-y-4 ${className}`}>
+    <div className={`space-y-3 ${className}`}>
       {/* Customer Information */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium text-gray-500 uppercase tracking-wider">
+      <Card className="py-0 gap-0">
+        <CardHeader className="px-3 pt-3 pb-1">
+          <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wider">
             Customer
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-2 px-3 pb-3">
           <div className="flex items-center gap-3">
             <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
               <User className="h-5 w-5 text-blue-600" />
@@ -158,13 +140,13 @@ export function ProjectSidebar({
       </Card>
 
       {/* Status */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium text-gray-500 uppercase tracking-wider">
+      <Card className="py-0 gap-0">
+        <CardHeader className="px-3 pt-3 pb-1">
+          <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wider">
             Status
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 pb-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="w-full justify-between">
@@ -191,86 +173,32 @@ export function ProjectSidebar({
         </CardContent>
       </Card>
 
-      {/* Timeline */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium text-gray-500 uppercase tracking-wider">
-            Timeline
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mt-0.5">
-                <Clock className="h-3 w-3 text-blue-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">Submitted</p>
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <span>{formatDate(project.submitted_at)}</span>
-                  <span className="text-gray-300">|</span>
-                  <span>{formatRelativeTime(project.submitted_at)}</span>
-                </div>
-              </div>
-            </div>
-            {project.reviewed_at && (
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-yellow-100 flex items-center justify-center mt-0.5">
-                  <Calendar className="h-3 w-3 text-yellow-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">Reviewed</p>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <span>{formatDate(project.reviewed_at)}</span>
-                    <span className="text-gray-300">|</span>
-                    <span>{formatRelativeTime(project.reviewed_at)}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            {project.completed_at && (
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-green-100 flex items-center justify-center mt-0.5">
-                  <CheckCircle className="h-3 w-3 text-green-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">Completed</p>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <span>{formatDate(project.completed_at)}</span>
-                    <span className="text-gray-300">|</span>
-                    <span>{formatRelativeTime(project.completed_at)}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Downloads */}
       {hasDownloadableFiles && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-500 uppercase tracking-wider">
+        <Card className="py-0 gap-0">
+          <CardHeader className="px-3 pt-3 pb-1">
+            <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wider">
               Downloads
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {hasFloorPlanData && canExportDxf && (
-              <a
-                href={`/api/export/dxf?project_id=${project.id}`}
-                download={`${project.reference_number || project.id}.dxf`}
-                className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
-              >
-                <div className="flex-shrink-0 w-8 h-8 rounded bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                  <FileCode className="h-4 w-4 text-blue-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">DXF Floor Plan</p>
-                  <p className="text-xs text-gray-500">AutoCAD format</p>
-                </div>
-                <Download className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
-              </a>
+          <CardContent className="space-y-2 px-3 pb-3">
+            {hasFloorPlanData && (
+              <LockedFeature feature="autocadExport" isLocked={!hasAutocadExport}>
+                <a
+                  href={hasAutocadExport ? `/api/export/dxf?project_id=${project.id}` : '#'}
+                  download={hasAutocadExport ? `${project.reference_number || project.id}.dxf` : undefined}
+                  className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
+                >
+                  <div className="flex-shrink-0 w-8 h-8 rounded bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                    <FileCode className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">DXF Floor Plan</p>
+                    <p className="text-xs text-gray-500">AutoCAD format</p>
+                  </div>
+                  <Download className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+                </a>
+              </LockedFeature>
             )}
             {hasVideoFile && (
               <a
@@ -340,29 +268,37 @@ export function ProjectSidebar({
       )}
 
       {/* Quick Actions */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium text-gray-500 uppercase tracking-wider">
+      <Card className="py-0 gap-0">
+        <CardHeader className="px-3 pt-3 pb-1">
+          <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wider">
             Quick Actions
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <Button
-            className="w-full justify-start gap-2"
-            variant="outline"
-            onClick={onSendQuote}
-          >
-            <Send className="h-4 w-4" />
-            Send Quote Email
-          </Button>
-          <Button
-            className="w-full justify-start gap-2"
-            variant="outline"
-            onClick={() => onStatusChange?.('completed')}
-          >
-            <CheckCircle className="h-4 w-4" />
-            Mark as Completed
-          </Button>
+        <CardContent className="space-y-2 px-3 pb-3">
+          <LockedFeature feature="aiAgent" isLocked={!hasAiAgent}>
+            <Button
+              className="w-full justify-start gap-2"
+              variant="outline"
+              onClick={hasAiAgent ? onCreateQuote : undefined}
+              disabled={!hasAiAgent}
+            >
+              <Send className="h-4 w-4" />
+              Create Quote
+            </Button>
+          </LockedFeature>
+          <LockedFeature feature="aiAgent" isLocked={!hasAiAgent}>
+            <Button
+              className="w-full justify-start gap-2 bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100 border-purple-200"
+              variant="outline"
+              onClick={hasAiAgent ? onVisualizeKitchen : undefined}
+              disabled={!hasAiAgent}
+            >
+              <Sparkles className="h-4 w-4 text-purple-600" />
+              <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent font-medium">
+                Visualize Kitchen
+              </span>
+            </Button>
+          </LockedFeature>
         </CardContent>
       </Card>
 

@@ -66,7 +66,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     autocadExport: true,
     prioritySupport: true,
     crmIntegration: false,
-    aiAgent: false,
+    aiAgent: true,
     customBranding: true,
     viewer3D: true,
   },
@@ -202,15 +202,11 @@ export const featureNames: Record<keyof PlanFeatures, string> = {
 export function getRequiredPlanForFeature(
   feature: keyof PlanFeatures
 ): SubscriptionPlan | null {
-  // Check plans in order from cheapest to most expensive
-  const plansInOrder: SubscriptionPlan[] = ['trial', 'basic', 'pro', 'enterprise']
+  // Check paid plans only (skip trial)
+  const plansInOrder: SubscriptionPlan[] = ['basic', 'pro', 'enterprise']
 
   for (const plan of plansInOrder) {
     if (hasFeature(plan, feature)) {
-      // For trial, we want to suggest basic as the paid option
-      if (plan === 'trial') {
-        return 'basic'
-      }
       return plan
     }
   }
