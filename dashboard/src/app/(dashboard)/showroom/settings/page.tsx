@@ -376,7 +376,15 @@ export default function SettingsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setIsEditingInfo(true)}
+                onClick={() => {
+                  // Ensure fields are populated with current data
+                  setShowroomName(showroom?.name || '')
+                  setShowroomCode(showroom?.showroom_code || '')
+                  setShowroomEmail(showroom?.email || '')
+                  setShowroomPhone(showroom?.phone || '')
+                  setInfoError(null)
+                  setIsEditingInfo(true)
+                }}
               >
                 <Edit2 className="h-4 w-4 mr-2" />
                 Edit
