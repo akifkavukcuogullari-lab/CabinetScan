@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Building2, Mail, CheckCircle2, Clock, Users } from 'lucide-react'
+import { Plus, Building2, Mail, CheckCircle2, Clock, Users, FolderKanban, HardDrive } from 'lucide-react'
 import Link from 'next/link'
 
 interface ShowroomWithStats {
@@ -23,14 +23,18 @@ interface ShowroomWithStats {
   user_count: number
   pending_invitations: number
   has_owner: boolean
+  total_projects: number
+  projects_last_month: number
+  total_storage_bytes: number
+  storage_last_month_bytes: number
 }
 
 export default async function ShowroomsPage() {
   const supabase = await createClient()
 
-  // Fetch showrooms with related counts
+  // Fetch showrooms with usage metrics from the view
   const { data: showrooms, error } = await supabase
-    .from('showrooms')
+    .from('showroom_usage_summary')
     .select('*')
     .order('created_at', { ascending: false })
 
@@ -69,6 +73,10 @@ export default async function ShowroomsPage() {
       email: string
       subscription_status: string
       created_at: string
+      total_projects: number
+      projects_last_month: number
+      total_storage_bytes: number
+      storage_last_month_bytes: number
     }) => ({
       ...showroom,
       user_count: userCountMap[showroom.id] || 0,
@@ -110,6 +118,11 @@ export default async function ShowroomsPage() {
     }
   }
 
+  const formatStorageGB = (bytes: number) => {
+    const gb = bytes / (1024 * 1024 * 1024)
+    return gb.toFixed(2)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -140,6 +153,18 @@ export default async function ShowroomsPage() {
                 <TableHead>Code</TableHead>
                 <TableHead>Owner Status</TableHead>
                 <TableHead>Subscription</TableHead>
+                <TableHead className="text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <FolderKanban className="h-4 w-4" />
+                    <span>Projects</span>
+                  </div>
+                </TableHead>
+                <TableHead className="text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <HardDrive className="h-4 w-4" />
+                    <span>Storage (GB)</span>
+                  </div>
+                </TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -173,6 +198,24 @@ export default async function ShowroomsPage() {
                     <Badge className={statusColors[showroom.subscription_status]}>
                       {showroom.subscription_status}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-center">
+                      <div className="font-medium text-sm">{showroom.total_projects}</div>
+                      <div className="text-xs text-gray-500">
+                        {showroom.projects_last_month} last mo
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-center">
+                      <div className="font-medium text-sm">
+                        {formatStorageGB(showroom.total_storage_bytes)}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {formatStorageGB(showroom.storage_last_month_bytes)} last mo
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell>
                     {new Date(showroom.created_at).toLocaleDateString()}
