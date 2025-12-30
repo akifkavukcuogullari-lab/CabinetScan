@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
-import { Webhook, CheckCircle, AlertCircle, Loader2, Lock, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
+import { Webhook, CheckCircle, AlertCircle, Loader2, Lock, Sparkles, ChevronDown, ChevronUp, Edit2, RefreshCw, Save, X } from 'lucide-react'
 import Link from 'next/link'
 
 interface Category {
@@ -55,6 +55,16 @@ export default function SettingsPage() {
   const [showWebhookExample, setShowWebhookExample] = useState(false)
   const [showQuoteWebhookExample, setShowQuoteWebhookExample] = useState(false)
 
+  // Showroom info editing state
+  const [isEditingInfo, setIsEditingInfo] = useState(false)
+  const [showroomName, setShowroomName] = useState('')
+  const [showroomCode, setShowroomCode] = useState('')
+  const [showroomEmail, setShowroomEmail] = useState('')
+  const [showroomPhone, setShowroomPhone] = useState('')
+  const [infoSaving, setInfoSaving] = useState(false)
+  const [infoError, setInfoError] = useState<string | null>(null)
+  const [infoSuccess, setInfoSuccess] = useState(false)
+
   useEffect(() => {
     async function loadData() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -81,6 +91,11 @@ export default function SettingsPage() {
         setShowroom(showroomData)
         setWebhookUrl(showroomData.webhook_url || '')
         setQuoteWebhookUrl(showroomData.quote_webhook_url || '')
+        // Initialize edit form
+        setShowroomName(showroomData.name || '')
+        setShowroomCode(showroomData.showroom_code || '')
+        setShowroomEmail(showroomData.email || '')
+        setShowroomPhone(showroomData.phone || '')
       }
 
       // Load all categories
@@ -227,6 +242,113 @@ export default function SettingsPage() {
     }
   }
 
+  const generateShowroomCode = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Exclude confusing chars (0, O, 1, I)
+    let code = ''
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    setShowroomCode(code)
+    setInfoError(null)
+  }
+
+  const validateShowroomCode = (code: string): boolean => {
+    // Must be 6 characters, uppercase letters and numbers only
+    const pattern = /^[A-Z0-9]{6}$/
+    return pattern.test(code)
+  }
+
+  const checkCodeUnique = async (code: string): Promise<boolean> => {
+    if (!showroomId) return false
+
+    const { data } = await supabase
+      .from('showrooms')
+      .select('id')
+      .eq('showroom_code', code)
+      .neq('id', showroomId)
+      .single()
+
+    return !data // Code is unique if no data returned
+  }
+
+  const saveShowroomInfo = async () => {
+    if (!showroomId) return
+
+    // Validate required fields
+    if (!showroomName.trim()) {
+      setInfoError('Showroom name is required')
+      return
+    }
+
+    if (!showroomCode.trim()) {
+      setInfoError('Showroom code is required')
+      return
+    }
+
+    if (!showroomEmail.trim()) {
+      setInfoError('Email is required')
+      return
+    }
+
+    // Validate code format
+    const upperCode = showroomCode.toUpperCase()
+    if (!validateShowroomCode(upperCode)) {
+      setInfoError('Showroom code must be 6 characters (letters and numbers only)')
+      return
+    }
+
+    // Check if code changed and if it's unique
+    if (upperCode !== showroom?.showroom_code) {
+      const isUnique = await checkCodeUnique(upperCode)
+      if (!isUnique) {
+        setInfoError('This showroom code is already in use. Please choose another.')
+        return
+      }
+    }
+
+    setInfoSaving(true)
+    setInfoError(null)
+    setInfoSuccess(false)
+
+    const { error } = await supabase
+      .from('showrooms')
+      .update({
+        name: showroomName.trim(),
+        showroom_code: upperCode,
+        email: showroomEmail.trim(),
+        phone: showroomPhone.trim() || null,
+      })
+      .eq('id', showroomId)
+
+    setInfoSaving(false)
+
+    if (error) {
+      setInfoError('Failed to save showroom information')
+    } else {
+      // Update local state
+      setShowroom({
+        ...showroom,
+        name: showroomName.trim(),
+        showroom_code: upperCode,
+        email: showroomEmail.trim(),
+        phone: showroomPhone.trim() || null,
+      })
+      setShowroomCode(upperCode) // Update to uppercase
+      setInfoSuccess(true)
+      setIsEditingInfo(false)
+      setTimeout(() => setInfoSuccess(false), 3000)
+    }
+  }
+
+  const cancelEditInfo = () => {
+    setShowroomName(showroom?.name || '')
+    setShowroomCode(showroom?.showroom_code || '')
+    setShowroomEmail(showroom?.email || '')
+    setShowroomPhone(showroom?.phone || '')
+    setInfoError(null)
+    setIsEditingInfo(false)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -245,46 +367,188 @@ export default function SettingsPage() {
       {/* Showroom Info */}
       <Card>
         <CardHeader>
-          <CardTitle>Showroom Information</CardTitle>
-          <CardDescription>Your showroom details</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Showroom Information</CardTitle>
+              <CardDescription>Your showroom details</CardDescription>
+            </div>
+            {!isEditingInfo && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditingInfo(true)}
+              >
+                <Edit2 className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="text-gray-500">Showroom Name</Label>
-              <p className="font-medium">{showroom?.name}</p>
-            </div>
-            <div>
-              <Label className="text-gray-500">Showroom Code</Label>
-              <p className="font-mono text-lg font-bold">{showroom?.showroom_code}</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="text-gray-500">Email</Label>
-              <p>{showroom?.email}</p>
-            </div>
-            <div>
-              <Label className="text-gray-500">Phone</Label>
-              <p>{showroom?.phone || '-'}</p>
-            </div>
-          </div>
-          <div>
-            <Label className="text-gray-500">Subscription Status</Label>
-            <div className="mt-1">
-              <Badge
-                className={
-                  showroom?.subscription_status === 'active'
-                    ? 'bg-green-100 text-green-800'
-                    : showroom?.subscription_status === 'trial'
-                    ? 'bg-yellow-100 text-yellow-800'
-                    : 'bg-gray-100 text-gray-800'
-                }
-              >
-                {showroom?.subscription_status}
-              </Badge>
-            </div>
-          </div>
+          {isEditingInfo ? (
+            <>
+              {/* Edit Mode */}
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="showroom-name">Showroom Name</Label>
+                  <Input
+                    id="showroom-name"
+                    value={showroomName}
+                    onChange={(e) => {
+                      setShowroomName(e.target.value)
+                      setInfoError(null)
+                    }}
+                    placeholder="Enter showroom name"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="showroom-code">Showroom Code</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="showroom-code"
+                      value={showroomCode}
+                      onChange={(e) => {
+                        setShowroomCode(e.target.value.toUpperCase())
+                        setInfoError(null)
+                      }}
+                      placeholder="6 characters (letters/numbers)"
+                      maxLength={6}
+                      className="font-mono text-lg"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={generateShowroomCode}
+                      title="Generate new code"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    This code is used in the iOS app. Changing it will require customers to use the new code.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="showroom-email">Email</Label>
+                    <Input
+                      id="showroom-email"
+                      type="email"
+                      value={showroomEmail}
+                      onChange={(e) => {
+                        setShowroomEmail(e.target.value)
+                        setInfoError(null)
+                      }}
+                      placeholder="showroom@example.com"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="showroom-phone">Phone</Label>
+                    <Input
+                      id="showroom-phone"
+                      type="tel"
+                      value={showroomPhone}
+                      onChange={(e) => {
+                        setShowroomPhone(e.target.value)
+                        setInfoError(null)
+                      }}
+                      placeholder="(555) 123-4567"
+                    />
+                  </div>
+                </div>
+
+                {infoError && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    {infoError}
+                  </div>
+                )}
+
+                {infoSuccess && (
+                  <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+                    <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                    Showroom information updated successfully
+                  </div>
+                )}
+
+                <div className="flex gap-2 justify-end pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={cancelEditInfo}
+                    disabled={infoSaving}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={saveShowroomInfo}
+                    disabled={infoSaving}
+                  >
+                    {infoSaving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Display Mode */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-gray-500">Showroom Name</Label>
+                  <p className="font-medium">{showroom?.name}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-500">Showroom Code</Label>
+                  <p className="font-mono text-lg font-bold">{showroom?.showroom_code}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-gray-500">Email</Label>
+                  <p>{showroom?.email}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-500">Phone</Label>
+                  <p>{showroom?.phone || '-'}</p>
+                </div>
+              </div>
+              <div>
+                <Label className="text-gray-500">Subscription Status</Label>
+                <div className="mt-1">
+                  <Badge
+                    className={
+                      showroom?.subscription_status === 'active'
+                        ? 'bg-green-100 text-green-800'
+                        : showroom?.subscription_status === 'trial'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }
+                  >
+                    {showroom?.subscription_status}
+                  </Badge>
+                </div>
+              </div>
+
+              {infoSuccess && (
+                <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+                  <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                  Showroom information updated successfully
+                </div>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 
