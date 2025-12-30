@@ -3,10 +3,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, Package } from 'lucide-react'
+import { Plus, Package, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
+import { CustomAddons } from '@/components/products/CustomAddons'
 
 export default async function ProductsPage() {
   const supabase = await createClient()
@@ -86,6 +87,10 @@ export default async function ProductsPage() {
                 {category.name}
               </TabsTrigger>
             ))}
+            <TabsTrigger value="custom-addons">
+              <Sparkles className="h-4 w-4 mr-1.5" />
+              Custom Addon Items
+            </TabsTrigger>
           </TabsList>
 
           {categories.map((category: any) => (
@@ -169,6 +174,11 @@ export default async function ProductsPage() {
               )}
             </TabsContent>
           ))}
+
+          {/* Custom Addon Items Tab */}
+          <TabsContent value="custom-addons">
+            <CustomAddons showroomId={showroomUser.showroom_id} />
+          </TabsContent>
         </Tabs>
       ) : (
         <Card>

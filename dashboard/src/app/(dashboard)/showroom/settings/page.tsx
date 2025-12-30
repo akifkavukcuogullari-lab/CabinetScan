@@ -10,16 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
-import { Webhook, CheckCircle, AlertCircle, Loader2, Lock, Sparkles, ChevronDown, ChevronUp, Edit2, RefreshCw, Save, X, Plus, Trash2 } from 'lucide-react'
+import { Webhook, CheckCircle, AlertCircle, Loader2, Lock, Sparkles, ChevronDown, ChevronUp, Edit2, RefreshCw, Save, X } from 'lucide-react'
 import Link from 'next/link'
-import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 
 interface Category {
   id: string
@@ -36,17 +28,6 @@ interface ShowroomCategory {
   display_order: number
   is_required: boolean
   custom_name: string | null
-}
-
-interface ShowroomAddon {
-  id: string
-  showroom_id: string
-  question: string
-  description: string | null
-  unit: string
-  is_enabled: boolean
-  display_order: number
-  price_per_unit: number | null
 }
 
 export default function SettingsPage() {
@@ -73,16 +54,6 @@ export default function SettingsPage() {
   const [quoteWebhookError, setQuoteWebhookError] = useState<string | null>(null)
   const [showWebhookExample, setShowWebhookExample] = useState(false)
   const [showQuoteWebhookExample, setShowQuoteWebhookExample] = useState(false)
-
-  // Custom addons state
-  const [addons, setAddons] = useState<ShowroomAddon[]>([])
-  const [isAddingAddon, setIsAddingAddon] = useState(false)
-  const [newAddonQuestion, setNewAddonQuestion] = useState('')
-  const [newAddonDescription, setNewAddonDescription] = useState('')
-  const [newAddonUnit, setNewAddonUnit] = useState('pieces')
-  const [newAddonPrice, setNewAddonPrice] = useState('')
-  const [addonSaving, setAddonSaving] = useState(false)
-  const [addonError, setAddonError] = useState<string | null>(null)
 
   // Showroom info editing state
   const [isEditingInfo, setIsEditingInfo] = useState(false)
@@ -143,34 +114,6 @@ export default function SettingsPage() {
         .eq('showroom_id', showroomUser.showroom_id)
 
       if (showroomCategoriesData) setShowroomCategories(showroomCategoriesData)
-
-      // Load custom addons
-      const { data: addonsData } = await supabase
-        .from('showroom_addons')
-        .select('*')
-        .eq('showroom_id', showroomUser.showroom_id)
-        .order('display_order')
-
-      if (addonsData) {
-        setAddons(addonsData)
-      } else {
-        // Create default addon if none exist
-        const { data: defaultAddon } = await supabase
-          .from('showroom_addons')
-          .insert({
-            showroom_id: showroomUser.showroom_id,
-            question: 'Add trash can?',
-            description: 'Include a pull-out trash can system',
-            unit: 'pieces',
-            is_enabled: true,
-            display_order: 0,
-            price_per_unit: 150.00
-          })
-          .select()
-          .single()
-
-        if (defaultAddon) setAddons([defaultAddon])
-      }
 
       setLoading(false)
     }
@@ -440,70 +383,6 @@ export default function SettingsPage() {
     setShowroomPhone(showroom?.phone || '')
     setInfoError(null)
     setIsEditingInfo(false)
-  }
-
-  // Custom addon management functions
-  const addNewAddon = async () => {
-    if (!showroomId) return
-
-    if (!newAddonQuestion.trim()) {
-      setAddonError('Question is required')
-      return
-    }
-
-    setAddonSaving(true)
-    setAddonError(null)
-
-    const { data, error } = await supabase
-      .from('showroom_addons')
-      .insert({
-        showroom_id: showroomId,
-        question: newAddonQuestion.trim(),
-        description: newAddonDescription.trim() || null,
-        unit: newAddonUnit,
-        is_enabled: true,
-        display_order: addons.length,
-        price_per_unit: newAddonPrice ? parseFloat(newAddonPrice) : null
-      })
-      .select()
-      .single()
-
-    setAddonSaving(false)
-
-    if (error) {
-      setAddonError('Failed to add custom item')
-    } else if (data) {
-      setAddons([...addons, data])
-      setNewAddonQuestion('')
-      setNewAddonDescription('')
-      setNewAddonUnit('pieces')
-      setNewAddonPrice('')
-      setIsAddingAddon(false)
-    }
-  }
-
-  const toggleAddon = async (addonId: string, enabled: boolean) => {
-    await supabase
-      .from('showroom_addons')
-      .update({ is_enabled: enabled })
-      .eq('id', addonId)
-
-    setAddons((prev) =>
-      prev.map((addon) =>
-        addon.id === addonId ? { ...addon, is_enabled: enabled } : addon
-      )
-    )
-  }
-
-  const deleteAddon = async (addonId: string) => {
-    if (!confirm('Are you sure you want to delete this custom item?')) return
-
-    await supabase
-      .from('showroom_addons')
-      .delete()
-      .eq('id', addonId)
-
-    setAddons((prev) => prev.filter((addon) => addon.id !== addonId))
   }
 
   if (loading) {
@@ -785,181 +664,6 @@ export default function SettingsPage() {
                 </div>
               )
             })}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Custom Addon Items */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Custom Addon Items</CardTitle>
-              <CardDescription>
-                Add custom yes/no questions that appear after product selections in the iOS app.
-                Examples: "Add trash can?", "Include wine rack?", etc.
-              </CardDescription>
-            </div>
-            {!isAddingAddon && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsAddingAddon(true)}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Item
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isAddingAddon && (
-            <div className="space-y-4 p-4 bg-gray-50 rounded-lg border">
-              <div>
-                <Label htmlFor="new-addon-question">Question *</Label>
-                <Input
-                  id="new-addon-question"
-                  value={newAddonQuestion}
-                  onChange={(e) => {
-                    setNewAddonQuestion(e.target.value)
-                    setAddonError(null)
-                  }}
-                  placeholder="Add trash can?"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="new-addon-description">Description (Optional)</Label>
-                <Textarea
-                  id="new-addon-description"
-                  value={newAddonDescription}
-                  onChange={(e) => setNewAddonDescription(e.target.value)}
-                  placeholder="Include a pull-out trash can system"
-                  rows={2}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="new-addon-unit">Unit</Label>
-                  <Select value={newAddonUnit} onValueChange={setNewAddonUnit}>
-                    <SelectTrigger id="new-addon-unit">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pieces">Pieces</SelectItem>
-                      <SelectItem value="units">Units</SelectItem>
-                      <SelectItem value="sets">Sets</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="new-addon-price">Price (Optional)</Label>
-                  <Input
-                    id="new-addon-price"
-                    type="number"
-                    step="0.01"
-                    value={newAddonPrice}
-                    onChange={(e) => setNewAddonPrice(e.target.value)}
-                    placeholder="150.00"
-                  />
-                </div>
-              </div>
-
-              {addonError && (
-                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  {addonError}
-                </div>
-              )}
-
-              <div className="flex gap-2 justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setIsAddingAddon(false)
-                    setNewAddonQuestion('')
-                    setNewAddonDescription('')
-                    setNewAddonUnit('pieces')
-                    setNewAddonPrice('')
-                    setAddonError(null)
-                  }}
-                  disabled={addonSaving}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={addNewAddon}
-                  disabled={addonSaving}
-                >
-                  {addonSaving ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Adding...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Item
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {addons.length === 0 && !isAddingAddon ? (
-              <div className="text-center py-8 text-gray-500">
-                <p>No custom addon items yet.</p>
-                <p className="text-sm">Click "Add Item" to create one.</p>
-              </div>
-            ) : (
-              addons.map((addon) => (
-                <div
-                  key={addon.id}
-                  className="flex items-center justify-between py-3 px-4 border rounded-lg"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{addon.question}</span>
-                      {addon.price_per_unit && (
-                        <Badge variant="outline" className="text-xs">
-                          ${addon.price_per_unit.toFixed(2)} / {addon.unit}
-                        </Badge>
-                      )}
-                    </div>
-                    {addon.description && (
-                      <p className="text-sm text-gray-500 mt-1">{addon.description}</p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor={`addon-${addon.id}`} className="text-sm text-gray-500">
-                        Enabled
-                      </Label>
-                      <Switch
-                        id={`addon-${addon.id}`}
-                        checked={addon.is_enabled}
-                        onCheckedChange={(checked) => toggleAddon(addon.id, checked)}
-                      />
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => deleteAddon(addon.id)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))
-            )}
           </div>
         </CardContent>
       </Card>
