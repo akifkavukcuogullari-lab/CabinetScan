@@ -271,6 +271,24 @@ export default function SettingsPage() {
     return !data // Code is unique if no data returned
   }
 
+  const formatPhoneNumber = (phone: string): string => {
+    // Remove all non-numeric characters
+    const cleaned = phone.replace(/[^0-9]/g, '')
+
+    // If starts with 1, keep it
+    if (cleaned.startsWith('1')) {
+      return '+' + cleaned
+    }
+
+    // Otherwise, add +1 prefix
+    return cleaned ? '+1' + cleaned : ''
+  }
+
+  const validateEmail = (email: string): boolean => {
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailPattern.test(email)
+  }
+
   const saveShowroomInfo = async () => {
     if (!showroomId) return
 
@@ -290,6 +308,16 @@ export default function SettingsPage() {
       return
     }
 
+    if (!validateEmail(showroomEmail.trim())) {
+      setInfoError('Please enter a valid email address')
+      return
+    }
+
+    if (!showroomPhone.trim()) {
+      setInfoError('Phone number is required')
+      return
+    }
+
     // Validate code format
     const upperCode = showroomCode.toUpperCase()
     if (!validateShowroomCode(upperCode)) {
@@ -306,6 +334,13 @@ export default function SettingsPage() {
       }
     }
 
+    // Format phone number
+    const formattedPhone = formatPhoneNumber(showroomPhone)
+    if (!formattedPhone || formattedPhone.length < 12) { // +1 + 10 digits minimum
+      setInfoError('Please enter a valid phone number (minimum 10 digits)')
+      return
+    }
+
     setInfoSaving(true)
     setInfoError(null)
     setInfoSuccess(false)
@@ -316,7 +351,7 @@ export default function SettingsPage() {
         name: showroomName.trim(),
         showroom_code: upperCode,
         email: showroomEmail.trim(),
-        phone: showroomPhone.trim() || null,
+        phone: formattedPhone,
       })
       .eq('id', showroomId)
 
@@ -331,9 +366,10 @@ export default function SettingsPage() {
         name: showroomName.trim(),
         showroom_code: upperCode,
         email: showroomEmail.trim(),
-        phone: showroomPhone.trim() || null,
+        phone: formattedPhone,
       })
       setShowroomCode(upperCode) // Update to uppercase
+      setShowroomPhone(formattedPhone) // Update with formatted phone
       setInfoSuccess(true)
       setIsEditingInfo(false)
       setTimeout(() => setInfoSuccess(false), 3000)
@@ -454,16 +490,26 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <Label htmlFor="showroom-phone">Phone</Label>
-                    <Input
-                      id="showroom-phone"
-                      type="tel"
-                      value={showroomPhone}
-                      onChange={(e) => {
-                        setShowroomPhone(e.target.value)
-                        setInfoError(null)
-                      }}
-                      placeholder="(555) 123-4567"
-                    />
+                    <div className="flex">
+                      <div className="flex items-center px-3 bg-gray-100 border border-r-0 border-gray-300 rounded-l-md text-gray-600 font-medium">
+                        +1
+                      </div>
+                      <Input
+                        id="showroom-phone"
+                        type="tel"
+                        value={showroomPhone.replace(/^\+1/, '')}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9]/g, '')
+                          setShowroomPhone('+1' + value)
+                          setInfoError(null)
+                        }}
+                        placeholder="5551234567"
+                        className="rounded-l-none"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Enter 10-digit phone number
+                    </p>
                   </div>
                 </div>
 
