@@ -23,7 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Plus, Trash2, Loader2, AlertCircle, Upload, X, Package, Sparkles } from 'lucide-react'
+import { Plus, Trash2, Loader2, AlertCircle, Upload, X, Package, Sparkles, Edit2 } from 'lucide-react'
 import Image from 'next/image'
 
 interface ShowroomAddon {
@@ -46,13 +46,14 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
   const supabase = createClient()
   const [addons, setAddons] = useState<ShowroomAddon[]>([])
   const [loading, setLoading] = useState(true)
-  const [showAddDialog, setShowAddDialog] = useState(false)
+  const [showDialog, setShowDialog] = useState(false)
+  const [editingAddon, setEditingAddon] = useState<ShowroomAddon | null>(null)
 
   // Form state
-  const [newAddonQuestion, setNewAddonQuestion] = useState('')
-  const [newAddonDescription, setNewAddonDescription] = useState('')
-  const [newAddonUnit, setNewAddonUnit] = useState('pieces')
-  const [newAddonPrice, setNewAddonPrice] = useState('')
+  const [addonQuestion, setAddonQuestion] = useState('')
+  const [addonDescription, setAddonDescription] = useState('')
+  const [addonUnit, setAddonUnit] = useState('pieces')
+  const [addonPrice, setAddonPrice] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -144,8 +145,8 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
     return publicUrl
   }
 
-  const addNewAddon = async () => {
-    if (!newAddonQuestion.trim()) {
+  const saveAddon = async () => {
+    if (!addonQuestion.trim()) {
       setError('Question is required')
       return
     }
@@ -153,47 +154,101 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
     setUploading(true)
     setError(null)
 
-    // Upload image if selected
-    let imageUrl = null
+    // Upload new image if selected
+    let imageUrl = editingAddon?.image_url || null
     if (imageFile) {
+      // Delete old image if updating and had an old image
+      if (editingAddon?.image_url) {
+        const oldPath = editingAddon.image_url.split('/products/')[1]
+        if (oldPath) {
+          await supabase.storage.from('products').remove([oldPath])
+        }
+      }
+
       imageUrl = await uploadImage()
-      if (!imageUrl) {
+      if (!imageUrl && imageFile) {
         setUploading(false)
         return
       }
     }
 
-    const { data, error: insertError } = await supabase
-      .from('showroom_addons')
-      .insert({
-        showroom_id: showroomId,
-        question: newAddonQuestion.trim(),
-        description: newAddonDescription.trim() || null,
-        unit: newAddonUnit,
-        is_enabled: true,
-        display_order: addons.length,
-        price_per_unit: newAddonPrice ? parseFloat(newAddonPrice) : null,
-        image_url: imageUrl
-      })
-      .select()
-      .single()
+    if (editingAddon) {
+      // Update existing addon
+      const { data, error: updateError } = await supabase
+        .from('showroom_addons')
+        .update({
+          question: addonQuestion.trim(),
+          description: addonDescription.trim() || null,
+          unit: addonUnit,
+          price_per_unit: addonPrice ? parseFloat(addonPrice) : null,
+          image_url: imageUrl
+        })
+        .eq('id', editingAddon.id)
+        .select()
+        .single()
 
-    setUploading(false)
+      setUploading(false)
 
-    if (insertError) {
-      setError('Failed to add custom item')
-    } else if (data) {
-      setAddons([...addons, data])
-      resetForm()
-      setShowAddDialog(false)
+      if (updateError) {
+        setError('Failed to update custom item')
+      } else if (data) {
+        setAddons((prev) => prev.map((addon) => (addon.id === data.id ? data : addon)))
+        resetForm()
+        setShowDialog(false)
+      }
+    } else {
+      // Insert new addon
+      const { data, error: insertError } = await supabase
+        .from('showroom_addons')
+        .insert({
+          showroom_id: showroomId,
+          question: addonQuestion.trim(),
+          description: addonDescription.trim() || null,
+          unit: addonUnit,
+          is_enabled: true,
+          display_order: addons.length,
+          price_per_unit: addonPrice ? parseFloat(addonPrice) : null,
+          image_url: imageUrl
+        })
+        .select()
+        .single()
+
+      setUploading(false)
+
+      if (insertError) {
+        setError('Failed to add custom item')
+      } else if (data) {
+        setAddons([...addons, data])
+        resetForm()
+        setShowDialog(false)
+      }
     }
   }
 
+  const openAddDialog = () => {
+    setEditingAddon(null)
+    resetForm()
+    setShowDialog(true)
+  }
+
+  const openEditDialog = (addon: ShowroomAddon) => {
+    setEditingAddon(addon)
+    setAddonQuestion(addon.question)
+    setAddonDescription(addon.description || '')
+    setAddonUnit(addon.unit)
+    setAddonPrice(addon.price_per_unit ? addon.price_per_unit.toString() : '')
+    setImagePreview(addon.image_url)
+    setImageFile(null)
+    setError(null)
+    setShowDialog(true)
+  }
+
   const resetForm = () => {
-    setNewAddonQuestion('')
-    setNewAddonDescription('')
-    setNewAddonUnit('pieces')
-    setNewAddonPrice('')
+    setEditingAddon(null)
+    setAddonQuestion('')
+    setAddonDescription('')
+    setAddonUnit('pieces')
+    setAddonPrice('')
     setImageFile(null)
     setImagePreview(null)
     setError(null)
@@ -253,7 +308,7 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
             Create custom yes/no questions with images that appear after product selections in the iOS app
           </p>
         </div>
-        <Button onClick={() => setShowAddDialog(true)}>
+        <Button onClick={openAddDialog}>
           <Plus className="h-4 w-4 mr-2" />
           Add Custom Item
         </Button>
@@ -309,15 +364,26 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
                     )}
                   </div>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => deleteAddon(addon.id)}
-                    className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 mt-2"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </Button>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openEditDialog(addon)}
+                      className="flex-1"
+                    >
+                      <Edit2 className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteAddon(addon.id)}
+                      className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -333,7 +399,7 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
             <p className="text-gray-500 mb-4">
               Add custom items like trash cans, wine racks, or any extra accessories
             </p>
-            <Button onClick={() => setShowAddDialog(true)}>
+            <Button onClick={openAddDialog}>
               <Plus className="h-4 w-4 mr-2" />
               Add Your First Item
             </Button>
@@ -341,23 +407,28 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
         </Card>
       )}
 
-      {/* Add Custom Addon Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={(open) => {
-        setShowAddDialog(open)
+      {/* Add/Edit Custom Addon Dialog */}
+      <Dialog open={showDialog} onOpenChange={(open) => {
+        setShowDialog(open)
         if (!open) resetForm()
       }}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add Custom Addon Item</DialogTitle>
+            <DialogTitle>
+              {editingAddon ? 'Edit Custom Addon Item' : 'Add Custom Addon Item'}
+            </DialogTitle>
             <DialogDescription>
-              Create a yes/no question with an image to show customers after product selection
+              {editingAddon
+                ? 'Update the addon item details and image'
+                : 'Create a yes/no question with an image to show customers after product selection'
+              }
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {/* Image Upload */}
             <div>
-              <Label htmlFor="image">Image *</Label>
+              <Label htmlFor="image">Image {!editingAddon && '*'}</Label>
               <div className="mt-2">
                 {imagePreview ? (
                   <div className="relative aspect-square rounded-lg overflow-hidden border">
@@ -371,7 +442,7 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
                       type="button"
                       onClick={() => {
                         setImageFile(null)
-                        setImagePreview(null)
+                        setImagePreview(editingAddon?.image_url || null)
                       }}
                       className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow-md hover:bg-gray-100"
                     >
@@ -403,9 +474,9 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
               <Label htmlFor="question">Question *</Label>
               <Input
                 id="question"
-                value={newAddonQuestion}
+                value={addonQuestion}
                 onChange={(e) => {
-                  setNewAddonQuestion(e.target.value)
+                  setAddonQuestion(e.target.value)
                   setError(null)
                 }}
                 placeholder="Add trash can?"
@@ -417,8 +488,8 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
               <Label htmlFor="description">Description (Optional)</Label>
               <Textarea
                 id="description"
-                value={newAddonDescription}
-                onChange={(e) => setNewAddonDescription(e.target.value)}
+                value={addonDescription}
+                onChange={(e) => setAddonDescription(e.target.value)}
                 placeholder="Include a pull-out trash can system"
                 rows={2}
               />
@@ -428,7 +499,7 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="unit">Unit</Label>
-                <Select value={newAddonUnit} onValueChange={setNewAddonUnit}>
+                <Select value={addonUnit} onValueChange={setAddonUnit}>
                   <SelectTrigger id="unit">
                     <SelectValue />
                   </SelectTrigger>
@@ -446,8 +517,8 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
                   id="price"
                   type="number"
                   step="0.01"
-                  value={newAddonPrice}
-                  onChange={(e) => setNewAddonPrice(e.target.value)}
+                  value={addonPrice}
+                  onChange={(e) => setAddonPrice(e.target.value)}
                   placeholder="150.00"
                 />
               </div>
@@ -464,7 +535,7 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
               <Button
                 variant="outline"
                 onClick={() => {
-                  setShowAddDialog(false)
+                  setShowDialog(false)
                   resetForm()
                 }}
                 disabled={uploading}
@@ -472,18 +543,27 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
                 Cancel
               </Button>
               <Button
-                onClick={addNewAddon}
+                onClick={saveAddon}
                 disabled={uploading}
               >
                 {uploading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Adding...
+                    {editingAddon ? 'Updating...' : 'Adding...'}
                   </>
                 ) : (
                   <>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Item
+                    {editingAddon ? (
+                      <>
+                        <Edit2 className="h-4 w-4 mr-2" />
+                        Update Item
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Item
+                      </>
+                    )}
                   </>
                 )}
               </Button>
