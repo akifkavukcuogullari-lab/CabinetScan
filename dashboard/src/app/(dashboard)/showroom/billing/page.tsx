@@ -93,9 +93,11 @@ export default function BillingPage() {
   const [showroom, setShowroom] = useState<Showroom | null>(null)
   const [plans, setPlans] = useState<SubscriptionPlan[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  // Always use monthly billing
+  const billingPeriod = 'monthly'
 
   // Check for success/cancel query params
   useEffect(() => {
@@ -506,30 +508,9 @@ export default function BillingPage() {
 
       {/* Pricing Plans */}
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4">
           <h2 className="text-xl font-semibold">Available Plans</h2>
-          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setBillingPeriod('monthly')}
-              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                billingPeriod === 'monthly'
-                  ? 'bg-white shadow text-gray-900'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setBillingPeriod('yearly')}
-              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                billingPeriod === 'yearly'
-                  ? 'bg-white shadow text-gray-900'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Yearly (Save 17%)
-            </button>
-          </div>
+          <p className="text-sm text-gray-500 mt-1">All plans are billed monthly</p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-4">
@@ -537,10 +518,7 @@ export default function BillingPage() {
             .filter((p) => p.slug !== 'trial')
             .map((plan) => {
               const isCurrentPlan = showroom?.subscription_plan === plan.slug
-              const price =
-                billingPeriod === 'yearly' && plan.price_yearly
-                  ? plan.price_yearly / 12
-                  : plan.price_monthly
+              const price = plan.price_monthly
 
               return (
                 <Card
@@ -564,17 +542,10 @@ export default function BillingPage() {
                       {plan.slug === 'enterprise' ? (
                         <p className="text-3xl font-bold">Custom</p>
                       ) : (
-                        <>
-                          <p className="text-3xl font-bold">
-                            ${price.toFixed(0)}
-                            <span className="text-base font-normal text-gray-500">/mo</span>
-                          </p>
-                          {billingPeriod === 'yearly' && (
-                            <p className="text-sm text-gray-500">
-                              Billed ${plan.price_yearly?.toFixed(0)}/year
-                            </p>
-                          )}
-                        </>
+                        <p className="text-3xl font-bold">
+                          ${price.toFixed(0)}
+                          <span className="text-base font-normal text-gray-500">/month</span>
+                        </p>
                       )}
                     </div>
 
