@@ -315,8 +315,7 @@ export function ModelViewer({
   }
 
   // GLB is available - show full 3D viewer
-  // Apply rotation angle to camera orbit for auto-straightening
-  const initialOrbitAngle = 45 - rotationAngle
+  // Apply rotation angle to model orientation for auto-straightening (rotate around Y-axis)
   const modelViewerHTML = isScriptLoaded ? `
     <model-viewer
       src="${glbUrl}"
@@ -334,7 +333,8 @@ export function ModelViewer({
       interaction-prompt="auto"
       interaction-prompt-style="wiggle"
       interaction-prompt-threshold="3000"
-      camera-orbit="${initialOrbitAngle}deg 55deg auto"
+      camera-orbit="45deg 55deg auto"
+      orientation="0deg ${-rotationAngle}deg 0deg"
       field-of-view="45deg"
       min-camera-orbit="auto auto auto"
       max-camera-orbit="auto auto auto"

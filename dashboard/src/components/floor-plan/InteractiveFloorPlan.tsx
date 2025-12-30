@@ -766,7 +766,7 @@ export function InteractiveFloorPlan({
     setTooltipData(null)
   }, [])
 
-  // Calculate wall labels with collision avoidance
+  // Calculate wall labels with collision avoidance (including segments split by doors/windows)
   const wallLabels = useMemo(() => {
     if (!showLabels) return []
 
@@ -775,38 +775,152 @@ export function InteractiveFloorPlan({
     walls.forEach((wall, idx) => {
       if (!wall.start || !wall.end) return
 
-      const start = toScreen(wall.start.x, wall.start.z)
-      const end = toScreen(wall.end.x, wall.end.z)
-      const lengthFt = wall.width_ft || wall.linear_ft || 0
+      const wallDx = wall.end.x - wall.start.x
+      const wallDz = wall.end.z - wall.start.z
+      const wallLengthCoords = Math.sqrt(wallDx * wallDx + wallDz * wallDz)
+      const wallLengthFt = wall.linear_ft || wall.width_ft || 0
 
-      if (lengthFt <= 0) return
+      if (wallLengthCoords === 0 || wallLengthFt === 0) return
 
-      const midX = (start.x + end.x) / 2
-      const midY = (start.y + end.y) / 2
+      // Find doors and windows on this wall
+      const openingsOnWall: Array<{ position: number; width: number }> = []
 
-      const screenAngle = Math.atan2(end.y - start.y, end.x - start.x) * 180 / Math.PI
-      const textAngle = (screenAngle > 90 || screenAngle < -90) ? screenAngle + 180 : screenAngle
+      // Check doors
+      doors.forEach(door => {
+        const dx = door.position.x - wall.start.x
+        const dz = door.position.z - wall.start.z
+        const t = (dx * wallDx + dz * wallDz) / (wallLengthCoords * wallLengthCoords)
 
-      const outside = getOutsideDirection(wall.start, wall.end)
-      const rad = (rotation * Math.PI) / 180
-      const rotOutX = outside.x * Math.cos(rad) - outside.y * Math.sin(rad)
-      const rotOutY = outside.x * Math.sin(rad) + outside.y * Math.cos(rad)
+        if (t >= -0.05 && t <= 1.05) {
+          const projX = wall.start.x + t * wallDx
+          const projZ = wall.start.z + t * wallDz
+          const dist = Math.sqrt((door.position.x - projX) ** 2 + (door.position.z - projZ) ** 2)
 
-      const labelOffset = 22
-
-      labels.push({
-        id: `wall-label-${idx}`,
-        x: midX + rotOutX * labelOffset,
-        y: midY + rotOutY * labelOffset,
-        width: 48,
-        height: 18,
-        text: formatFeetInches(lengthFt),
-        rotation: textAngle
+          if (dist < 1.5) {
+            openingsOnWall.push({ position: t * wallLengthFt, width: door.width_ft })
+          }
+        }
       })
+
+      // Check windows
+      windows.forEach(window => {
+        const dx = window.position.x - wall.start.x
+        const dz = window.position.z - wall.start.z
+        const t = (dx * wallDx + dz * wallDz) / (wallLengthCoords * wallLengthCoords)
+
+        if (t >= -0.05 && t <= 1.05) {
+          const projX = wall.start.x + t * wallDx
+          const projZ = wall.start.z + t * wallDz
+          const dist = Math.sqrt((window.position.x - projX) ** 2 + (window.position.z - projZ) ** 2)
+
+          if (dist < 1.5) {
+            openingsOnWall.push({ position: t * wallLengthFt, width: window.width_ft })
+          }
+        }
+      })
+
+      // Sort openings by position along the wall
+      openingsOnWall.sort((a, b) => a.position - b.position)
+
+      // Calculate wall segments
+      const segments: Array<{ start: number; end: number; length: number }> = []
+      let currentPos = 0
+
+      openingsOnWall.forEach(opening => {
+        const openingStart = opening.position - opening.width / 2
+        const openingEnd = opening.position + opening.width / 2
+
+        // Segment before the opening
+        if (openingStart > currentPos + 0.5) {
+          segments.push({
+            start: currentPos,
+            end: openingStart,
+            length: openingStart - currentPos
+          })
+        }
+
+        currentPos = openingEnd
+      })
+
+      // Final segment after last opening
+      if (currentPos < wallLengthFt - 0.5) {
+        segments.push({
+          start: currentPos,
+          end: wallLengthFt,
+          length: wallLengthFt - currentPos
+        })
+      }
+
+      // If no segments (no openings or wall too short), use the whole wall
+      if (segments.length === 0) {
+        const start = toScreen(wall.start.x, wall.start.z)
+        const end = toScreen(wall.end.x, wall.end.z)
+
+        const midX = (start.x + end.x) / 2
+        const midY = (start.y + end.y) / 2
+
+        const screenAngle = Math.atan2(end.y - start.y, end.x - start.x) * 180 / Math.PI
+        const textAngle = (screenAngle > 90 || screenAngle < -90) ? screenAngle + 180 : screenAngle
+
+        const outside = getOutsideDirection(wall.start, wall.end)
+        const rad = (rotation * Math.PI) / 180
+        const rotOutX = outside.x * Math.cos(rad) - outside.y * Math.sin(rad)
+        const rotOutY = outside.x * Math.sin(rad) + outside.y * Math.cos(rad)
+
+        const labelOffset = 22
+
+        labels.push({
+          id: `wall-label-${idx}`,
+          x: midX + rotOutX * labelOffset,
+          y: midY + rotOutY * labelOffset,
+          width: 48,
+          height: 18,
+          text: formatFeetInches(wallLengthFt),
+          rotation: textAngle
+        })
+      } else {
+        // Create labels for each segment
+        segments.forEach((segment, segIdx) => {
+          // Convert feet position to parametric position (0-1) then to coordinates
+          const tStart = segment.start / wallLengthFt
+          const tEnd = segment.end / wallLengthFt
+
+          const segmentStartX = wall.start.x + wallDx * tStart
+          const segmentStartZ = wall.start.z + wallDz * tStart
+          const segmentEndX = wall.start.x + wallDx * tEnd
+          const segmentEndZ = wall.start.z + wallDz * tEnd
+
+          const segStart = toScreen(segmentStartX, segmentStartZ)
+          const segEnd = toScreen(segmentEndX, segmentEndZ)
+
+          const midX = (segStart.x + segEnd.x) / 2
+          const midY = (segStart.y + segEnd.y) / 2
+
+          const screenAngle = Math.atan2(segEnd.y - segStart.y, segEnd.x - segStart.x) * 180 / Math.PI
+          const textAngle = (screenAngle > 90 || screenAngle < -90) ? screenAngle + 180 : screenAngle
+
+          const outside = getOutsideDirection(wall.start, wall.end)
+          const rad = (rotation * Math.PI) / 180
+          const rotOutX = outside.x * Math.cos(rad) - outside.y * Math.sin(rad)
+          const rotOutY = outside.x * Math.sin(rad) + outside.y * Math.cos(rad)
+
+          const labelOffset = 22
+
+          labels.push({
+            id: `wall-label-${idx}-seg-${segIdx}`,
+            x: midX + rotOutX * labelOffset,
+            y: midY + rotOutY * labelOffset,
+            width: 48,
+            height: 18,
+            text: formatFeetInches(segment.length),
+            rotation: textAngle
+          })
+        })
+      }
     })
 
     return resolveCollisions(labels)
-  }, [walls, showLabels, toScreen, getOutsideDirection, rotation])
+  }, [walls, doors, windows, showLabels, toScreen, getOutsideDirection, rotation])
 
   // Render detail panel
   const renderDetailPanel = () => {
@@ -1052,7 +1166,7 @@ export function InteractiveFloorPlan({
   // Minimal render mode
   if (minimal) {
     return (
-      <div className={`relative bg-gray-50 ${className}`}>
+      <div className={`relative ${className}`}>
         {/* Floating controls */}
         <div className="absolute top-3 right-3 z-20 flex gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-sm border border-gray-200/50">
           <Button
@@ -1101,7 +1215,7 @@ export function InteractiveFloorPlan({
 
         <div
           ref={containerRef}
-          className="relative bg-white rounded-lg border border-gray-200 overflow-hidden"
+          className={`relative overflow-hidden ${isFullscreen ? 'h-screen' : 'h-[60vh] min-h-[400px]'}`}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -1110,11 +1224,8 @@ export function InteractiveFloorPlan({
           <svg
             ref={svgRef}
             viewBox={`0 0 ${viewWidth} ${viewHeight}`}
-            className="w-full"
-            style={{
-              height: isFullscreen ? '100vh' : '60vh',
-              minHeight: '400px'
-            }}
+            className="w-full h-full"
+            preserveAspectRatio="xMidYMid slice"
             role="img"
             aria-label="Interactive floor plan showing room layout with walls, cabinets, and appliances"
           >
