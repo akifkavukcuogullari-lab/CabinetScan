@@ -15,13 +15,8 @@ import {
 } from '@/components/ui/select'
 import {
   FolderKanban,
-  Rotate3d,
   Layers,
   Ruler,
-  User,
-  Calendar,
-  ChevronRight,
-  Box,
   Search,
   Filter,
   X,
@@ -83,20 +78,10 @@ export default function ProjectsPage() {
         return
       }
 
-      // Get projects with their measurements
+      // Get projects
       const { data, error: fetchError } = await supabase
         .from('projects')
-        .select(`
-          *,
-          project_measurements (
-            id,
-            usdz_file_url,
-            preview_image_url,
-            measurements,
-            total_linear_ft,
-            total_sq_ft
-          )
-        `)
+        .select('*')
         .eq('showroom_id', showroomUser.showroom_id)
         .order('submitted_at', { ascending: false })
 
@@ -166,7 +151,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Projects</h1>
         <p className="text-gray-500">View and manage customer room scans and selections</p>
@@ -248,12 +233,6 @@ export default function ProjectsPage() {
       ) : filteredProjects.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
           {filteredProjects.map((project: any) => {
-            // Extract measurement data
-            const measurement = project.project_measurements?.[0]
-            const hasUsdzFile = measurement?.usdz_file_url
-            const hasFloorPlanData = measurement?.measurements?.walls?.length > 0
-            const hasScanData = hasUsdzFile || hasFloorPlanData
-
             return (
               <Link
                 key={project.id}
@@ -287,31 +266,8 @@ export default function ProjectsPage() {
                     </div>
 
                     {/* Email Row */}
-                    <div className="text-sm text-gray-600 mb-3 truncate">
+                    <div className="text-sm text-gray-600 truncate">
                       {project.customer_email}
-                    </div>
-
-                    {/* Scan Info & Measurements */}
-                    <div className="flex items-center justify-between pt-3 border-t">
-                      <div className="flex items-center gap-3 text-xs text-gray-500">
-                        {hasScanData && (
-                          <span className="flex items-center gap-1">
-                            {hasUsdzFile ? (
-                              <Rotate3d className="h-3.5 w-3.5 text-blue-500" />
-                            ) : (
-                              <Layers className="h-3.5 w-3.5 text-gray-400" />
-                            )}
-                            {hasUsdzFile ? '3D' : '2D'}
-                          </span>
-                        )}
-                        {measurement?.total_sq_ft && (
-                          <span className="flex items-center gap-1">
-                            <Ruler className="h-3.5 w-3.5" />
-                            {measurement.total_sq_ft.toFixed(0)} sqft
-                          </span>
-                        )}
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
                     </div>
                   </CardContent>
                 </Card>
@@ -345,13 +301,9 @@ export default function ProjectsPage() {
             <h3 className="text-xl font-medium mb-2">No projects yet</h3>
             <p className="text-gray-500 max-w-md mx-auto mb-6">
               Projects will appear here when customers submit room scans from the iOS app.
-              Each project includes the 3D scan, measurements, and product selections.
+              Each project includes floor plans, measurements, and product selections.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-gray-500">
-              <div className="flex items-center gap-2">
-                <Rotate3d className="h-5 w-5 text-blue-500" />
-                <span>3D Room Scans</span>
-              </div>
               <div className="flex items-center gap-2">
                 <Layers className="h-5 w-5 text-gray-500" />
                 <span>Floor Plans</span>
