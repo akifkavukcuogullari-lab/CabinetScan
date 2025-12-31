@@ -24,7 +24,6 @@ interface Project {
 
 interface Measurement {
   id: string
-  glb_file_url?: string
   usdz_file_url?: string
   video_url?: string
   preview_image_url?: string

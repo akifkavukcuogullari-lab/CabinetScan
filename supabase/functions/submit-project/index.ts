@@ -373,54 +373,6 @@ async function buildWebhookPayload(
   }
 }
 
-// Trigger USDZ to GLB conversion (async, non-blocking)
-async function triggerGlbConversion(
-  measurementId: string,
-  usdzUrl: string,
-  showroomCode: string
-): Promise<void> {
-  const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
-  const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')
-
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.log('[GLB CONVERSION] Missing environment variables, skipping conversion')
-    return
-  }
-
-  const conversionUrl = `${SUPABASE_URL}/functions/v1/convert-usdz-to-glb`
-
-  console.log(`[GLB CONVERSION] Triggering conversion for measurement ${measurementId}`)
-
-  try {
-    const response = await fetch(conversionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        measurement_id: measurementId,
-        usdz_url: usdzUrl,
-        showroom_code: showroomCode,
-      }),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`[GLB CONVERSION] Conversion request failed: ${response.status} - ${errorText}`)
-    } else {
-      const result = await response.json()
-      if (result.success) {
-        console.log(`[GLB CONVERSION] Conversion successful: ${result.glb_url}`)
-      } else {
-        console.log(`[GLB CONVERSION] Conversion not available: ${result.error}`)
-      }
-    }
-  } catch (err) {
-    console.error('[GLB CONVERSION] Error calling conversion function:', err)
-  }
-}
-
 // Call webhook with project data
 async function callWebhook(
   webhookUrl: string,
@@ -628,7 +580,6 @@ serve(async (req) => {
     }
 
     // Create measurements if provided
-    let measurementId: string | null = null
     if (submission.measurements?.roomplan_data) {
       const measurementData: Record<string, unknown> = {
         project_id: project.id,
@@ -664,28 +615,13 @@ serve(async (req) => {
         console.log('⚠️ [submit-project] No visualization photos in submission')
       }
 
-      const { data: measurementResult, error: measurementError } = await supabaseAdmin
+      const { error: measurementError } = await supabaseAdmin
         .from('project_measurements')
         .insert(measurementData)
-        .select('id')
-        .single()
 
       if (measurementError) {
         console.error('Error creating measurements:', measurementError)
         // Don't fail the whole submission, just log
-      } else if (measurementResult) {
-        measurementId = measurementResult.id
-      }
-
-      // Trigger USDZ to GLB conversion if USDZ file exists (async, don't block)
-      if (measurementId && submission.measurements.usdz_file_url) {
-        triggerGlbConversion(
-          measurementId,
-          submission.measurements.usdz_file_url,
-          showroom.showroom_code
-        ).catch((err) => {
-          console.error('[GLB CONVERSION] Failed to trigger conversion:', err)
-        })
       }
     }
 

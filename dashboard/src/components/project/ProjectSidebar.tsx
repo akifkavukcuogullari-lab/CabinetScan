@@ -88,13 +88,12 @@ export function ProjectSidebar({
   const hasAutocadExport = hasFeature(currentPlan, 'autocadExport')
   const hasAiAgent = hasFeature(currentPlan, 'aiAgent')
 
-  const hasGlbFile = measurement?.glb_file_url
   const hasUsdzFile = measurement?.usdz_file_url
   const hasVideoFile = measurement?.video_url
   const visualizationPhotos = measurement?.visualization_photo_urls || []
   const hasVisualizationPhotos = visualizationPhotos.length > 0
   const hasFloorPlanData = measurement?.measurements?.walls?.length > 0 || measurement?.measurements?.room
-  const hasDownloadableFiles = hasGlbFile || hasUsdzFile || hasVideoFile || hasVisualizationPhotos || hasFloorPlanData
+  const hasDownloadableFiles = hasUsdzFile || hasVideoFile || hasVisualizationPhotos || hasFloorPlanData
 
   return (
     <div className={`space-y-3 ${className}`}>
