@@ -3,6 +3,7 @@ import SwiftUI
 struct SelectionView: View {
     @EnvironmentObject var appState: AppState
     @State private var currentCategoryIndex = 0
+    @State private var currentProductIndex = 0
     @State private var showingColorSelection = false
     @State private var selectedModelForColors: Product? = nil
 
@@ -15,30 +16,13 @@ struct SelectionView: View {
         return categories[currentCategoryIndex]
     }
 
-    // Adjust progress to account for color selection step
-    private var totalSteps: Int {
-        var steps = categories.count
-        // Add extra step for each category that has a selected product with variants
-        for category in categories {
-            if let selectedProduct = appState.selections[category.categoryId],
-               selectedProduct.hasVariants && !selectedProduct.variants.isEmpty {
-                steps += 1
-            }
-        }
-        return steps
-    }
-
-    private var currentStep: Int {
-        var step = currentCategoryIndex + 1
-        if showingColorSelection {
-            step += 1
-        }
-        return step
+    private var currentProducts: [Product] {
+        currentCategory?.products ?? []
     }
 
     private var progress: Double {
-        guard totalSteps > 0 else { return 0 }
-        return Double(currentStep) / Double(max(totalSteps, categories.count))
+        guard categories.count > 0 else { return 0 }
+        return Double(currentCategoryIndex + 1) / Double(categories.count)
     }
 
     var body: some View {
@@ -61,7 +45,7 @@ struct SelectionView: View {
                     .tint(.blue)
 
                 if showingColorSelection, let product = selectedModelForColors, let category = currentCategory {
-                    // Color Selection View (full screen, same style as category)
+                    // Color Selection View
                     ColorSelectionView(
                         product: product,
                         category: category,
@@ -72,7 +56,6 @@ struct SelectionView: View {
                             withAnimation {
                                 showingColorSelection = false
                                 selectedModelForColors = nil
-                                // Clear the model selection so user can pick again
                                 appState.selections.removeValue(forKey: category.categoryId)
                                 appState.variantSelections.removeValue(forKey: product.id)
                             }
@@ -89,10 +72,11 @@ struct SelectionView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    .padding()
+                    .padding(.top, 16)
+                    .padding(.bottom, 8)
 
-                    // Products grid
-                    if category.products.isEmpty {
+                    // Products carousel
+                    if currentProducts.isEmpty {
                         ContentUnavailableView(
                             "No Products",
                             systemImage: "cube.transparent",
@@ -100,24 +84,44 @@ struct SelectionView: View {
                         )
                         .frame(maxHeight: .infinity)
                     } else {
-                        ScrollView {
-                            LazyVGrid(columns: [
-                                GridItem(.flexible()),
-                                GridItem(.flexible())
-                            ], spacing: 16) {
-                                ForEach(category.products) { product in
-                                    ProductCard(
-                                        product: product,
-                                        isSelected: appState.selections[category.categoryId]?.id == product.id,
-                                        selectedVariant: appState.getSelectedVariant(for: product),
-                                        onSelect: {
-                                            selectProduct(product, in: category)
-                                        }
-                                    )
-                                }
+                        // Swipeable product carousel
+                        TabView(selection: $currentProductIndex) {
+                            ForEach(Array(currentProducts.enumerated()), id: \.element.id) { index, product in
+                                ProductCarouselCard(
+                                    product: product,
+                                    isSelected: appState.selections[category.categoryId]?.id == product.id,
+                                    selectedVariant: appState.getSelectedVariant(for: product),
+                                    onSelect: {
+                                        selectProduct(product, in: category)
+                                    }
+                                )
+                                .tag(index)
                             }
-                            .padding()
                         }
+                        .tabViewStyle(.page(indexDisplayMode: .never))
+                        .frame(maxHeight: .infinity)
+
+                        // Custom page indicator
+                        HStack(spacing: 8) {
+                            ForEach(0..<min(currentProducts.count, 20), id: \.self) { index in
+                                Circle()
+                                    .fill(index == currentProductIndex ? Color.blue : Color(.systemGray4))
+                                    .frame(width: index == currentProductIndex ? 10 : 8, height: index == currentProductIndex ? 10 : 8)
+                                    .animation(.spring(response: 0.3), value: currentProductIndex)
+                            }
+                            if currentProducts.count > 20 {
+                                Text("+\(currentProducts.count - 20)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 8)
+
+                        // Swipe hint
+                        Text("Swipe to browse \(currentProducts.count) products • Tap to select")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 8)
                     }
 
                     // Navigation buttons
@@ -126,6 +130,7 @@ struct SelectionView: View {
                             Button {
                                 withAnimation {
                                     currentCategoryIndex -= 1
+                                    currentProductIndex = 0
                                 }
                             } label: {
                                 Label("Back", systemImage: "chevron.left")
@@ -135,10 +140,19 @@ struct SelectionView: View {
 
                         Spacer()
 
+                        // Skip this category
+                        Button {
+                            skipCategory()
+                        } label: {
+                            Text("Skip")
+                                .foregroundStyle(.secondary)
+                        }
+
                         if currentCategoryIndex < categories.count - 1 {
                             Button {
                                 withAnimation {
                                     currentCategoryIndex += 1
+                                    currentProductIndex = 0
                                 }
                             } label: {
                                 Label("Next", systemImage: "chevron.right")
@@ -187,16 +201,17 @@ struct SelectionView: View {
                 }
             }
         }
+        .onChange(of: currentCategoryIndex) { _, _ in
+            currentProductIndex = 0
+        }
     }
 
     private func selectProduct(_ product: Product, in category: Category) {
-        // If product has variants (colors), show color selection as next step
+        // If product has variants (colors), show color selection
         if product.hasVariants && !product.variants.isEmpty {
-            // First select the model
             withAnimation(.spring(response: 0.3)) {
                 appState.selectProduct(for: category.categoryId, product: product)
             }
-            // Then show color selection
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 withAnimation {
                     selectedModelForColors = product
@@ -206,7 +221,7 @@ struct SelectionView: View {
             return
         }
 
-        // Otherwise, select the product directly and advance
+        // Select product and advance
         withAnimation(.spring(response: 0.3)) {
             appState.selectProduct(for: category.categoryId, product: product)
         }
@@ -219,7 +234,6 @@ struct SelectionView: View {
             appState.selectVariant(for: product, variant: variant)
         }
 
-        // Hide color selection and advance
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             withAnimation {
                 showingColorSelection = false
@@ -229,15 +243,176 @@ struct SelectionView: View {
         }
     }
 
+    private func skipCategory() {
+        if currentCategoryIndex < categories.count - 1 {
+            withAnimation {
+                currentCategoryIndex += 1
+                currentProductIndex = 0
+            }
+        } else {
+            appState.proceedToReview()
+        }
+    }
+
     private func advanceToNextCategory() {
-        // Auto-advance after selection (with delay)
         if currentCategoryIndex < categories.count - 1 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 withAnimation {
                     currentCategoryIndex += 1
+                    currentProductIndex = 0
                 }
             }
         }
+    }
+}
+
+// MARK: - Product Carousel Card (Large Single Product Display)
+struct ProductCarouselCard: View {
+    let product: Product
+    let isSelected: Bool
+    let selectedVariant: ProductVariant?
+    let onSelect: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            // Large product image
+            ZStack {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color(.systemGray6))
+
+                if let imageUrl = product.imageUrl,
+                   let url = URL(string: imageUrl) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                        case .failure:
+                            Image(systemName: "cube")
+                                .font(.system(size: 60))
+                                .foregroundStyle(.tertiary)
+                        case .empty:
+                            ProgressView()
+                        @unknown default:
+                            ProgressView()
+                        }
+                    }
+                    .padding(20)
+                } else {
+                    Image(systemName: "cube")
+                        .font(.system(size: 60))
+                        .foregroundStyle(.tertiary)
+                }
+
+                // Selection indicator
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 20)
+                        .strokeBorder(.green, lineWidth: 4)
+
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.largeTitle)
+                                .foregroundStyle(.green)
+                                .background(Circle().fill(.white).padding(4))
+                        }
+                        Spacer()
+                    }
+                    .padding(16)
+                }
+
+                // Badges
+                VStack {
+                    HStack {
+                        if product.isFeatured {
+                            Text("Featured")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(.yellow)
+                                .clipShape(Capsule())
+                        }
+                        Spacer()
+                        if product.hasVariants && !product.variants.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "paintpalette.fill")
+                                    .font(.caption)
+                                Text("\(product.variants.count) colors")
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(.blue)
+                            .foregroundStyle(.white)
+                            .clipShape(Capsule())
+                        }
+                    }
+                    Spacer()
+                }
+                .padding(16)
+            }
+            .frame(maxWidth: .infinity)
+            .aspectRatio(1, contentMode: .fit)
+
+            // Product info
+            VStack(spacing: 8) {
+                Text(product.name)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+
+                if let description = product.description {
+                    Text(description)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                }
+
+                if let variant = selectedVariant {
+                    Text(variant.name)
+                        .font(.subheadline)
+                        .foregroundStyle(.blue)
+                }
+
+                // Price display
+                if let price = selectedVariant?.price ?? product.price {
+                    Text("$\(price, specifier: "%.2f")")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                } else if product.hasVariants {
+                    let prices = product.variants.compactMap { $0.price }
+                    if let minPrice = prices.min(), let maxPrice = prices.max() {
+                        if minPrice == maxPrice {
+                            Text("$\(minPrice, specifier: "%.2f")")
+                                .font(.headline)
+                        } else {
+                            Text("$\(minPrice, specifier: "%.0f") - $\(maxPrice, specifier: "%.0f")")
+                                .font(.headline)
+                        }
+                    }
+                }
+            }
+
+            // Select button
+            Button(action: onSelect) {
+                HStack {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "plus.circle.fill")
+                    Text(isSelected ? "Selected" : "Select This Product")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(isSelected ? .green : .blue)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 8)
     }
 }
 
@@ -247,6 +422,8 @@ struct ColorSelectionView: View {
     let category: Category
     let onSelect: (ProductVariant) -> Void
     let onBack: () -> Void
+
+    @State private var currentColorIndex = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -279,20 +456,32 @@ struct ColorSelectionView: View {
             .padding()
             .background(Color(.systemGray6))
 
-            // Color options grid - larger cards for door images
-            ScrollView {
-                LazyVGrid(columns: [
-                    GridItem(.flexible()),
-                    GridItem(.flexible())
-                ], spacing: 16) {
-                    ForEach(product.variants) { variant in
-                        ColorOptionCard(variant: variant) {
-                            onSelect(variant)
-                        }
+            // Color carousel
+            TabView(selection: $currentColorIndex) {
+                ForEach(Array(product.variants.enumerated()), id: \.element.id) { index, variant in
+                    ColorCarouselCard(variant: variant) {
+                        onSelect(variant)
                     }
+                    .tag(index)
                 }
-                .padding()
             }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(maxHeight: .infinity)
+
+            // Page indicator
+            HStack(spacing: 8) {
+                ForEach(0..<min(product.variants.count, 20), id: \.self) { index in
+                    Circle()
+                        .fill(index == currentColorIndex ? Color.blue : Color(.systemGray4))
+                        .frame(width: index == currentColorIndex ? 10 : 8, height: index == currentColorIndex ? 10 : 8)
+                }
+            }
+            .padding(.vertical, 8)
+
+            Text("Swipe to browse \(product.variants.count) colors • Tap to select")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 8)
 
             // Back button
             HStack {
@@ -310,80 +499,105 @@ struct ColorSelectionView: View {
     }
 }
 
-// MARK: - Color Option Card (Larger for door images)
-struct ColorOptionCard: View {
+// MARK: - Color Carousel Card
+struct ColorCarouselCard: View {
     let variant: ProductVariant
     let onSelect: () -> Void
 
     var body: some View {
-        Button(action: onSelect) {
-            VStack(spacing: 8) {
-                // Door image or color swatch - taller aspect ratio for doors
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemGray6))
-                        .aspectRatio(0.6, contentMode: .fit) // Taller for door images
+        VStack(spacing: 16) {
+            // Large color/door image
+            ZStack {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color(.systemGray6))
 
-                    if let imageUrl = variant.imageUrl,
-                       let url = URL(string: imageUrl) {
-                        AsyncImage(url: url) { image in
+                if let imageUrl = variant.imageUrl,
+                   let url = URL(string: imageUrl) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
                             image
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
-                        } placeholder: {
+                        case .failure:
+                            colorSwatch
+                        case .empty:
+                            ProgressView()
+                        @unknown default:
                             ProgressView()
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                    } else if let colorCode = variant.colorCode,
-                              let color = Color(hex: colorCode) {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(color)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .strokeBorder(Color(.systemGray4), lineWidth: 1)
-                            )
-                    } else {
-                        Image(systemName: "paintpalette")
-                            .font(.system(size: 40))
-                            .foregroundStyle(.tertiary)
                     }
+                    .padding(20)
+                } else {
+                    colorSwatch
+                }
 
-                    // Default badge
-                    if variant.isDefault {
-                        VStack {
-                            HStack {
-                                Text("Popular")
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(.yellow)
-                                    .clipShape(Capsule())
-                                Spacer()
-                            }
+                // Default badge
+                if variant.isDefault {
+                    VStack {
+                        HStack {
+                            Text("Popular Choice")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(.yellow)
+                                .clipShape(Capsule())
                             Spacer()
                         }
-                        .padding(8)
+                        Spacer()
                     }
-                }
-
-                // Color name
-                Text(variant.name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-
-                // Price
-                if let price = variant.price {
-                    Text("$\(price, specifier: "%.2f")")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .padding(16)
                 }
             }
+            .frame(maxWidth: .infinity)
+            .aspectRatio(0.8, contentMode: .fit)
+
+            // Color info
+            VStack(spacing: 8) {
+                Text(variant.name)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+
+                if let price = variant.price {
+                    Text("$\(price, specifier: "%.2f")")
+                        .font(.headline)
+                }
+            }
+
+            // Select button
+            Button(action: onSelect) {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Select This Color")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+            }
+            .buttonStyle(.borderedProminent)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private var colorSwatch: some View {
+        if let colorCode = variant.colorCode,
+           let color = Color(hex: colorCode) {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(color)
+                .padding(40)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(Color(.systemGray4), lineWidth: 1)
+                        .padding(40)
+                )
+        } else {
+            Image(systemName: "paintpalette")
+                .font(.system(size: 60))
+                .foregroundStyle(.tertiary)
+        }
     }
 }
 
@@ -407,7 +621,7 @@ extension Color {
     }
 }
 
-// MARK: - Product Card
+// MARK: - Product Card (kept for backwards compatibility)
 struct ProductCard: View {
     let product: Product
     let isSelected: Bool
@@ -424,7 +638,6 @@ struct ProductCard: View {
     var body: some View {
         Button(action: onSelect) {
             VStack(spacing: 8) {
-                // Product image
                 ZStack {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(Color(.systemGray6))
@@ -447,7 +660,6 @@ struct ProductCard: View {
                             .foregroundStyle(.tertiary)
                     }
 
-                    // Selection indicator
                     if isSelected {
                         RoundedRectangle(cornerRadius: 12)
                             .strokeBorder(.blue, lineWidth: 3)
@@ -464,41 +676,8 @@ struct ProductCard: View {
                         }
                         .padding(8)
                     }
-
-                    // Featured badge or variants indicator
-                    VStack {
-                        HStack {
-                            if product.isFeatured {
-                                Text("Featured")
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(.yellow)
-                                    .clipShape(Capsule())
-                            }
-                            Spacer()
-                            if product.hasVariants && !product.variants.isEmpty {
-                                HStack(spacing: 2) {
-                                    Image(systemName: "paintpalette.fill")
-                                        .font(.caption2)
-                                    Text("\(product.variants.count)")
-                                        .font(.caption2)
-                                        .fontWeight(.bold)
-                                }
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(.blue.opacity(0.9))
-                                .foregroundStyle(.white)
-                                .clipShape(Capsule())
-                            }
-                        }
-                        Spacer()
-                    }
-                    .padding(8)
                 }
 
-                // Product info
                 VStack(spacing: 2) {
                     Text(product.name)
                         .font(.subheadline)
@@ -506,32 +685,16 @@ struct ProductCard: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
 
-                    // Show selected variant name if applicable
                     if let variant = selectedVariant {
                         Text(variant.name)
                             .font(.caption)
                             .foregroundStyle(.blue)
                     }
 
-                    // Show price (variant price takes precedence)
                     if let price = selectedVariant?.price ?? product.price {
                         Text("$\(price, specifier: "%.2f")")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    } else if product.hasVariants {
-                        // Show price range for products with variants
-                        let prices = product.variants.compactMap { $0.price }
-                        if let minPrice = prices.min(), let maxPrice = prices.max() {
-                            if minPrice == maxPrice {
-                                Text("$\(minPrice, specifier: "%.2f")")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Text("$\(minPrice, specifier: "%.0f") - $\(maxPrice, specifier: "%.0f")")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
                     }
                 }
             }
