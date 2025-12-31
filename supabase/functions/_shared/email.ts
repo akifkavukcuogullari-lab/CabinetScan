@@ -169,3 +169,160 @@ export function generateInvitationEmailHtml(options: {
 </html>
 `
 }
+
+// Generate project notification email HTML
+export function generateProjectNotificationEmailHtml(options: {
+  showroomName: string
+  customerName: string
+  customerEmail: string
+  customerPhone?: string | null
+  submittedDate: string
+  referenceNumber: string
+  projectViewUrl: string
+  logoUrl?: string | null
+  primaryColor?: string
+  isTest?: boolean
+}): string {
+  const {
+    showroomName,
+    customerName,
+    customerEmail,
+    customerPhone,
+    submittedDate,
+    referenceNumber,
+    projectViewUrl,
+    logoUrl,
+    primaryColor = '#2563EB',
+    isTest = false,
+  } = options
+
+  const formattedDate = new Date(submittedDate).toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+
+  const subject = isTest ? '[TEST]' : ''
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject} New Project Submitted - ${referenceNumber}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #e5e7eb;">
+              ${logoUrl ? `<img src="${logoUrl}" alt="${showroomName}" style="max-height: 60px; max-width: 200px; margin-bottom: 16px;">` : ''}
+              <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #111827;">
+                ${isTest ? '🧪 Test: ' : ''}New Project Submitted
+              </h1>
+              <p style="margin: 8px 0 0; font-size: 14px; color: #6b7280;">
+                Reference: <code style="padding: 2px 8px; background-color: #f3f4f6; border-radius: 4px; font-family: monospace;">${referenceNumber}</code>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding: 40px;">
+              <p style="margin: 0 0 24px; font-size: 16px; line-height: 1.6; color: #374151;">
+                A new project has been submitted${isTest ? ' (this is a test notification)' : ''} for <strong style="color: ${primaryColor};">${showroomName}</strong>.
+              </p>
+
+              <!-- Project Details Card -->
+              <div style="margin: 0 0 32px; padding: 24px; background-color: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
+                <h2 style="margin: 0 0 16px; font-size: 18px; font-weight: 600; color: #111827;">
+                  Customer Information
+                </h2>
+
+                <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 8px 0; font-size: 14px; color: #6b7280; width: 120px;">
+                      <strong>Name:</strong>
+                    </td>
+                    <td style="padding: 8px 0; font-size: 14px; color: #111827;">
+                      ${customerName}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; font-size: 14px; color: #6b7280;">
+                      <strong>Email:</strong>
+                    </td>
+                    <td style="padding: 8px 0; font-size: 14px; color: #111827;">
+                      <a href="mailto:${customerEmail}" style="color: ${primaryColor}; text-decoration: none;">
+                        ${customerEmail}
+                      </a>
+                    </td>
+                  </tr>
+                  ${customerPhone ? `
+                  <tr>
+                    <td style="padding: 8px 0; font-size: 14px; color: #6b7280;">
+                      <strong>Phone:</strong>
+                    </td>
+                    <td style="padding: 8px 0; font-size: 14px; color: #111827;">
+                      <a href="tel:${customerPhone}" style="color: ${primaryColor}; text-decoration: none;">
+                        ${customerPhone}
+                      </a>
+                    </td>
+                  </tr>
+                  ` : ''}
+                  <tr>
+                    <td style="padding: 8px 0; font-size: 14px; color: #6b7280;">
+                      <strong>Submitted:</strong>
+                    </td>
+                    <td style="padding: 8px 0; font-size: 14px; color: #111827;">
+                      ${formattedDate}
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <p style="margin: 0 0 32px; font-size: 16px; line-height: 1.6; color: #374151;">
+                Click the button below to view the project details, floor plans, and product selections:
+              </p>
+
+              <!-- CTA Button -->
+              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td align="center">
+                    <a href="${projectViewUrl}"
+                       style="display: inline-block; padding: 16px 32px; background-color: ${primaryColor}; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                      View Project Details
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 40px; background-color: #f9fafb; border-radius: 0 0 12px 12px; border-top: 1px solid #e5e7eb;">
+              <p style="margin: 0 0 8px; font-size: 12px; color: #9ca3af; text-align: center;">
+                This email was sent by CabinetHub
+              </p>
+              <p style="margin: 0; font-size: 12px; color: #9ca3af; text-align: center;">
+                If the button doesn't work, copy and paste this link into your browser:<br>
+                <a href="${projectViewUrl}" style="color: ${primaryColor}; word-break: break-all;">${projectViewUrl}</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`
+}

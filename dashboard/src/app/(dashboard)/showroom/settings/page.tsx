@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
-import { Webhook, CheckCircle, AlertCircle, Loader2, Lock, Sparkles, ChevronDown, ChevronUp, Edit2, RefreshCw, Save, X } from 'lucide-react'
+import { Webhook, CheckCircle, AlertCircle, Loader2, Lock, Sparkles, ChevronDown, ChevronUp, Edit2, RefreshCw, Save, X, Mail, Send } from 'lucide-react'
 import Link from 'next/link'
 
 interface Category {
@@ -65,6 +65,15 @@ export default function SettingsPage() {
   const [infoError, setInfoError] = useState<string | null>(null)
   const [infoSuccess, setInfoSuccess] = useState(false)
 
+  // Email notification state
+  const [notificationEmails, setNotificationEmails] = useState('')
+  const [notificationSaving, setNotificationSaving] = useState(false)
+  const [notificationError, setNotificationError] = useState<string | null>(null)
+  const [notificationSuccess, setNotificationSuccess] = useState(false)
+  const [sendingTestEmail, setSendingTestEmail] = useState(false)
+  const [testEmailError, setTestEmailError] = useState<string | null>(null)
+  const [testEmailSuccess, setTestEmailSuccess] = useState(false)
+
   useEffect(() => {
     async function loadData() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -91,6 +100,7 @@ export default function SettingsPage() {
         setShowroom(showroomData)
         setWebhookUrl(showroomData.webhook_url || '')
         setQuoteWebhookUrl(showroomData.quote_webhook_url || '')
+        setNotificationEmails(showroomData.notification_emails || '')
         // Initialize edit form
         setShowroomName(showroomData.name || '')
         setShowroomCode(showroomData.showroom_code || '')
@@ -385,6 +395,115 @@ export default function SettingsPage() {
     setIsEditingInfo(false)
   }
 
+  const validateNotificationEmails = (emails: string): { valid: boolean; error?: string } => {
+    if (!emails.trim()) {
+      return { valid: true } // Empty is valid
+    }
+
+    const list = emails.split(',').map(e => e.trim()).filter(e => e)
+
+    if (list.length > 5) {
+      return { valid: false, error: 'Maximum 5 email addresses allowed' }
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    for (const email of list) {
+      if (!emailPattern.test(email)) {
+        return { valid: false, error: `Invalid email address: ${email}` }
+      }
+    }
+
+    return { valid: true }
+  }
+
+  const saveNotificationEmails = async () => {
+    if (!showroomId) return
+
+    // Validate emails
+    const validation = validateNotificationEmails(notificationEmails)
+    if (!validation.valid) {
+      setNotificationError(validation.error || 'Invalid email addresses')
+      return
+    }
+
+    // Clean up and deduplicate emails
+    const cleanedEmails = notificationEmails
+      .split(',')
+      .map(e => e.trim())
+      .filter((e, index, arr) => e && arr.indexOf(e) === index) // Remove duplicates
+      .join(', ')
+
+    setNotificationSaving(true)
+    setNotificationError(null)
+    setNotificationSuccess(false)
+
+    const { error } = await supabase
+      .from('showrooms')
+      .update({ notification_emails: cleanedEmails || null })
+      .eq('id', showroomId)
+
+    setNotificationSaving(false)
+
+    if (error) {
+      setNotificationError('Failed to save notification emails')
+    } else {
+      setNotificationEmails(cleanedEmails)
+      setShowroom({ ...showroom, notification_emails: cleanedEmails })
+      setNotificationSuccess(true)
+      setTimeout(() => setNotificationSuccess(false), 3000)
+    }
+  }
+
+  const sendTestNotification = async () => {
+    if (!showroomId) return
+
+    // Check if emails are configured
+    const emails = notificationEmails.trim()
+    if (!emails) {
+      setTestEmailError('Please configure and save notification emails first')
+      return
+    }
+
+    setSendingTestEmail(true)
+    setTestEmailError(null)
+    setTestEmailSuccess(false)
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setTestEmailError('Not authenticated')
+        setSendingTestEmail(false)
+        return
+      }
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-test-notification`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ showroom_id: showroomId }),
+        }
+      )
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        setTestEmailError(result.error || result.message || 'Failed to send test notification')
+      } else {
+        setTestEmailSuccess(true)
+        setTimeout(() => setTestEmailSuccess(false), 5000)
+      }
+    } catch (error) {
+      setTestEmailError('Failed to send test notification')
+      console.error('Test notification error:', error)
+    }
+
+    setSendingTestEmail(false)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -664,6 +783,120 @@ export default function SettingsPage() {
                 </div>
               )
             })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Email Notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            Email Notifications
+          </CardTitle>
+          <CardDescription>
+            Configure email addresses to receive notifications when new projects are submitted.
+            You can add up to 5 email addresses (comma-separated).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="notification-emails">Notification Email Addresses</Label>
+            <Input
+              id="notification-emails"
+              type="text"
+              placeholder="email1@example.com, email2@example.com"
+              value={notificationEmails}
+              onChange={(e) => {
+                setNotificationEmails(e.target.value)
+                setNotificationError(null)
+              }}
+              className="flex-1"
+            />
+            <p className="text-xs text-gray-500">
+              Separate multiple email addresses with commas. Maximum 5 addresses.
+            </p>
+          </div>
+
+          {notificationError && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              {notificationError}
+            </div>
+          )}
+
+          {notificationSuccess && (
+            <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
+              Notification emails saved successfully
+            </div>
+          )}
+
+          {testEmailError && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              {testEmailError}
+            </div>
+          )}
+
+          {testEmailSuccess && (
+            <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
+              Test notification sent successfully! Check your inbox.
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              onClick={saveNotificationEmails}
+              disabled={notificationSaving}
+              className="flex-1"
+            >
+              {notificationSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Emails
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={sendTestNotification}
+              disabled={sendingTestEmail || !notificationEmails.trim()}
+              className="flex-1"
+            >
+              {sendingTestEmail ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Send Test Notification
+                </>
+              )}
+            </Button>
+          </div>
+
+          <Separator />
+
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h4 className="text-sm font-medium text-blue-900 mb-2">What&apos;s included in notifications?</h4>
+            <ul className="text-sm text-blue-800 space-y-1">
+              <li>• Customer name and contact information</li>
+              <li>• Project reference number</li>
+              <li>• Submission date and time</li>
+              <li>• Direct link to view project details in dashboard</li>
+            </ul>
+            <p className="text-xs text-blue-700 mt-3">
+              Notifications are sent immediately when a customer submits a new project from the iOS app.
+            </p>
           </div>
         </CardContent>
       </Card>

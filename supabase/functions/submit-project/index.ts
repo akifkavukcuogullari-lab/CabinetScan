@@ -1,6 +1,9 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { supabaseAdmin } from '../_shared/supabase.ts'
+import { sendEmail, generateProjectNotificationEmailHtml } from '../_shared/email.ts'
+
+const DASHBOARD_URL = Deno.env.get('DASHBOARD_URL') || 'https://cabinetscan.nextlyn.ai'
 
 interface ProjectSubmission {
   showroom_id: string
@@ -779,6 +782,58 @@ serve(async (req) => {
       callWebhook(showroom.webhook_url, webhookPayload, project.id).catch((err) => {
         console.error('Webhook call failed:', err)
       })
+    }
+
+    // Send email notifications (async, non-blocking)
+    if (showroom.notification_emails) {
+      const emails = showroom.notification_emails.split(',').map((e: string) => e.trim()).filter((e: string) => e)
+
+      if (emails.length > 0) {
+        console.log(`[EMAIL] Sending notifications to ${emails.length} recipient(s)`)
+
+        // Get branding for email styling
+        supabaseAdmin
+          .from('showroom_branding')
+          .select('logo_url, primary_color')
+          .eq('showroom_id', submission.showroom_id)
+          .single()
+          .then(({ data: branding }) => {
+            const projectUrl = `${DASHBOARD_URL}/showroom/projects/${project.id}`
+
+            const html = generateProjectNotificationEmailHtml({
+              showroomName: showroom.name,
+              customerName: `${submission.customer.first_name} ${submission.customer.last_name}`,
+              customerEmail: submission.customer.email,
+              customerPhone: submission.customer.phone,
+              submittedDate: project.submitted_at,
+              referenceNumber,
+              projectViewUrl: projectUrl,
+              logoUrl: branding?.logo_url || null,
+              primaryColor: branding?.primary_color || undefined,
+            })
+
+            // Send async (don't block response)
+            Promise.all(
+              emails.map((email: string) =>
+                sendEmail({
+                  to: email,
+                  subject: `New Project - ${showroom.name} [${referenceNumber}]`,
+                  html,
+                })
+              )
+            )
+              .then((results) => {
+                const successCount = results.filter((r: any) => r.success).length
+                console.log(`[EMAIL] Notifications sent: ${successCount}/${emails.length} successful`)
+              })
+              .catch((err: any) => {
+                console.error('[EMAIL] Error sending notifications:', err)
+              })
+          })
+          .catch((err: any) => {
+            console.error('[EMAIL] Error fetching branding for notifications:', err)
+          })
+      }
     }
 
     return new Response(

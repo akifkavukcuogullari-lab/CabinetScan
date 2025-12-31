@@ -7,6 +7,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -21,6 +29,9 @@ import {
   Filter,
   X,
   Loader2,
+  LayoutGrid,
+  List,
+  ArrowUpDown,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -57,6 +68,11 @@ export default function ProjectsPage() {
   // Filter state
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+
+  // View mode state
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
+  const [sortColumn, setSortColumn] = useState<'name' | 'email' | 'date' | 'status' | 'reference'>('date')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
 
   useEffect(() => {
     async function loadProjects() {
@@ -96,6 +112,32 @@ export default function ProjectsPage() {
     loadProjects()
   }, [supabase, router])
 
+  // Load view preference from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('projects-view-preference')
+    if (saved === 'grid' || saved === 'table') {
+      setViewMode(saved)
+    }
+  }, [])
+
+  // Handle view mode change with localStorage persistence
+  const handleViewChange = (mode: 'grid' | 'table') => {
+    setViewMode(mode)
+    localStorage.setItem('projects-view-preference', mode)
+  }
+
+  // Handle sort column change
+  const handleSort = (column: 'name' | 'email' | 'date' | 'status' | 'reference') => {
+    if (sortColumn === column) {
+      // Toggle direction if same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      // New column, default to descending (except for name/email which default to ascending)
+      setSortColumn(column)
+      setSortDirection(column === 'name' || column === 'email' ? 'asc' : 'desc')
+    }
+  }
+
   // Filter projects based on search and status
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
@@ -134,6 +176,41 @@ export default function ProjectsPage() {
     })
     return counts
   }, [projects])
+
+  // Sort projects for table view
+  const sortedProjects = useMemo(() => {
+    if (viewMode !== 'table') return filteredProjects
+
+    const sorted = [...filteredProjects]
+    sorted.sort((a, b) => {
+      let compare = 0
+
+      switch (sortColumn) {
+        case 'name':
+          const nameA = `${a.customer_first_name || ''} ${a.customer_last_name || ''}`.toLowerCase()
+          const nameB = `${b.customer_first_name || ''} ${b.customer_last_name || ''}`.toLowerCase()
+          compare = nameA.localeCompare(nameB)
+          break
+        case 'email':
+          compare = (a.customer_email || '').localeCompare(b.customer_email || '')
+          break
+        case 'date':
+          const dateA = a.submitted_at ? new Date(a.submitted_at).getTime() : 0
+          const dateB = b.submitted_at ? new Date(b.submitted_at).getTime() : 0
+          compare = dateA - dateB
+          break
+        case 'status':
+          compare = (a.status || '').localeCompare(b.status || '')
+          break
+        case 'reference':
+          compare = (a.reference_number || '').localeCompare(b.reference_number || '')
+          break
+      }
+
+      return sortDirection === 'asc' ? compare : -compare
+    })
+    return sorted
+  }, [filteredProjects, viewMode, sortColumn, sortDirection])
 
   const clearFilters = () => {
     setSearchQuery('')
@@ -196,6 +273,28 @@ export default function ProjectsPage() {
               </Select>
             </div>
 
+            {/* View Mode Toggle */}
+            <div className="flex gap-1 border rounded-lg p-1">
+              <Button
+                variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => handleViewChange('grid')}
+                className="gap-2"
+              >
+                <LayoutGrid className="h-4 w-4" />
+                <span className="hidden sm:inline">Grid</span>
+              </Button>
+              <Button
+                variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => handleViewChange('table')}
+                className="gap-2"
+              >
+                <List className="h-4 w-4" />
+                <span className="hidden sm:inline">Table</span>
+              </Button>
+            </div>
+
             {/* Clear Filters */}
             {hasActiveFilters && (
               <Button
@@ -231,50 +330,143 @@ export default function ProjectsPage() {
           </CardContent>
         </Card>
       ) : filteredProjects.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-          {filteredProjects.map((project: any) => {
-            return (
-              <Link
-                key={project.id}
-                href={`/showroom/projects/${project.id}`}
-                className="group"
-              >
-                <Card className="h-full hover:shadow-md transition-all duration-200 hover:border-blue-400">
-                  <CardContent className="p-4">
-                    {/* Header: Customer Name + Status */}
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold truncate group-hover:text-blue-600 transition-colors">
-                          {project.customer_first_name} {project.customer_last_name}
-                        </h3>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <code className="font-mono">{project.reference_number}</code>
-                          <span>|</span>
-                          <span>
-                            {project.submitted_at
-                              ? new Date(project.submitted_at).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric'
-                                })
-                              : '-'}
-                          </span>
+        viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+            {filteredProjects.map((project: any) => {
+              return (
+                <Link
+                  key={project.id}
+                  href={`/showroom/projects/${project.id}`}
+                  className="group"
+                >
+                  <Card className="h-full hover:shadow-md transition-all duration-200 hover:border-blue-400">
+                    <CardContent className="p-4">
+                      {/* Header: Customer Name + Status */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold truncate group-hover:text-blue-600 transition-colors">
+                            {project.customer_first_name} {project.customer_last_name}
+                          </h3>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <code className="font-mono">{project.reference_number}</code>
+                            <span>|</span>
+                            <span>
+                              {project.submitted_at
+                                ? new Date(project.submitted_at).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric'
+                                  })
+                                : '-'}
+                            </span>
+                          </div>
                         </div>
+                        <Badge className={`${statusColors[project.status]} shrink-0 text-xs`}>
+                          {project.status.replace('_', ' ')}
+                        </Badge>
                       </div>
-                      <Badge className={`${statusColors[project.status]} shrink-0 text-xs`}>
-                        {project.status.replace('_', ' ')}
-                      </Badge>
-                    </div>
 
-                    {/* Email Row */}
-                    <div className="text-sm text-gray-600 truncate">
-                      {project.customer_email}
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            )
-          })}
-        </div>
+                      {/* Email Row */}
+                      <div className="text-sm text-gray-600 truncate">
+                        {project.customer_email}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            })}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleSort('reference')}
+                      >
+                        <div className="flex items-center gap-2">
+                          Reference
+                          <ArrowUpDown className="h-4 w-4" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleSort('name')}
+                      >
+                        <div className="flex items-center gap-2">
+                          Customer Name
+                          <ArrowUpDown className="h-4 w-4" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleSort('email')}
+                      >
+                        <div className="flex items-center gap-2">
+                          Email
+                          <ArrowUpDown className="h-4 w-4" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleSort('date')}
+                      >
+                        <div className="flex items-center gap-2">
+                          Date Submitted
+                          <ArrowUpDown className="h-4 w-4" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleSort('status')}
+                      >
+                        <div className="flex items-center gap-2">
+                          Status
+                          <ArrowUpDown className="h-4 w-4" />
+                        </div>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedProjects.map((project: any) => (
+                      <TableRow
+                        key={project.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => router.push(`/showroom/projects/${project.id}`)}
+                      >
+                        <TableCell className="font-mono text-sm">
+                          {project.reference_number}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {project.customer_first_name} {project.customer_last_name}
+                        </TableCell>
+                        <TableCell className="text-gray-600">
+                          {project.customer_email}
+                        </TableCell>
+                        <TableCell className="text-gray-600">
+                          {project.submitted_at
+                            ? new Date(project.submitted_at).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                              })
+                            : '-'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={statusColors[project.status]}>
+                            {project.status.replace('_', ' ')}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )
       ) : projects.length > 0 ? (
         // Has projects but none match filters
         <Card>
