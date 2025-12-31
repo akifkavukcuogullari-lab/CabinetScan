@@ -801,7 +801,7 @@ serve(async (req) => {
         customerId,
       })
 
-      // Save webhook payload to project (async, don't block)
+      // Save webhook payload to project (for Create Quote button to use later)
       supabaseAdmin
         .from('projects')
         .update({ webhook_payload: webhookPayload })
@@ -814,10 +814,8 @@ serve(async (req) => {
           }
         })
 
-      // Call webhook (async, don't block response)
-      callWebhook(showroom.webhook_url, webhookPayload, project.id).catch((err) => {
-        console.error('Webhook call failed:', err)
-      })
+      // NOTE: Webhook is NOT called automatically on submission
+      // It will only be triggered when "Create Quote" button is clicked in dashboard
     }
 
     // Send email notifications (async, non-blocking)
