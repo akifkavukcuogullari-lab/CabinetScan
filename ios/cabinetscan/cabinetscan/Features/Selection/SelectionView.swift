@@ -163,7 +163,7 @@ struct SelectionView: View {
                             Button {
                                 appState.proceedToReview()
                             } label: {
-                                Text("Review")
+                                Label("Continue", systemImage: "chevron.right")
                             }
                             .buttonStyle(.borderedProminent)
                         }
