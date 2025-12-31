@@ -88,6 +88,13 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     `)
     .eq('project_id', id)
 
+  // Get addon selections
+  const { data: addonSelections } = await supabase
+    .from('project_addon_selections')
+    .select('*')
+    .eq('project_id', id)
+    .eq('is_selected', true)
+
   // Get quote email (latest one for this project)
   const { data: quoteEmails } = await supabase
     .from('quote_emails')
@@ -238,7 +245,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             <RoomMeasurementsSection measurement={measurement} defaultOpen={true} />
 
             {/* Product Selections */}
-            <ProductSelectionsSection selections={selections} defaultOpen={false} />
+            <ProductSelectionsSection selections={selections} addonSelections={addonSelections} defaultOpen={false} />
 
             {/* Quote Email Preview */}
             {quoteEmail && (
