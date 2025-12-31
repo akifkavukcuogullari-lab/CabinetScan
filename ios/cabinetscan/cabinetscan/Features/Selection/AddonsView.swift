@@ -133,69 +133,72 @@ struct AddonsView: View {
                                 .padding(.top, 8)
                             } else {
                                 // Quantity and Details section (shown after Yes)
-                                VStack(spacing: 20) {
-                                    // Quantity selector
-                                    VStack(alignment: .leading, spacing: 8) {
+                                VStack(spacing: 16) {
+                                    // Compact quantity selector
+                                    HStack {
                                         Text("Quantity")
                                             .font(.subheadline)
-                                            .fontWeight(.medium)
                                             .foregroundStyle(.secondary)
 
-                                        HStack {
+                                        Spacer()
+
+                                        HStack(spacing: 16) {
                                             Button {
-                                                if quantity > 1 {
-                                                    quantity -= 1
-                                                }
+                                                if quantity > 1 { quantity -= 1 }
                                             } label: {
                                                 Image(systemName: "minus.circle.fill")
-                                                    .font(.title)
+                                                    .font(.title2)
                                                     .foregroundStyle(quantity > 1 ? .blue : .gray)
                                             }
                                             .disabled(quantity <= 1)
 
                                             Text("\(quantity)")
-                                                .font(.title)
-                                                .fontWeight(.bold)
-                                                .frame(minWidth: 60)
+                                                .font(.title3)
+                                                .fontWeight(.semibold)
+                                                .frame(minWidth: 32)
 
                                             Button {
                                                 quantity += 1
                                             } label: {
                                                 Image(systemName: "plus.circle.fill")
-                                                    .font(.title)
+                                                    .font(.title2)
                                                     .foregroundStyle(.blue)
                                             }
                                         }
-                                        .frame(maxWidth: .infinity)
                                     }
-                                    .padding()
-                                    .background(Color(.systemGray6))
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .padding(.horizontal)
 
                                     // Details text field
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Additional Details (Optional)")
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                            .foregroundStyle(.secondary)
+                                    TextField("Notes (optional)", text: $notes, axis: .vertical)
+                                        .lineLimit(2...4)
+                                        .textFieldStyle(.roundedBorder)
+                                        .padding(.horizontal)
 
-                                        TextField("Any specific requirements or preferences...", text: $notes, axis: .vertical)
-                                            .lineLimit(3...6)
-                                            .textFieldStyle(.roundedBorder)
-                                    }
+                                    // Buttons row
+                                    HStack(spacing: 12) {
+                                        Button {
+                                            withAnimation {
+                                                showDetails = false
+                                            }
+                                        } label: {
+                                            Label("Change", systemImage: "chevron.left")
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 14)
+                                        }
+                                        .buttonStyle(.bordered)
 
-                                    // Continue button
-                                    Button {
-                                        confirmAndContinue()
-                                    } label: {
-                                        Text("Continue")
-                                            .fontWeight(.semibold)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 16)
+                                        Button {
+                                            confirmAndContinue()
+                                        } label: {
+                                            Label("Continue", systemImage: "chevron.right")
+                                                .fontWeight(.semibold)
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 14)
+                                        }
+                                        .buttonStyle(.borderedProminent)
                                     }
-                                    .buttonStyle(.borderedProminent)
+                                    .padding(.horizontal)
                                 }
-                                .padding(.horizontal)
                                 .padding(.top, 8)
                             }
 
