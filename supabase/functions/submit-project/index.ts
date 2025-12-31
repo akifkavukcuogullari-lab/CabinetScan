@@ -205,6 +205,7 @@ async function buildWebhookPayload(
   // Build comprehensive webhook payload
   return {
     event: 'project.submitted',
+    generate_quote: false, // Only generate quote when Create Quote button is clicked
     timestamp: new Date().toISOString(),
     project: {
       id: project.id,

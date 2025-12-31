@@ -93,6 +93,7 @@ serve(async (req) => {
     const webhookPayload = {
       ...project.webhook_payload,
       event: 'quote.requested',
+      generate_quote: true, // Signal n8n to generate AI quote email
       triggered_at: new Date().toISOString(),
     }
 
