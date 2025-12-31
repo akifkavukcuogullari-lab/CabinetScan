@@ -102,51 +102,58 @@ struct ReviewView: View {
                     }
                 }
 
-                // Selections section
-                Section("Selected Products") {
-                    if appState.selections.isEmpty {
-                        Text("No products selected")
+                // Selections section (products + addons)
+                Section("Your Selections") {
+                    if appState.selections.isEmpty && selectedAddons.isEmpty {
+                        Text("No selections made")
                             .foregroundStyle(.secondary)
                     } else {
+                        // Products
                         ForEach(categories.filter { appState.selections[$0.categoryId] != nil }) { category in
                             if let product = appState.selections[category.categoryId] {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(category.name)
-                                        .font(.caption)
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(category.name)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        Text(product.name)
+                                            .font(.body)
+                                        if let variant = appState.getSelectedVariant(for: product) {
+                                            Text(variant.name)
+                                                .font(.caption)
+                                                .foregroundStyle(.blue)
+                                        }
+                                    }
+                                    Spacer()
+                                    Image(systemName: "cube.fill")
                                         .foregroundStyle(.secondary)
-                                    Text(product.name)
-                                        .font(.body)
                                 }
                             }
                         }
-                    }
-                }
 
-                // Addon selections section
-                if !selectedAddons.isEmpty {
-                    Section("Add-ons") {
+                        // Addons (under products)
                         ForEach(selectedAddons, id: \.addon.id) { item in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.green)
-                                    Text(item.addon.question)
-                                        .font(.body)
-                                    Spacer()
-                                    Text("x\(item.quantity)")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 2)
-                                        .background(Color(.systemGray5))
-                                        .clipShape(Capsule())
-                                }
-                                if !item.notes.isEmpty {
-                                    Text(item.notes)
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Add-on")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                        .padding(.leading, 28)
+                                    Text(item.addon.question)
+                                        .font(.body)
+                                    if !item.notes.isEmpty {
+                                        Text(item.notes)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
+                                Spacer()
+                                Text("×\(item.quantity)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(Color(.systemGray5))
+                                    .clipShape(Capsule())
                             }
                         }
                     }
