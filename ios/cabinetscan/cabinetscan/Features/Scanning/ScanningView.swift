@@ -935,17 +935,118 @@ struct ScanningView: View {
         }
 
         // OBJECTS - Extract cabinet, appliance, and fixture data with rotation
+        // Cabinet types detected:
+        // 1. Upper Cabinet - standard upper cabinets (30-42" / 0.76-1.07m height)
+        // 2. Lower Cabinet - base cabinets
+        // 3. Wall Oven Cabinet - tall cabinet with oven between upper and lower sections
+        // 4. Pantry Cabinet - tall cabinet without oven (vertically aligned upper+lower)
+        // 5. Upper Small Cabinet - shorter cabinets above appliances (fridge, stove, sink) - 12-18" / 0.3-0.46m height
+
         var upperCabinets: [[String: Any]] = []
         var lowerCabinets: [[String: Any]] = []
+        var wallOvenCabinets: [[String: Any]] = []
+        var pantryCabinets: [[String: Any]] = []
+        var upperSmallCabinets: [[String: Any]] = []
         var appliances: [[String: Any]] = []
         var sinks: [[String: Any]] = []
 
         var upperIndex = 1
         var lowerIndex = 1
+        var wallOvenIndex = 1
+        var pantryIndex = 1
+        var upperSmallIndex = 1
         var applianceIndex = 1
         var sinkIndex = 1
 
+        // First pass: Collect all storage objects and appliances for analysis
+        struct StorageInfo {
+            let object: CapturedRoom.Object
+            let position: SIMD4<Float>
+            let dimensions: SIMD3<Float>
+            let heightAboveFloor: Float
+        }
+
+        // Find floor level from all storage objects (minimum Y is floor level)
+        let allStorageYPositions = room.objects
+            .filter { $0.category == .storage }
+            .map { $0.transform.columns.3.y }
+        let floorLevel = allStorageYPositions.min() ?? -1.0
+
+        // Collect storage objects with height classification
+        var upperStorageObjects: [StorageInfo] = []
+        var lowerStorageObjects: [StorageInfo] = []
+
+        for object in room.objects where object.category == .storage {
+            let position = object.transform.columns.3
+            let heightAboveFloor = position.y - floorLevel
+
+            let info = StorageInfo(
+                object: object,
+                position: position,
+                dimensions: object.dimensions,
+                heightAboveFloor: heightAboveFloor
+            )
+
+            if heightAboveFloor > 1.0 {
+                upperStorageObjects.append(info)
+            } else {
+                lowerStorageObjects.append(info)
+            }
+        }
+
+        // Collect appliance positions for cabinet type detection
+        var ovenPositions: [SIMD4<Float>] = []
+        var appliancePositionsForSmallCabinets: [SIMD4<Float>] = []  // Fridge, stove positions
+        var sinkPositions: [SIMD4<Float>] = []
+
         for object in room.objects {
+            let pos = object.transform.columns.3
+            switch object.category {
+            case .oven:
+                ovenPositions.append(pos)
+            case .refrigerator, .stove:
+                appliancePositionsForSmallCabinets.append(pos)
+            case .sink:
+                sinkPositions.append(pos)
+            default:
+                break
+            }
+        }
+
+        // Helper function to check if two objects are horizontally aligned (same X/Z within threshold)
+        func areHorizontallyAligned(_ pos1: SIMD4<Float>, _ pos2: SIMD4<Float>, threshold: Float = 0.4) -> Bool {
+            let xDiff = abs(pos1.x - pos2.x)
+            let zDiff = abs(pos1.z - pos2.z)
+            return xDiff < threshold && zDiff < threshold
+        }
+
+        // Helper function to check if an oven is between upper and lower cabinet positions
+        func isOvenBetween(upper: SIMD4<Float>, lower: SIMD4<Float>, oven: SIMD4<Float>, threshold: Float = 0.4) -> Bool {
+            let alignedWithUpper = areHorizontallyAligned(upper, oven, threshold: threshold)
+            let alignedWithLower = areHorizontallyAligned(lower, oven, threshold: threshold)
+            let ovenBetweenY = oven.y > lower.y && oven.y < upper.y
+            return (alignedWithUpper || alignedWithLower) && ovenBetweenY
+        }
+
+        // Helper function to check if a cabinet is above an appliance or sink
+        func isAboveApplianceOrSink(_ cabinetPos: SIMD4<Float>, threshold: Float = 0.5) -> (Bool, String?) {
+            // Check if above refrigerator or stove
+            for appPos in appliancePositionsForSmallCabinets {
+                if areHorizontallyAligned(cabinetPos, appPos, threshold: threshold) && cabinetPos.y > appPos.y {
+                    return (true, "appliance")
+                }
+            }
+            // Check if above sink
+            for sinkPos in sinkPositions {
+                if areHorizontallyAligned(cabinetPos, sinkPos, threshold: threshold) && cabinetPos.y > sinkPos.y {
+                    return (true, "sink")
+                }
+            }
+            return (false, nil)
+        }
+
+        // Helper to create base object data
+        func createBaseObjectData(for object: CapturedRoom.Object) -> [String: Any] {
             let transform = object.transform
             let position = transform.columns.3
             let dimensions = object.dimensions
@@ -954,11 +1055,9 @@ struct ScanningView: View {
             let heightFt = Double(dimensions.y) * 3.28084
             let depthFt = Double(dimensions.z) * 3.28084
 
-            // Calculate corner points for accurate 2D rendering
             let halfWidth = dimensions.x / 2.0
             let halfDepth = dimensions.z / 2.0
 
-            // Four corners in local space, transformed to world space
             let corners = [
                 SIMD4<Float>(-halfWidth, 0, -halfDepth, 1),
                 SIMD4<Float>(halfWidth, 0, -halfDepth, 1),
@@ -973,7 +1072,7 @@ struct ScanningView: View {
                 ]
             }
 
-            let baseObjectData: [String: Any] = [
+            return [
                 "position": [
                     "x": Double(position.x) * 3.28084,
                     "z": Double(position.z) * 3.28084,
@@ -987,46 +1086,115 @@ struct ScanningView: View {
                 "height_inches": formatFeetInches(heightFt),
                 "depth_inches": formatFeetInches(depthFt)
             ]
+        }
 
-            // Categorize objects based on type and position
+        // Height threshold for small upper cabinets (in meters)
+        // Small cabinets above fridge/stove/sink are typically 12-18" (0.3-0.46m) tall
+        let smallUpperCabinetMaxHeight: Float = 0.5  // 18 inches
+
+        // PHASE 1: Detect Wall Oven Cabinets and Pantry Cabinets
+        // Find vertically aligned upper+lower pairs
+        var matchedUpperIndices: Set<Int> = []
+        var matchedLowerIndices: Set<Int> = []
+
+        for (upperIdx, upperInfo) in upperStorageObjects.enumerated() {
+            for (lowerIdx, lowerInfo) in lowerStorageObjects.enumerated() {
+                guard !matchedUpperIndices.contains(upperIdx) && !matchedLowerIndices.contains(lowerIdx) else { continue }
+
+                if areHorizontallyAligned(upperInfo.position, lowerInfo.position) {
+                    var hasOvenBetween = false
+                    for ovenPos in ovenPositions {
+                        if isOvenBetween(upper: upperInfo.position, lower: lowerInfo.position, oven: ovenPos) {
+                            hasOvenBetween = true
+                            break
+                        }
+                    }
+
+                    // Calculate combined dimensions
+                    let upperHeightFt = Double(upperInfo.dimensions.y) * 3.28084
+                    let lowerHeightFt = Double(lowerInfo.dimensions.y) * 3.28084
+                    let gapHeight = Double(upperInfo.position.y - lowerInfo.position.y - upperInfo.dimensions.y/2 - lowerInfo.dimensions.y/2) * 3.28084
+                    let totalHeightFt = upperHeightFt + lowerHeightFt + max(0, gapHeight)
+                    let widthFt = max(Double(upperInfo.dimensions.x), Double(lowerInfo.dimensions.x)) * 3.28084
+                    let depthFt = max(Double(upperInfo.dimensions.z), Double(lowerInfo.dimensions.z)) * 3.28084
+
+                    var cabinetData = createBaseObjectData(for: lowerInfo.object)
+                    cabinetData["total_height_ft"] = totalHeightFt
+                    cabinetData["total_height_inches"] = formatFeetInches(totalHeightFt)
+                    cabinetData["upper_section_height_ft"] = upperHeightFt
+                    cabinetData["lower_section_height_ft"] = lowerHeightFt
+                    cabinetData["width_ft"] = widthFt
+                    cabinetData["depth_ft"] = depthFt
+
+                    if hasOvenBetween {
+                        cabinetData["id"] = "wall_oven_\(wallOvenIndex)"
+                        cabinetData["type"] = "wall_oven_cabinet"
+                        cabinetData["has_oven"] = true
+                        wallOvenCabinets.append(cabinetData)
+                        wallOvenIndex += 1
+                    } else {
+                        cabinetData["id"] = "pantry_\(pantryIndex)"
+                        cabinetData["type"] = "pantry_cabinet"
+                        pantryCabinets.append(cabinetData)
+                        pantryIndex += 1
+                    }
+
+                    matchedUpperIndices.insert(upperIdx)
+                    matchedLowerIndices.insert(lowerIdx)
+                }
+            }
+        }
+
+        // PHASE 2: Process remaining upper cabinets - check for small upper cabinets
+        for (idx, info) in upperStorageObjects.enumerated() {
+            guard !matchedUpperIndices.contains(idx) else { continue }
+
+            var cabinetData = createBaseObjectData(for: info.object)
+            let cabinetHeight = info.dimensions.y
+
+            // Check if this is a small cabinet above appliance or sink
+            let (isAbove, aboveType) = isAboveApplianceOrSink(info.position)
+
+            if cabinetHeight < smallUpperCabinetMaxHeight && isAbove {
+                cabinetData["id"] = "upper_small_\(upperSmallIndex)"
+                cabinetData["type"] = "upper_small_cabinet"
+                if let aboveType = aboveType {
+                    cabinetData["above"] = aboveType
+                }
+                upperSmallCabinets.append(cabinetData)
+                upperSmallIndex += 1
+            } else {
+                // Standard upper cabinet
+                cabinetData["id"] = "upper_\(upperIndex)"
+                cabinetData["type"] = "upper_cabinet"
+                upperCabinets.append(cabinetData)
+                upperIndex += 1
+            }
+        }
+
+        // PHASE 3: Process remaining lower cabinets
+        for (idx, info) in lowerStorageObjects.enumerated() {
+            guard !matchedLowerIndices.contains(idx) else { continue }
+            var cabinetData = createBaseObjectData(for: info.object)
+            cabinetData["id"] = "lower_\(lowerIndex)"
+            cabinetData["type"] = "lower_cabinet"
+            lowerCabinets.append(cabinetData)
+            lowerIndex += 1
+        }
+
+        // PHASE 4: Process non-storage objects (sinks, appliances)
+        for object in room.objects {
             switch object.category {
             case .storage:
-                // Determine if upper or lower cabinet based on RELATIVE height
-                // RoomPlan Y coordinates are relative to scan origin, NOT floor level
-                // We need to find floor level first, then compare
-
-                // Find floor level from all storage objects (minimum Y is floor level)
-                let allStorageYPositions = room.objects
-                    .filter { $0.category == .storage }
-                    .map { $0.transform.columns.3.y }
-                let floorLevel = allStorageYPositions.min() ?? -1.0
-
-                // Upper cabinet if its center is more than 1.0m above floor level
-                // (Lower cabinet centers are ~0.45m above floor, upper cabinet centers are ~1.5m+ above floor)
-                let heightAboveFloor = position.y - floorLevel
-                let isUpperCabinet = heightAboveFloor > 1.0
-
-                if isUpperCabinet {
-                    var cabinetData = baseObjectData
-                    cabinetData["id"] = "upper_\(upperIndex)"
-                    cabinetData["type"] = "upper_cabinet"
-                    upperCabinets.append(cabinetData)
-                    upperIndex += 1
-                } else {
-                    var cabinetData = baseObjectData
-                    cabinetData["id"] = "lower_\(lowerIndex)"
-                    cabinetData["type"] = "lower_cabinet"
-                    lowerCabinets.append(cabinetData)
-                    lowerIndex += 1
-                }
+                break  // Already processed above
             case .sink:
-                var sinkData = baseObjectData
+                var sinkData = createBaseObjectData(for: object)
                 sinkData["id"] = "sink_\(sinkIndex)"
                 sinkData["type"] = "sink"
                 sinks.append(sinkData)
                 sinkIndex += 1
             case .refrigerator, .stove, .oven, .washerDryer, .dishwasher:
-                var applianceData = baseObjectData
+                var applianceData = createBaseObjectData(for: object)
                 applianceData["id"] = "appliance_\(applianceIndex)"
                 applianceData["type"] = "\(object.category)"
                 appliances.append(applianceData)
@@ -1035,6 +1203,14 @@ struct ScanningView: View {
                 break
             }
         }
+
+        print("=== Cabinet Classification Results ===")
+        print("Upper cabinets: \(upperCabinets.count)")
+        print("Lower cabinets: \(lowerCabinets.count)")
+        print("Wall oven cabinets: \(wallOvenCabinets.count)")
+        print("Pantry cabinets: \(pantryCabinets.count)")
+        print("Upper small cabinets: \(upperSmallCabinets.count)")
+        print("======================================")
 
         // Room dimensions
         let roomBounds: [String: Any] = [
@@ -1129,7 +1305,10 @@ struct ScanningView: View {
         measurements["windows"] = windowsData
         measurements["cabinets"] = [
             "upper": upperCabinets,
-            "lower": lowerCabinets
+            "lower": lowerCabinets,
+            "wall_oven": wallOvenCabinets,
+            "pantry": pantryCabinets,
+            "upper_small": upperSmallCabinets
         ]
         measurements["appliances"] = appliances
         measurements["sinks"] = sinks
@@ -1144,6 +1323,9 @@ struct ScanningView: View {
         measurements["summary"] = [
             "upper_cabinet_count": upperCabinets.count,
             "lower_cabinet_count": lowerCabinets.count,
+            "wall_oven_cabinet_count": wallOvenCabinets.count,
+            "pantry_cabinet_count": pantryCabinets.count,
+            "upper_small_cabinet_count": upperSmallCabinets.count,
             "appliance_count": appliances.count,
             "sink_count": sinks.count,
             "door_count": doorsData.count,

@@ -21,12 +21,14 @@ struct ProjectSubmission: Codable {
     let project: ProjectInfo
     let measurements: MeasurementData
     let selections: [ProductSelection]
+    let addonSelections: [AddonSelection]
     let deviceInfo: DeviceInfo?
 
     enum CodingKeys: String, CodingKey {
         case customer, project, measurements, selections
         case showroomId = "showroom_id"
         case endClient = "end_client"
+        case addonSelections = "addon_selections"
         case deviceInfo = "device_info"
     }
 }
@@ -134,6 +136,21 @@ struct ProductSelection: Codable {
         case categoryId = "category_id"
         case productId = "product_id"
         case variantId = "variant_id"
+        case customerNotes = "customer_notes"
+    }
+}
+
+// MARK: - Addon Selection
+struct AddonSelection: Codable {
+    let addonId: String
+    let isSelected: Bool
+    let quantity: Int
+    let customerNotes: String?
+
+    enum CodingKeys: String, CodingKey {
+        case quantity
+        case addonId = "addon_id"
+        case isSelected = "is_selected"
         case customerNotes = "customer_notes"
     }
 }

@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   X,
   Ruler,
@@ -20,7 +21,10 @@ import {
   EyeOff,
   Compass,
   Keyboard,
-  Loader2
+  Loader2,
+  Layers,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 
 // iOS data structure types
@@ -89,8 +93,12 @@ interface MeasurementsData {
   cabinets?: {
     upper?: CabinetData[]
     lower?: CabinetData[]
+    wall_oven?: CabinetData[]
+    pantry?: CabinetData[]
+    upper_small?: CabinetData[]
   }
   appliances?: ApplianceData[]
+  sinks?: ApplianceData[]  // Sinks are stored separately from appliances
   doors?: DoorData[]
   windows?: WindowData[]
   countertop_summary?: {
@@ -119,6 +127,15 @@ interface LabelPosition {
   height: number
   text: string
   rotation: number
+}
+
+interface LayerVisibility {
+  WALLS: boolean
+  CABINETS_LOWER: boolean
+  CABINETS_UPPER: boolean
+  APPLIANCES: boolean
+  DOORS: boolean
+  WINDOWS: boolean
 }
 
 // Collision detection for labels
@@ -179,6 +196,15 @@ export function InteractiveFloorPlan({
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showKeyboardHints, setShowKeyboardHints] = useState(false)
   const [tooltipData, setTooltipData] = useState<{ x: number; y: number; content: string } | null>(null)
+  const [showLayerPanel, setShowLayerPanel] = useState(true)
+  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
+    WALLS: true,
+    CABINETS_LOWER: true,
+    CABINETS_UPPER: true,
+    APPLIANCES: true,
+    DOORS: true,
+    WINDOWS: true
+  })
 
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -343,7 +369,13 @@ export function InteractiveFloorPlan({
   const walls = Array.isArray(measurements?.walls) ? measurements.walls : []
   const upperCabinets = Array.isArray(measurements?.cabinets?.upper) ? measurements.cabinets.upper : []
   const lowerCabinets = Array.isArray(measurements?.cabinets?.lower) ? measurements.cabinets.lower : []
-  const appliances = Array.isArray(measurements?.appliances) ? measurements.appliances : []
+  const wallOvenCabinets = Array.isArray(measurements?.cabinets?.wall_oven) ? measurements.cabinets.wall_oven : []
+  const pantryCabinets = Array.isArray(measurements?.cabinets?.pantry) ? measurements.cabinets.pantry : []
+  const upperSmallCabinets = Array.isArray(measurements?.cabinets?.upper_small) ? measurements.cabinets.upper_small : []
+  const rawAppliances = Array.isArray(measurements?.appliances) ? measurements.appliances : []
+  const sinks = Array.isArray(measurements?.sinks) ? measurements.sinks : []
+  // Combine appliances and sinks for rendering (sinks have type: "sink")
+  const appliances = [...rawAppliances, ...sinks]
   const doors = Array.isArray(measurements?.doors) ? measurements.doors : []
   const windows = Array.isArray(measurements?.windows) ? measurements.windows : []
   const room = measurements?.room
@@ -657,11 +689,9 @@ export function InteractiveFloorPlan({
   }, [])
 
   // Format measurements
+  // Format measurements in inches (cabinet industry standard)
   const formatFeetInches = (feet: number) => {
-    const wholeFeet = Math.floor(feet)
-    const inches = Math.round((feet - wholeFeet) * 12)
-    if (inches === 12) return `${wholeFeet + 1}'0"`
-    return `${wholeFeet}'${inches}"`
+    return `${Math.round(feet * 12)}"`
   }
 
   const formatInches = (feet: number) => {
@@ -765,6 +795,24 @@ export function InteractiveFloorPlan({
     setHoveredObject(null)
     setTooltipData(null)
   }, [])
+
+  // Toggle layer visibility
+  const toggleLayer = (layer: keyof LayerVisibility) => {
+    setLayerVisibility(prev => ({ ...prev, [layer]: !prev[layer] }))
+  }
+
+  // Count entities in each layer
+  const layerCounts = useMemo(() => ({
+    WALLS: measurements?.walls?.length || 0,
+    CABINETS_LOWER: (measurements?.cabinets?.lower?.length || 0) +
+                    (measurements?.cabinets?.wall_oven?.length || 0) +
+                    (measurements?.cabinets?.pantry?.length || 0),
+    CABINETS_UPPER: (measurements?.cabinets?.upper?.length || 0) +
+                    (measurements?.cabinets?.upper_small?.length || 0),
+    APPLIANCES: (measurements?.appliances?.length || 0) + (measurements?.sinks?.length || 0),
+    DOORS: measurements?.doors?.length || 0,
+    WINDOWS: measurements?.windows?.length || 0
+  }), [measurements])
 
   // Calculate wall labels with collision avoidance (including segments split by doors/windows)
   const wallLabels = useMemo(() => {
@@ -1213,6 +1261,40 @@ export function InteractiveFloorPlan({
           <span className="text-xs text-gray-500 w-8 text-right font-mono">{Math.round(rotation)}°</span>
         </div>
 
+        {/* Layer panel toggle button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute top-3 left-3 z-30 h-8 w-8 bg-white/90 hover:bg-gray-100 shadow-sm border border-gray-200/50"
+          onClick={() => setShowLayerPanel(!showLayerPanel)}
+          title={showLayerPanel ? "Hide layers" : "Show layers"}
+        >
+          {showLayerPanel ? <ChevronLeft className="h-4 w-4" /> : <Layers className="h-4 w-4" />}
+        </Button>
+
+        {/* Layer panel */}
+        {showLayerPanel && (
+          <div className="absolute top-12 left-3 z-20 w-48 bg-white/95 backdrop-blur-sm rounded-lg border border-gray-200 shadow-lg p-3">
+            <div className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">Layers</div>
+            <div className="space-y-1.5">
+              {(Object.keys(layerVisibility) as Array<keyof LayerVisibility>).map(layer => (
+                <label
+                  key={layer}
+                  className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 rounded px-1.5 py-1 -mx-1.5"
+                >
+                  <Checkbox
+                    checked={layerVisibility[layer]}
+                    onCheckedChange={() => toggleLayer(layer)}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span className="text-xs text-gray-700 flex-1">{layer.replace('_', ' ')}</span>
+                  <span className="text-xs text-gray-400">{layerCounts[layer]}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div
           ref={containerRef}
           className={`relative overflow-hidden ${isFullscreen ? 'h-screen' : 'h-[60vh] min-h-[400px]'}`}
@@ -1232,7 +1314,7 @@ export function InteractiveFloorPlan({
             {renderSvgContent()}
 
             {/* Lower Cabinets */}
-            {lowerCabinets.map((cabinet, idx) => {
+            {layerVisibility.CABINETS_LOWER && lowerCabinets.map((cabinet, idx) => {
               const id = `cabinet-lower-${idx}`
               const isHovered = hoveredObject === id
               const isSelected = selectedObject?.data?.id === cabinet.id
@@ -1314,7 +1396,7 @@ export function InteractiveFloorPlan({
             })}
 
             {/* Appliances */}
-            {appliances.map((appliance, idx) => {
+            {layerVisibility.APPLIANCES && appliances.map((appliance, idx) => {
               const id = `appliance-${idx}`
               const isHovered = hoveredObject === id
               const isSelected = selectedObject?.data?.id === appliance.id
@@ -1377,7 +1459,7 @@ export function InteractiveFloorPlan({
             })}
 
             {/* Walls */}
-            {walls.map((wall, idx) => {
+            {layerVisibility.WALLS && walls.map((wall, idx) => {
               const id = `wall-${idx}`
               const isHovered = hoveredObject === id
               const isSelected = selectedObject?.data?.id === wall.id
@@ -1452,7 +1534,7 @@ export function InteractiveFloorPlan({
             ))}
 
             {/* Upper Cabinets (dashed purple outline with subtle fill) */}
-            {upperCabinets.map((cabinet, idx) => {
+            {layerVisibility.CABINETS_UPPER && upperCabinets.map((cabinet, idx) => {
               const id = `cabinet-upper-${idx}`
               const isHovered = hoveredObject === id
               const isSelected = selectedObject?.data?.id === cabinet.id
@@ -1536,7 +1618,7 @@ export function InteractiveFloorPlan({
             })}
 
             {/* Windows */}
-            {windows.map((windowItem, idx) => {
+            {layerVisibility.WINDOWS && windows.map((windowItem, idx) => {
               const id = `window-${idx}`
               const isHovered = hoveredObject === id
               const isSelected = selectedObject?.data?.id === windowItem.id
@@ -1588,7 +1670,7 @@ export function InteractiveFloorPlan({
             })}
 
             {/* Doors */}
-            {doors.map((door, idx) => {
+            {layerVisibility.DOORS && doors.map((door, idx) => {
               const id = `door-${idx}`
               const isHovered = hoveredObject === id
               const isSelected = selectedObject?.data?.id === door.id
@@ -1801,8 +1883,40 @@ export function InteractiveFloorPlan({
             >
               <Keyboard className="h-4 w-4" />
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowLayerPanel(!showLayerPanel)}
+              title={showLayerPanel ? "Hide layers" : "Show layers"}
+              className="h-8 w-8 hover:bg-gray-200/50 transition-colors duration-200"
+            >
+              <Layers className="h-4 w-4" />
+            </Button>
           </div>
         </div>
+
+        {/* Layer panel */}
+        {showLayerPanel && (
+          <div className="mb-4 p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+            <div className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">Layers</div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {(Object.keys(layerVisibility) as Array<keyof LayerVisibility>).map(layer => (
+                <label
+                  key={layer}
+                  className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-2 py-1.5"
+                >
+                  <Checkbox
+                    checked={layerVisibility[layer]}
+                    onCheckedChange={() => toggleLayer(layer)}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span className="text-xs text-gray-700 flex-1">{layer.replace('_', ' ')}</span>
+                  <span className="text-xs text-gray-400">{layerCounts[layer]}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Keyboard hints panel */}
         {showKeyboardHints && (
@@ -1987,7 +2101,7 @@ export function InteractiveFloorPlan({
             })}
 
             {/* Appliances */}
-            {appliances.map((appliance, idx) => {
+            {layerVisibility.APPLIANCES && appliances.map((appliance, idx) => {
               const id = `appliance-${idx}`
               const isHovered = hoveredObject === id
               const isSelected = selectedObject?.data?.id === appliance.id
@@ -2050,7 +2164,7 @@ export function InteractiveFloorPlan({
             })}
 
             {/* Walls */}
-            {walls.map((wall, idx) => {
+            {layerVisibility.WALLS && walls.map((wall, idx) => {
               const id = `wall-${idx}`
               const isHovered = hoveredObject === id
               const isSelected = selectedObject?.data?.id === wall.id
@@ -2125,7 +2239,7 @@ export function InteractiveFloorPlan({
             ))}
 
             {/* Upper Cabinets (dashed purple outline with subtle fill) */}
-            {upperCabinets.map((cabinet, idx) => {
+            {layerVisibility.CABINETS_UPPER && upperCabinets.map((cabinet, idx) => {
               const id = `cabinet-upper-${idx}`
               const isHovered = hoveredObject === id
               const isSelected = selectedObject?.data?.id === cabinet.id
@@ -2209,7 +2323,7 @@ export function InteractiveFloorPlan({
             })}
 
             {/* Windows */}
-            {windows.map((windowItem, idx) => {
+            {layerVisibility.WINDOWS && windows.map((windowItem, idx) => {
               const id = `window-${idx}`
               const isHovered = hoveredObject === id
               const isSelected = selectedObject?.data?.id === windowItem.id
@@ -2261,7 +2375,7 @@ export function InteractiveFloorPlan({
             })}
 
             {/* Doors */}
-            {doors.map((door, idx) => {
+            {layerVisibility.DOORS && doors.map((door, idx) => {
               const id = `door-${idx}`
               const isHovered = hoveredObject === id
               const isSelected = selectedObject?.data?.id === door.id

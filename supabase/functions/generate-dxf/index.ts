@@ -86,6 +86,9 @@ interface Measurements {
   cabinets?: {
     upper?: CabinetData[]
     lower?: CabinetData[]
+    wall_oven?: CabinetData[]
+    pantry?: CabinetData[]
+    upper_small?: CabinetData[]
   }
   appliances?: ApplianceData[]
   sinks?: SinkData[]
@@ -235,6 +238,61 @@ serve(async (req) => {
           const width = feetToInches(cabinet.width_ft)
           const depth = feetToInches(cabinet.depth_ft)
           dxf.addRectangle(pos.x - width/2, pos.y - depth/2, width, depth, 'CABINETS_UPPER')
+        }
+      }
+    }
+
+    // Add wall oven cabinets
+    if (measurements.cabinets?.wall_oven && measurements.cabinets.wall_oven.length > 0) {
+      for (const cabinet of measurements.cabinets.wall_oven) {
+        if (cabinet.corners && cabinet.corners.length === 4) {
+          const points = cabinet.corners.map(c => toDxfCoords(c.x, c.z))
+          dxf.addLwPolyline(points, 'CABINETS_WALL_OVEN', true)
+          // Add label
+          const centerX = points.reduce((sum, p) => sum + p.x, 0) / 4
+          const centerY = points.reduce((sum, p) => sum + p.y, 0) / 4
+          dxf.addText({ x: centerX, y: centerY }, 3, 'WALL OVEN', 'TEXT')
+        } else if (cabinet.position && cabinet.width_ft && cabinet.depth_ft) {
+          const pos = toDxfCoords(cabinet.position.x, cabinet.position.z)
+          const width = feetToInches(cabinet.width_ft)
+          const depth = feetToInches(cabinet.depth_ft)
+          dxf.addRectangle(pos.x - width/2, pos.y - depth/2, width, depth, 'CABINETS_WALL_OVEN')
+          dxf.addText({ x: pos.x, y: pos.y }, 3, 'WALL OVEN', 'TEXT')
+        }
+      }
+    }
+
+    // Add pantry cabinets
+    if (measurements.cabinets?.pantry && measurements.cabinets.pantry.length > 0) {
+      for (const cabinet of measurements.cabinets.pantry) {
+        if (cabinet.corners && cabinet.corners.length === 4) {
+          const points = cabinet.corners.map(c => toDxfCoords(c.x, c.z))
+          dxf.addLwPolyline(points, 'CABINETS_PANTRY', true)
+          // Add label
+          const centerX = points.reduce((sum, p) => sum + p.x, 0) / 4
+          const centerY = points.reduce((sum, p) => sum + p.y, 0) / 4
+          dxf.addText({ x: centerX, y: centerY }, 3, 'PANTRY', 'TEXT')
+        } else if (cabinet.position && cabinet.width_ft && cabinet.depth_ft) {
+          const pos = toDxfCoords(cabinet.position.x, cabinet.position.z)
+          const width = feetToInches(cabinet.width_ft)
+          const depth = feetToInches(cabinet.depth_ft)
+          dxf.addRectangle(pos.x - width/2, pos.y - depth/2, width, depth, 'CABINETS_PANTRY')
+          dxf.addText({ x: pos.x, y: pos.y }, 3, 'PANTRY', 'TEXT')
+        }
+      }
+    }
+
+    // Add upper small cabinets (above fridge/stove/sink - dashed lines)
+    if (measurements.cabinets?.upper_small && measurements.cabinets.upper_small.length > 0) {
+      for (const cabinet of measurements.cabinets.upper_small) {
+        if (cabinet.corners && cabinet.corners.length === 4) {
+          const points = cabinet.corners.map(c => toDxfCoords(c.x, c.z))
+          dxf.addLwPolyline(points, 'CABINETS_UPPER_SMALL', true)
+        } else if (cabinet.position && cabinet.width_ft && cabinet.depth_ft) {
+          const pos = toDxfCoords(cabinet.position.x, cabinet.position.z)
+          const width = feetToInches(cabinet.width_ft)
+          const depth = feetToInches(cabinet.depth_ft)
+          dxf.addRectangle(pos.x - width/2, pos.y - depth/2, width, depth, 'CABINETS_UPPER_SMALL')
         }
       }
     }

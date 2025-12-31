@@ -58,6 +58,12 @@ interface ProjectSubmission {
     quantity?: number
     customer_notes?: string
   }>
+  addon_selections?: Array<{
+    addon_id: string
+    is_selected: boolean
+    quantity?: number
+    customer_notes?: string
+  }>
   device_info?: {
     model?: string
     ios_version?: string
@@ -255,6 +261,32 @@ async function buildWebhookPayload(
             depth: formatDimension(cab.depth_ft),
           })),
 
+          wall_oven_cabinets: (Array.isArray(measurements.measurements?.cabinets?.wall_oven) ? measurements.measurements.cabinets.wall_oven : []).map((cab: any, index: number) => ({
+            id: `wall_oven_cabinet_${index + 1}`,
+            width: formatDimension(cab.width_ft),
+            total_height: formatDimension(cab.total_height_ft || cab.height_ft),
+            depth: formatDimension(cab.depth_ft),
+            upper_section_height: formatDimension(cab.upper_section_height_ft),
+            lower_section_height: formatDimension(cab.lower_section_height_ft),
+          })),
+
+          pantry_cabinets: (Array.isArray(measurements.measurements?.cabinets?.pantry) ? measurements.measurements.cabinets.pantry : []).map((cab: any, index: number) => ({
+            id: `pantry_cabinet_${index + 1}`,
+            width: formatDimension(cab.width_ft),
+            total_height: formatDimension(cab.total_height_ft || cab.height_ft),
+            depth: formatDimension(cab.depth_ft),
+            upper_section_height: formatDimension(cab.upper_section_height_ft),
+            lower_section_height: formatDimension(cab.lower_section_height_ft),
+          })),
+
+          upper_small_cabinets: (Array.isArray(measurements.measurements?.cabinets?.upper_small) ? measurements.measurements.cabinets.upper_small : []).map((cab: any, index: number) => ({
+            id: `upper_small_cabinet_${index + 1}`,
+            width: formatDimension(cab.width_ft),
+            height: formatDimension(cab.height_ft),
+            depth: formatDimension(cab.depth_ft),
+            above: cab.above || null,
+          })),
+
           appliances: (Array.isArray(measurements.measurements?.appliances) ? measurements.measurements.appliances : []).map((app: any, index: number) => ({
             id: `appliance_${index + 1}`,
             type: app.type || 'appliance',
@@ -301,6 +333,9 @@ async function buildWebhookPayload(
             wall_count: measurements.wall_count || 0,
             lower_cabinet_count: measurements.measurements?.summary?.lower_cabinet_count || 0,
             upper_cabinet_count: measurements.measurements?.summary?.upper_cabinet_count || 0,
+            wall_oven_cabinet_count: measurements.measurements?.summary?.wall_oven_cabinet_count || 0,
+            pantry_cabinet_count: measurements.measurements?.summary?.pantry_cabinet_count || 0,
+            upper_small_cabinet_count: measurements.measurements?.summary?.upper_small_cabinet_count || 0,
             appliance_count: measurements.measurements?.summary?.appliance_count || 0,
             sink_count: measurements.measurements?.summary?.sink_count || 0,
             window_count: measurements.window_count || 0,
@@ -363,6 +398,29 @@ async function buildWebhookPayload(
       }
 
       return selectionsObj
+    })(),
+    addon_selections: await (async () => {
+      // Fetch addon selections for this project
+      const { data: addonSelections } = await supabaseAdmin
+        .from('project_addon_selections')
+        .select('*')
+        .eq('project_id', project.id)
+
+      if (!addonSelections || addonSelections.length === 0) {
+        return []
+      }
+
+      return addonSelections.map((a: any) => ({
+        addon_id: a.addon_id,
+        question: a.addon_question_snapshot,
+        description: a.addon_description_snapshot,
+        is_selected: a.is_selected,
+        quantity: a.quantity,
+        unit: a.addon_unit_snapshot,
+        price_per_unit: a.addon_price_snapshot,
+        image_url: a.addon_image_url_snapshot,
+        customer_notes: a.customer_notes || null,
+      }))
     })(),
     showroom: {
       id: showroom.id,
@@ -684,6 +742,47 @@ serve(async (req) => {
 
         if (selectionsError) {
           console.error('Error creating selections:', selectionsError)
+          // Don't fail the whole submission, just log
+        }
+      }
+    }
+
+    // Create addon selections
+    if (submission.addon_selections && submission.addon_selections.length > 0) {
+      // Fetch addon details for snapshots
+      const addonIds = submission.addon_selections.map((s) => s.addon_id)
+      const { data: addons } = await supabaseAdmin
+        .from('showroom_addons')
+        .select('id, question, description, unit, price_per_unit, image_url')
+        .in('id', addonIds)
+
+      const addonMap = new Map(addons?.map((a: any) => [a.id, a]) || [])
+
+      const addonSelectionsToInsert = submission.addon_selections
+        .filter((s) => addonMap.has(s.addon_id))
+        .map((s) => {
+          const addon = addonMap.get(s.addon_id) as any
+          return {
+            project_id: project.id,
+            addon_id: s.addon_id,
+            is_selected: s.is_selected,
+            quantity: s.is_selected ? (s.quantity || 1) : 0,
+            customer_notes: s.customer_notes || null,
+            addon_question_snapshot: addon.question,
+            addon_description_snapshot: addon.description,
+            addon_unit_snapshot: addon.unit,
+            addon_price_snapshot: addon.price_per_unit,
+            addon_image_url_snapshot: addon.image_url,
+          }
+        })
+
+      if (addonSelectionsToInsert.length > 0) {
+        const { error: addonSelectionsError } = await supabaseAdmin
+          .from('project_addon_selections')
+          .insert(addonSelectionsToInsert)
+
+        if (addonSelectionsError) {
+          console.error('Error creating addon selections:', addonSelectionsError)
           // Don't fail the whole submission, just log
         }
       }

@@ -7,12 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		2AE8406F2EFF87F30061E0C9 /* Debug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 2AE8406E2EFF87F30061E0C9 /* Debug.xcconfig */; };
+		2AE8406F2EFF87F30061E0C9 /* Config/Debug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 2AE8406E2EFF87F30061E0C9 /* Config/Debug.xcconfig */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		2AD9A07C2EF50813005EB90A /* cabinetscan.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = cabinetscan.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AE8406E2EFF87F30061E0C9 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Debug.xcconfig; sourceTree = "<group>"; };
+		2AE8406E2EFF87F30061E0C9 /* Config/Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Debug.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -52,7 +52,7 @@
 			children = (
 				2AD9A07E2EF50813005EB90A /* cabinetscan */,
 				2AD9A07D2EF50813005EB90A /* Products */,
-				2AE8406E2EFF87F30061E0C9 /* Debug.xcconfig */,
+				2AE8406E2EFF87F30061E0C9 /* Config/Debug.xcconfig */,
 			);
 			sourceTree = "<group>";
 		};
@@ -128,7 +128,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2AE8406F2EFF87F30061E0C9 /* Debug.xcconfig in Resources */,
+				2AE8406F2EFF87F30061E0C9 /* Config/Debug.xcconfig in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -147,7 +147,7 @@
 /* Begin XCBuildConfiguration section */
 		2AD9A0852EF50814005EB90A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 2AE8406E2EFF87F30061E0C9 /* Debug.xcconfig */;
+			baseConfigurationReference = 2AE8406E2EFF87F30061E0C9 /* Config/Debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -264,7 +264,7 @@
 		};
 		2AD9A0882EF50814005EB90A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 2AE8406E2EFF87F30061E0C9 /* Debug.xcconfig */;
+			baseConfigurationReference = 2AE8406E2EFF87F30061E0C9 /* Config/Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

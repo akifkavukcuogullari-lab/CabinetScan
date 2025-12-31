@@ -7,6 +7,14 @@ struct ReviewView: View {
         appState.showroomConfig?.categories ?? []
     }
 
+    private var addons: [Addon] {
+        appState.showroomConfig?.addons ?? []
+    }
+
+    private var selectedAddons: [Addon] {
+        addons.filter { appState.isAddonSelected($0.id) }
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -90,37 +98,6 @@ struct ReviewView: View {
                     }
                 }
 
-                // Measurements section
-                Section("Room Measurements") {
-                    if let measurements = appState.measurementData {
-                        if let linearFt = measurements.totalLinearFt {
-                            LabeledContent("Linear Feet") {
-                                Text("\(linearFt, specifier: "%.1f") ft")
-                            }
-                        }
-                        if let sqFt = measurements.totalSqFt {
-                            LabeledContent("Square Feet") {
-                                Text("\(sqFt, specifier: "%.1f") sq ft")
-                            }
-                        }
-                        if let walls = measurements.wallCount {
-                            LabeledContent("Walls") {
-                                Text("\(walls)")
-                            }
-                        }
-                        if let windows = measurements.windowCount {
-                            LabeledContent("Windows") {
-                                Text("\(windows)")
-                            }
-                        }
-                        if let doors = measurements.doorCount {
-                            LabeledContent("Doors") {
-                                Text("\(doors)")
-                            }
-                        }
-                    }
-                }
-
                 // Selections section
                 Section("Selected Products") {
                     if appState.selections.isEmpty {
@@ -129,20 +106,27 @@ struct ReviewView: View {
                     } else {
                         ForEach(categories.filter { appState.selections[$0.categoryId] != nil }) { category in
                             if let product = appState.selections[category.categoryId] {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(category.name)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                        Text(product.name)
-                                            .font(.body)
-                                    }
-                                    Spacer()
-                                    if let price = product.price {
-                                        Text("$\(price, specifier: "%.2f")")
-                                            .foregroundStyle(.secondary)
-                                    }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(category.name)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text(product.name)
+                                        .font(.body)
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // Addon selections section
+                if !selectedAddons.isEmpty {
+                    Section("Add-ons") {
+                        ForEach(selectedAddons) { addon in
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Text(addon.question)
+                                    .font(.body)
                             }
                         }
                     }
@@ -182,7 +166,12 @@ struct ReviewView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Back") {
-                        appState.currentScreen = .selection
+                        // Go back to addons if there are any, otherwise to selection
+                        if !addons.isEmpty {
+                            appState.currentScreen = .addons
+                        } else {
+                            appState.currentScreen = .selection
+                        }
                     }
                 }
             }

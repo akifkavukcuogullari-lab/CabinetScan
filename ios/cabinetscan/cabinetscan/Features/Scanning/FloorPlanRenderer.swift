@@ -96,21 +96,126 @@ struct FloorPlanRenderer {
             print("Floor level detected: \(floorLevel)m")
             print("Storage objects count: \(storageObjects.count)")
 
-            var lowerCount = 0
-            var upperCount = 0
+            // Collect appliance positions for cabinet classification
+            var ovenPositions: [SIMD4<Float>] = []
+            var appliancePositionsForSmallCabinets: [SIMD4<Float>] = []
+            var sinkPositions: [SIMD4<Float>] = []
 
-            // Draw cabinets (lower) - white fill with black outline
+            for object in room.objects {
+                let pos = object.transform.columns.3
+                switch object.category {
+                case .oven:
+                    ovenPositions.append(pos)
+                case .refrigerator, .stove:
+                    appliancePositionsForSmallCabinets.append(pos)
+                case .sink:
+                    sinkPositions.append(pos)
+                default:
+                    break
+                }
+            }
+
+            // Helper functions for cabinet classification
+            func areHorizontallyAligned(_ pos1: SIMD4<Float>, _ pos2: SIMD4<Float>, threshold: Float = 0.4) -> Bool {
+                let xDiff = abs(pos1.x - pos2.x)
+                let zDiff = abs(pos1.z - pos2.z)
+                return xDiff < threshold && zDiff < threshold
+            }
+
+            func isAboveApplianceOrSink(_ cabinetPos: SIMD4<Float>, threshold: Float = 0.5) -> Bool {
+                for appPos in appliancePositionsForSmallCabinets {
+                    if areHorizontallyAligned(cabinetPos, appPos, threshold: threshold) && cabinetPos.y > appPos.y {
+                        return true
+                    }
+                }
+                for sinkPos in sinkPositions {
+                    if areHorizontallyAligned(cabinetPos, sinkPos, threshold: threshold) && cabinetPos.y > sinkPos.y {
+                        return true
+                    }
+                }
+                return false
+            }
+
+            // Classify storage objects
+            var upperStorageObjects: [CapturedRoom.Object] = []
+            var lowerStorageObjects: [CapturedRoom.Object] = []
+
             for object in room.objects where object.category == .storage {
                 let position = object.transform.columns.3
                 let heightAboveFloor = position.y - floorLevel
-
-                // Lower cabinet: less than 1.0m above floor level
-                if heightAboveFloor <= 1.0 {
-                    lowerCount += 1
-                    print("Drawing LOWER cabinet: y=\(position.y)m, heightAboveFloor=\(heightAboveFloor)m")
-                    drawObject(ctx: ctx, object: object, scale: scale, minX: minX, minZ: minZ,
-                              fillColor: UIColor.white, strokeColor: UIColor.darkGray, strokeWidth: 1.5)
+                if heightAboveFloor > 1.0 {
+                    upperStorageObjects.append(object)
+                } else {
+                    lowerStorageObjects.append(object)
                 }
+            }
+
+            // Detect tall cabinet pairs (wall oven and pantry)
+            var matchedUpperIndices: Set<Int> = []
+            var matchedLowerIndices: Set<Int> = []
+            var wallOvenLowerObjects: [CapturedRoom.Object] = []
+            var pantryLowerObjects: [CapturedRoom.Object] = []
+
+            let smallUpperCabinetMaxHeight: Float = 0.5
+
+            for (upperIdx, upperObj) in upperStorageObjects.enumerated() {
+                for (lowerIdx, lowerObj) in lowerStorageObjects.enumerated() {
+                    guard !matchedUpperIndices.contains(upperIdx) && !matchedLowerIndices.contains(lowerIdx) else { continue }
+
+                    let upperPos = upperObj.transform.columns.3
+                    let lowerPos = lowerObj.transform.columns.3
+
+                    if areHorizontallyAligned(upperPos, lowerPos) {
+                        // Check for oven between
+                        var hasOvenBetween = false
+                        for ovenPos in ovenPositions {
+                            let alignedWithUpper = areHorizontallyAligned(upperPos, ovenPos)
+                            let alignedWithLower = areHorizontallyAligned(lowerPos, ovenPos)
+                            let ovenBetweenY = ovenPos.y > lowerPos.y && ovenPos.y < upperPos.y
+                            if (alignedWithUpper || alignedWithLower) && ovenBetweenY {
+                                hasOvenBetween = true
+                                break
+                            }
+                        }
+
+                        if hasOvenBetween {
+                            wallOvenLowerObjects.append(lowerObj)
+                        } else {
+                            pantryLowerObjects.append(lowerObj)
+                        }
+
+                        matchedUpperIndices.insert(upperIdx)
+                        matchedLowerIndices.insert(lowerIdx)
+                    }
+                }
+            }
+
+            var lowerCount = 0
+            var upperCount = 0
+            var wallOvenCount = 0
+            var pantryCount = 0
+            var upperSmallCount = 0
+
+            // Draw lower cabinets (not matched to tall cabinets) - white fill with dark gray outline
+            for (idx, object) in lowerStorageObjects.enumerated() {
+                guard !matchedLowerIndices.contains(idx) else { continue }
+                lowerCount += 1
+                drawObject(ctx: ctx, object: object, scale: scale, minX: minX, minZ: minZ,
+                          fillColor: UIColor.white, strokeColor: UIColor.darkGray, strokeWidth: 1.5)
+            }
+
+            // Draw wall oven cabinets - orange/amber fill with brown outline
+            for object in wallOvenLowerObjects {
+                wallOvenCount += 1
+                drawObject(ctx: ctx, object: object, scale: scale, minX: minX, minZ: minZ,
+                          fillColor: UIColor.systemOrange.withAlphaComponent(0.3), strokeColor: UIColor.systemBrown, strokeWidth: 2.0)
+            }
+
+            // Draw pantry cabinets - green fill with dark green outline
+            for object in pantryLowerObjects {
+                pantryCount += 1
+                drawObject(ctx: ctx, object: object, scale: scale, minX: minX, minZ: minZ,
+                          fillColor: UIColor.systemGreen.withAlphaComponent(0.2), strokeColor: UIColor.systemGreen, strokeWidth: 2.0)
             }
 
             // Draw appliances and sinks - white fill with icon
@@ -124,21 +229,28 @@ struct FloorPlanRenderer {
                 }
             }
 
-            // Draw upper cabinets - dashed outline (drawn on top)
-            // Upper cabinets are more than 1.0m above floor level
-            for object in room.objects where object.category == .storage {
-                let position = object.transform.columns.3
-                let heightAboveFloor = position.y - floorLevel
+            // Draw upper cabinets (not matched to tall cabinets) - dashed outline
+            for (idx, object) in upperStorageObjects.enumerated() {
+                guard !matchedUpperIndices.contains(idx) else { continue }
 
-                if heightAboveFloor > 1.0 {
+                let position = object.transform.columns.3
+                let cabinetHeight = object.dimensions.y
+
+                // Check if small cabinet above appliance/sink
+                if cabinetHeight < smallUpperCabinetMaxHeight && isAboveApplianceOrSink(position) {
+                    upperSmallCount += 1
+                    // Upper small cabinet - purple dashed outline
+                    drawObject(ctx: ctx, object: object, scale: scale, minX: minX, minZ: minZ,
+                              fillColor: UIColor.systemPurple.withAlphaComponent(0.15), strokeColor: UIColor.systemPurple, strokeWidth: 1.5, dashed: true)
+                } else {
                     upperCount += 1
-                    print("Drawing UPPER cabinet: y=\(position.y)m, heightAboveFloor=\(heightAboveFloor)m")
+                    // Standard upper cabinet - blue dashed outline
                     drawObject(ctx: ctx, object: object, scale: scale, minX: minX, minZ: minZ,
                               fillColor: UIColor.systemGray5, strokeColor: UIColor.blue, strokeWidth: 2.0, dashed: true)
                 }
             }
 
-            print("Lower cabinets drawn: \(lowerCount), Upper cabinets drawn: \(upperCount)")
+            print("Cabinet counts - Lower: \(lowerCount), Upper: \(upperCount), Wall Oven: \(wallOvenCount), Pantry: \(pantryCount), Upper Small: \(upperSmallCount)")
             print("=== End FloorPlanRenderer Debug ===")
 
             // Draw walls - thick black lines

@@ -7,11 +7,41 @@ struct ShowroomConfig: Codable, Identifiable {
     let showroomCode: String
     let branding: Branding
     let categories: [Category]
+    let addons: [Addon]
     let subscription: SubscriptionInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, branding, categories, subscription
+        case id, name, branding, categories, addons, subscription
         case showroomCode = "showroom_code"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        showroomCode = try container.decode(String.self, forKey: .showroomCode)
+        branding = try container.decode(Branding.self, forKey: .branding)
+        categories = try container.decode([Category].self, forKey: .categories)
+        addons = try container.decodeIfPresent([Addon].self, forKey: .addons) ?? []
+        subscription = try container.decodeIfPresent(SubscriptionInfo.self, forKey: .subscription)
+    }
+}
+
+// MARK: - Addon
+struct Addon: Codable, Identifiable {
+    let id: String
+    let question: String
+    let description: String?
+    let unit: String
+    let pricePerUnit: Double?
+    let imageUrl: String?
+    let displayOrder: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, question, description, unit
+        case pricePerUnit = "price_per_unit"
+        case imageUrl = "image_url"
+        case displayOrder = "display_order"
     }
 }
 

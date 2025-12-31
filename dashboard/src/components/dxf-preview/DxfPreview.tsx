@@ -80,8 +80,12 @@ interface MeasurementsData {
   cabinets?: {
     upper?: CabinetData[]
     lower?: CabinetData[]
+    wall_oven?: CabinetData[]
+    pantry?: CabinetData[]
+    upper_small?: CabinetData[]
   }
   appliances?: ApplianceData[]
+  sinks?: ApplianceData[]
   doors?: DoorData[]
   windows?: WindowData[]
   countertop_summary?: {
@@ -100,10 +104,14 @@ const LAYER_COLORS = {
   WALLS: '#e5e7eb',        // White/Gray
   CABINETS_LOWER: '#06b6d4', // Cyan
   CABINETS_UPPER: '#d946ef', // Magenta
+  CABINETS_WALL_OVEN: '#f97316', // Orange
+  CABINETS_PANTRY: '#10b981', // Emerald
+  CABINETS_UPPER_SMALL: '#8b5cf6', // Violet
   APPLIANCES: '#ef4444',    // Red
+  SINKS: '#eab308',         // Yellow
   DOORS: '#22c55e',         // Green
   WINDOWS: '#3b82f6',       // Blue
-  COUNTERTOPS: '#eab308',   // Yellow
+  COUNTERTOPS: '#a3a3a3',   // Gray
   GRID: '#374151',          // Dark gray
   TEXT: '#9ca3af'           // Light gray
 }
@@ -114,7 +122,11 @@ interface LayerVisibility {
   WALLS: boolean
   CABINETS_LOWER: boolean
   CABINETS_UPPER: boolean
+  CABINETS_WALL_OVEN: boolean
+  CABINETS_PANTRY: boolean
+  CABINETS_UPPER_SMALL: boolean
   APPLIANCES: boolean
+  SINKS: boolean
   DOORS: boolean
   WINDOWS: boolean
 }
@@ -136,7 +148,11 @@ export function DxfPreview({
     WALLS: true,
     CABINETS_LOWER: true,
     CABINETS_UPPER: true,
+    CABINETS_WALL_OVEN: true,
+    CABINETS_PANTRY: true,
+    CABINETS_UPPER_SMALL: true,
     APPLIANCES: true,
+    SINKS: true,
     DOORS: true,
     WINDOWS: true
   })
@@ -292,7 +308,11 @@ export function DxfPreview({
     WALLS: measurements?.walls?.length || 0,
     CABINETS_LOWER: measurements?.cabinets?.lower?.length || 0,
     CABINETS_UPPER: measurements?.cabinets?.upper?.length || 0,
+    CABINETS_WALL_OVEN: measurements?.cabinets?.wall_oven?.length || 0,
+    CABINETS_PANTRY: measurements?.cabinets?.pantry?.length || 0,
+    CABINETS_UPPER_SMALL: measurements?.cabinets?.upper_small?.length || 0,
     APPLIANCES: measurements?.appliances?.length || 0,
+    SINKS: measurements?.sinks?.length || 0,
     DOORS: measurements?.doors?.length || 0,
     WINDOWS: measurements?.windows?.length || 0
   }), [measurements])
@@ -550,6 +570,110 @@ export function DxfPreview({
             )
           })}
 
+          {/* Wall Oven Cabinets */}
+          {layerVisibility.CABINETS_WALL_OVEN && measurements.cabinets?.wall_oven?.map(cabinet => {
+            if (cabinet.corners && cabinet.corners.length >= 3) {
+              const points = cabinet.corners.map(c => `${c.x * scale},${c.z * scale}`).join(' ')
+              return (
+                <polygon
+                  key={cabinet.id}
+                  points={points}
+                  fill={LAYER_COLORS.CABINETS_WALL_OVEN}
+                  fillOpacity="0.25"
+                  stroke={LAYER_COLORS.CABINETS_WALL_OVEN}
+                  strokeWidth="2"
+                />
+              )
+            }
+            const x = (cabinet.position.x - cabinet.width_ft / 2) * scale
+            const y = (cabinet.position.z - cabinet.depth_ft / 2) * scale
+            const width = cabinet.width_ft * scale
+            const height = cabinet.depth_ft * scale
+            return (
+              <rect
+                key={cabinet.id}
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                fill={LAYER_COLORS.CABINETS_WALL_OVEN}
+                fillOpacity="0.25"
+                stroke={LAYER_COLORS.CABINETS_WALL_OVEN}
+                strokeWidth="2"
+              />
+            )
+          })}
+
+          {/* Pantry Cabinets */}
+          {layerVisibility.CABINETS_PANTRY && measurements.cabinets?.pantry?.map(cabinet => {
+            if (cabinet.corners && cabinet.corners.length >= 3) {
+              const points = cabinet.corners.map(c => `${c.x * scale},${c.z * scale}`).join(' ')
+              return (
+                <polygon
+                  key={cabinet.id}
+                  points={points}
+                  fill={LAYER_COLORS.CABINETS_PANTRY}
+                  fillOpacity="0.2"
+                  stroke={LAYER_COLORS.CABINETS_PANTRY}
+                  strokeWidth="2"
+                />
+              )
+            }
+            const x = (cabinet.position.x - cabinet.width_ft / 2) * scale
+            const y = (cabinet.position.z - cabinet.depth_ft / 2) * scale
+            const width = cabinet.width_ft * scale
+            const height = cabinet.depth_ft * scale
+            return (
+              <rect
+                key={cabinet.id}
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                fill={LAYER_COLORS.CABINETS_PANTRY}
+                fillOpacity="0.2"
+                stroke={LAYER_COLORS.CABINETS_PANTRY}
+                strokeWidth="2"
+              />
+            )
+          })}
+
+          {/* Upper Small Cabinets (dashed) */}
+          {layerVisibility.CABINETS_UPPER_SMALL && measurements.cabinets?.upper_small?.map(cabinet => {
+            if (cabinet.corners && cabinet.corners.length >= 3) {
+              const points = cabinet.corners.map(c => `${c.x * scale},${c.z * scale}`).join(' ')
+              return (
+                <polygon
+                  key={cabinet.id}
+                  points={points}
+                  fill={LAYER_COLORS.CABINETS_UPPER_SMALL}
+                  fillOpacity="0.15"
+                  stroke={LAYER_COLORS.CABINETS_UPPER_SMALL}
+                  strokeWidth="1.5"
+                  strokeDasharray="6 3"
+                />
+              )
+            }
+            const x = (cabinet.position.x - cabinet.width_ft / 2) * scale
+            const y = (cabinet.position.z - cabinet.depth_ft / 2) * scale
+            const width = cabinet.width_ft * scale
+            const height = cabinet.depth_ft * scale
+            return (
+              <rect
+                key={cabinet.id}
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                fill={LAYER_COLORS.CABINETS_UPPER_SMALL}
+                fillOpacity="0.15"
+                stroke={LAYER_COLORS.CABINETS_UPPER_SMALL}
+                strokeWidth="1.5"
+                strokeDasharray="6 3"
+              />
+            )
+          })}
+
           {/* Appliances */}
           {layerVisibility.APPLIANCES && measurements.appliances?.map(appliance => {
             if (appliance.corners && appliance.corners.length >= 3) {
@@ -581,6 +705,66 @@ export function DxfPreview({
                 stroke={LAYER_COLORS.APPLIANCES}
                 strokeWidth="1.5"
               />
+            )
+          })}
+
+          {/* Sinks */}
+          {layerVisibility.SINKS && measurements.sinks?.map(sink => {
+            if (sink.corners && sink.corners.length >= 3) {
+              const points = sink.corners.map(c => `${c.x * scale},${c.z * scale}`).join(' ')
+              const cx = sink.corners.reduce((sum, c) => sum + c.x, 0) / sink.corners.length * scale
+              const cy = sink.corners.reduce((sum, c) => sum + c.z, 0) / sink.corners.length * scale
+              return (
+                <g key={sink.id}>
+                  <polygon
+                    points={points}
+                    fill={LAYER_COLORS.SINKS}
+                    fillOpacity="0.2"
+                    stroke={LAYER_COLORS.SINKS}
+                    strokeWidth="1.5"
+                  />
+                  {/* Sink basin oval */}
+                  <ellipse
+                    cx={cx}
+                    cy={cy}
+                    rx={sink.width_ft * scale * 0.3}
+                    ry={sink.depth_ft * scale * 0.25}
+                    fill="none"
+                    stroke={LAYER_COLORS.SINKS}
+                    strokeWidth="1"
+                  />
+                </g>
+              )
+            }
+            const x = (sink.position.x - sink.width_ft / 2) * scale
+            const y = (sink.position.z - sink.depth_ft / 2) * scale
+            const width = sink.width_ft * scale
+            const height = sink.depth_ft * scale
+            const cx = sink.position.x * scale
+            const cy = sink.position.z * scale
+            return (
+              <g key={sink.id}>
+                <rect
+                  x={x}
+                  y={y}
+                  width={width}
+                  height={height}
+                  fill={LAYER_COLORS.SINKS}
+                  fillOpacity="0.2"
+                  stroke={LAYER_COLORS.SINKS}
+                  strokeWidth="1.5"
+                />
+                {/* Sink basin oval */}
+                <ellipse
+                  cx={cx}
+                  cy={cy}
+                  rx={width * 0.3}
+                  ry={height * 0.25}
+                  fill="none"
+                  stroke={LAYER_COLORS.SINKS}
+                  strokeWidth="1"
+                />
+              </g>
             )
           })}
 

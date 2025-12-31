@@ -20,8 +20,12 @@ interface MeasurementsData {
   cabinets?: {
     upper?: any[]
     lower?: any[]
+    wall_oven?: any[]
+    pantry?: any[]
+    upper_small?: any[]
   }
   appliances?: any[]
+  sinks?: any[]
   doors?: any[]
   windows?: any[]
   countertop_summary?: {
@@ -55,7 +59,11 @@ export function RoomMeasurementsSection({
   const wallCount = measurement.wall_count || measurements?.walls?.length || 0
   const lowerCabinetCount = measurements?.cabinets?.lower?.length || 0
   const upperCabinetCount = measurements?.cabinets?.upper?.length || 0
+  const wallOvenCabinetCount = measurements?.cabinets?.wall_oven?.length || 0
+  const pantryCabinetCount = measurements?.cabinets?.pantry?.length || 0
+  const upperSmallCabinetCount = measurements?.cabinets?.upper_small?.length || 0
   const applianceCount = measurements?.appliances?.length || 0
+  const sinkCount = measurements?.sinks?.length || 0
   const doorCount = measurement.door_count || measurements?.doors?.length || 0
   const windowCount = measurements?.windows?.length || 0
   const countertopArea = measurements?.countertop_summary?.total_area_sqft || 0
@@ -69,11 +77,12 @@ export function RoomMeasurementsSection({
     ? Math.abs(measurements.room.max_z - measurements.room.min_z)
     : 0
 
+  const totalCabinets = lowerCabinetCount + upperCabinetCount + wallOvenCabinetCount + pantryCabinetCount + upperSmallCabinetCount
   const summaryItems = [
     wallCount > 0 && `${wallCount} walls`,
-    lowerCabinetCount > 0 && `${lowerCabinetCount} lower cabinets`,
-    upperCabinetCount > 0 && `${upperCabinetCount} upper cabinets`,
+    totalCabinets > 0 && `${totalCabinets} cabinets`,
     applianceCount > 0 && `${applianceCount} appliances`,
+    sinkCount > 0 && `${sinkCount} sinks`,
   ].filter(Boolean).join(' | ')
 
   return (
@@ -90,15 +99,6 @@ export function RoomMeasurementsSection({
         </AccordionTrigger>
         <AccordionContent className="px-4 pb-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {measurement.total_linear_ft && (
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
-                  <Ruler className="h-4 w-4" />
-                  <span className="text-xs">Linear Feet</span>
-                </div>
-                <p className="text-xl font-bold">{measurement.total_linear_ft.toFixed(1)}</p>
-              </div>
-            )}
             {measurement.total_sq_ft && (
               <div className="p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-2 text-gray-500 mb-1">
@@ -142,8 +142,7 @@ export function RoomMeasurementsSection({
                   <ArrowUp className="h-4 w-4" />
                   <span className="text-xs">Ceiling Height</span>
                 </div>
-                <p className="text-xl font-bold">{ceilingHeight.toFixed(1)}</p>
-                <p className="text-xs text-gray-500">ft</p>
+                <p className="text-xl font-bold">{Math.round(ceilingHeight * 12)}"</p>
               </div>
             )}
             {roomWidth > 0 && roomDepth > 0 && (
@@ -152,14 +151,13 @@ export function RoomMeasurementsSection({
                   <Maximize2 className="h-4 w-4" />
                   <span className="text-xs">Room Size</span>
                 </div>
-                <p className="text-xl font-bold">{roomWidth.toFixed(1)} x {roomDepth.toFixed(1)}</p>
-                <p className="text-xs text-gray-500">ft</p>
+                <p className="text-xl font-bold">{Math.round(roomWidth * 12)}" x {Math.round(roomDepth * 12)}"</p>
               </div>
             )}
           </div>
 
           {/* Cabinet & Appliance breakdown */}
-          {(lowerCabinetCount > 0 || upperCabinetCount > 0 || applianceCount > 0 || windowCount > 0) && (
+          {(lowerCabinetCount > 0 || upperCabinetCount > 0 || wallOvenCabinetCount > 0 || pantryCabinetCount > 0 || upperSmallCabinetCount > 0 || applianceCount > 0 || sinkCount > 0 || windowCount > 0) && (
             <div className="mt-4 pt-4 border-t">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 {lowerCabinetCount > 0 && (
@@ -174,10 +172,34 @@ export function RoomMeasurementsSection({
                     <span className="font-medium text-purple-900">{upperCabinetCount}</span>
                   </div>
                 )}
+                {wallOvenCabinetCount > 0 && (
+                  <div className="flex items-center justify-between p-2 bg-orange-50 rounded">
+                    <span className="text-orange-700">Wall Oven</span>
+                    <span className="font-medium text-orange-900">{wallOvenCabinetCount}</span>
+                  </div>
+                )}
+                {pantryCabinetCount > 0 && (
+                  <div className="flex items-center justify-between p-2 bg-emerald-50 rounded">
+                    <span className="text-emerald-700">Pantry</span>
+                    <span className="font-medium text-emerald-900">{pantryCabinetCount}</span>
+                  </div>
+                )}
+                {upperSmallCabinetCount > 0 && (
+                  <div className="flex items-center justify-between p-2 bg-violet-50 rounded">
+                    <span className="text-violet-700">Upper Small</span>
+                    <span className="font-medium text-violet-900">{upperSmallCabinetCount}</span>
+                  </div>
+                )}
                 {applianceCount > 0 && (
                   <div className="flex items-center justify-between p-2 bg-red-50 rounded">
                     <span className="text-red-700">Appliances</span>
                     <span className="font-medium text-red-900">{applianceCount}</span>
+                  </div>
+                )}
+                {sinkCount > 0 && (
+                  <div className="flex items-center justify-between p-2 bg-yellow-50 rounded">
+                    <span className="text-yellow-700">Sinks</span>
+                    <span className="font-medium text-yellow-900">{sinkCount}</span>
                   </div>
                 )}
                 {windowCount > 0 && (

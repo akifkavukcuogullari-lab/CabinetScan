@@ -13,6 +13,16 @@ interface ProductVariant {
   is_default: boolean
 }
 
+interface Addon {
+  id: string
+  question: string
+  description: string | null
+  unit: string
+  price_per_unit: number | null
+  image_url: string | null
+  display_order: number
+}
+
 interface Product {
   id: string
   name: string
@@ -56,6 +66,7 @@ interface ShowroomConfig {
     is_required: boolean
     products: Product[]
   }>
+  addons: Addon[]
   subscription: {
     status: string
     plan: string | null
@@ -150,6 +161,14 @@ serve(async (req) => {
       .select('*')
       .eq('showroom_id', showroom.id)
       .eq('is_active', true)
+      .order('display_order')
+
+    // Fetch enabled addons for this showroom
+    const { data: addons } = await supabaseAdmin
+      .from('showroom_addons')
+      .select('id, question, description, unit, price_per_unit, image_url, display_order')
+      .eq('showroom_id', showroom.id)
+      .eq('is_enabled', true)
       .order('display_order')
 
     // Fetch variants for products that have them
@@ -263,6 +282,15 @@ serve(async (req) => {
             privacy_url: null,
           },
       categories: categoriesWithProducts,
+      addons: (addons || []).map((a: any) => ({
+        id: a.id,
+        question: a.question,
+        description: a.description,
+        unit: a.unit,
+        price_per_unit: a.price_per_unit,
+        image_url: a.image_url,
+        display_order: a.display_order,
+      })),
       subscription: {
         status: showroom.subscription_status,
         plan: plan?.slug || null,
