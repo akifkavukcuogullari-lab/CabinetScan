@@ -11,8 +11,12 @@ struct ReviewView: View {
         appState.showroomConfig?.addons ?? []
     }
 
-    private var selectedAddons: [Addon] {
-        addons.filter { appState.isAddonSelected($0.id) }
+    private var selectedAddons: [(addon: Addon, quantity: Int, notes: String)] {
+        addons.compactMap { addon in
+            guard let selection = appState.getAddonSelection(addon.id),
+                  selection.isSelected else { return nil }
+            return (addon: addon, quantity: selection.quantity, notes: selection.notes)
+        }
     }
 
     var body: some View {
@@ -121,12 +125,28 @@ struct ReviewView: View {
                 // Addon selections section
                 if !selectedAddons.isEmpty {
                     Section("Add-ons") {
-                        ForEach(selectedAddons) { addon in
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                                Text(addon.question)
-                                    .font(.body)
+                        ForEach(selectedAddons, id: \.addon.id) { item in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.green)
+                                    Text(item.addon.question)
+                                        .font(.body)
+                                    Spacer()
+                                    Text("x\(item.quantity)")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 2)
+                                        .background(Color(.systemGray5))
+                                        .clipShape(Capsule())
+                                }
+                                if !item.notes.isEmpty {
+                                    Text(item.notes)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.leading, 28)
+                                }
                             }
                         }
                     }

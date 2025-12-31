@@ -16,8 +16,8 @@ class AppState: ObservableObject {
     @Published var measurementData: MeasurementData?
     @Published var selections: [String: Product] = [:] // categoryId -> selected product
     @Published var variantSelections: [String: ProductVariant] = [:] // productId -> selected variant (for products with colors)
-    @Published var addonSelections: [String: Bool] = [:] // addonId -> is selected (true/false)
-    @Published var addonNotes: String = "" // Additional notes/requests about addons
+    // Addon selections: addonId -> (isSelected, quantity, notes)
+    @Published var addonSelections: [String: (isSelected: Bool, quantity: Int, notes: String)] = [:]
     @Published var specialRequests: String = "" // Additional notes/special requests from customer
     @Published var isLoading = false
     @Published var error: Error?
@@ -92,12 +92,30 @@ class AppState: ObservableObject {
         return variantSelections[product.id]
     }
 
-    func selectAddon(addonId: String, isSelected: Bool) {
-        addonSelections[addonId] = isSelected
+    func selectAddon(addonId: String, isSelected: Bool, quantity: Int = 1, notes: String = "") {
+        addonSelections[addonId] = (isSelected: isSelected, quantity: quantity, notes: notes)
+    }
+
+    func updateAddonQuantity(addonId: String, quantity: Int) {
+        if var selection = addonSelections[addonId] {
+            selection.quantity = quantity
+            addonSelections[addonId] = selection
+        }
+    }
+
+    func updateAddonNotes(addonId: String, notes: String) {
+        if var selection = addonSelections[addonId] {
+            selection.notes = notes
+            addonSelections[addonId] = selection
+        }
     }
 
     func isAddonSelected(_ addonId: String) -> Bool {
-        return addonSelections[addonId] ?? false
+        return addonSelections[addonId]?.isSelected ?? false
+    }
+
+    func getAddonSelection(_ addonId: String) -> (isSelected: Bool, quantity: Int, notes: String)? {
+        return addonSelections[addonId]
     }
 
     func proceedToReview() {
@@ -139,12 +157,12 @@ class AppState: ObservableObject {
             }
 
             // Build addon selections (only include addons that were answered)
-            let projectAddonSelections = addonSelections.map { addonId, isSelected in
+            let projectAddonSelections = addonSelections.map { addonId, selection in
                 AddonSelection(
                     addonId: addonId,
-                    isSelected: isSelected,
-                    quantity: isSelected ? 1 : 0,
-                    customerNotes: addonNotes.isEmpty ? nil : addonNotes
+                    isSelected: selection.isSelected,
+                    quantity: selection.isSelected ? selection.quantity : 0,
+                    customerNotes: selection.notes.isEmpty ? nil : selection.notes
                 )
             }
 
@@ -193,7 +211,6 @@ class AppState: ObservableObject {
         selections = [:]
         variantSelections = [:]
         addonSelections = [:]
-        addonNotes = ""
         specialRequests = ""
         error = nil
     }
