@@ -6,9 +6,24 @@ struct SelectionView: View {
     @State private var currentProductIndex = 0
     @State private var showingColorSelection = false
     @State private var selectedModelForColors: Product? = nil
+    @State private var showSelectionsSummary = false
 
     private var categories: [Category] {
         appState.showroomConfig?.categories ?? []
+    }
+
+    private var addons: [Addon] {
+        appState.showroomConfig?.addons ?? []
+    }
+
+    private var selectedAddonsCount: Int {
+        addons.filter { addon in
+            appState.getAddonSelection(addon.id)?.isSelected == true
+        }.count
+    }
+
+    private var selectedProductsCount: Int {
+        appState.selections.count
     }
 
     private var currentCategory: Category? {
@@ -124,6 +139,34 @@ struct SelectionView: View {
                             .padding(.bottom, 4)
                     }
 
+                    // Selections summary bar
+                    if selectedProductsCount > 0 || selectedAddonsCount > 0 {
+                        Button {
+                            showSelectionsSummary = true
+                        } label: {
+                            HStack(spacing: 12) {
+                                if selectedProductsCount > 0 {
+                                    Label("\(selectedProductsCount) products", systemImage: "cube.fill")
+                                        .font(.caption)
+                                }
+                                if selectedAddonsCount > 0 {
+                                    Label("\(selectedAddonsCount) add-ons", systemImage: "plus.circle.fill")
+                                        .font(.caption)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.up")
+                                    .font(.caption)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color(.systemGray6))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal)
+                    }
+
                     // Navigation buttons
                     HStack(spacing: 16) {
                         if currentCategoryIndex > 0 {
@@ -203,6 +246,12 @@ struct SelectionView: View {
         }
         .onChange(of: currentCategoryIndex) { _, _ in
             currentProductIndex = 0
+        }
+        .sheet(isPresented: $showSelectionsSummary) {
+            SelectionsSummarySheet(categories: categories, addons: addons)
+                .environmentObject(appState)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -697,6 +746,103 @@ struct ProductCard: View {
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Selections Summary Sheet
+struct SelectionsSummarySheet: View {
+    @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) var dismiss
+    let categories: [Category]
+    let addons: [Addon]
+
+    private var selectedProducts: [(category: Category, product: Product, variant: ProductVariant?)] {
+        categories.compactMap { category in
+            guard let product = appState.selections[category.categoryId] else { return nil }
+            let variant = appState.getSelectedVariant(for: product)
+            return (category: category, product: product, variant: variant)
+        }
+    }
+
+    private var selectedAddons: [(addon: Addon, quantity: Int, notes: String)] {
+        addons.compactMap { addon in
+            guard let selection = appState.getAddonSelection(addon.id),
+                  selection.isSelected else { return nil }
+            return (addon: addon, quantity: selection.quantity, notes: selection.notes)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if !selectedProducts.isEmpty {
+                    Section("Selected Products") {
+                        ForEach(selectedProducts, id: \.product.id) { item in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.category.name)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text(item.product.name)
+                                        .font(.subheadline)
+                                    if let variant = item.variant {
+                                        Text(variant.name)
+                                            .font(.caption)
+                                            .foregroundStyle(.blue)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            }
+                        }
+                    }
+                }
+
+                if !selectedAddons.isEmpty {
+                    Section("Selected Add-ons") {
+                        ForEach(selectedAddons, id: \.addon.id) { item in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.addon.question)
+                                        .font(.subheadline)
+                                    if !item.notes.isEmpty {
+                                        Text(item.notes)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                Text("×\(item.quantity)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(Color(.systemGray5))
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+                }
+
+                if selectedProducts.isEmpty && selectedAddons.isEmpty {
+                    ContentUnavailableView(
+                        "No Selections Yet",
+                        systemImage: "cube.transparent",
+                        description: Text("Tap on products to select them")
+                    )
+                }
+            }
+            .navigationTitle("Your Selections")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
