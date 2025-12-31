@@ -224,6 +224,9 @@ struct ScanningView: View {
     private func stopScanning() {
         manuallyStopped = true
 
+        // Re-enable screen sleep
+        UIApplication.shared.isIdleTimerDisabled = false
+
         // Check if scan is too short (less than 5 seconds)
         if let startTime = scanStartTime {
             let scanDuration = Date().timeIntervalSince(startTime)
@@ -287,6 +290,9 @@ struct ScanningView: View {
         recordingDuration = 0 // Reset recording timer
         scanStartTime = Date() // Track scan start time
         keepFullScreenOpen = false // Reset fullscreen state
+
+        // Prevent screen from sleeping during scan
+        UIApplication.shared.isIdleTimerDisabled = true
 
         // Initialize video recorder if enabled
         print("[ScanningView] isVideoCaptureEnabled: \(isVideoCaptureEnabled)")
@@ -1746,6 +1752,9 @@ class RoomPlanViewController: UIViewController {
         // Stop UI update timer
         updateTimer?.invalidate()
         updateTimer = nil
+
+        // Re-enable screen sleep (safety)
+        UIApplication.shared.isIdleTimerDisabled = false
 
         // CRITICAL: Aggressive camera cleanup to prevent FigCapture errors
         print("[RoomPlanViewController] View disappearing - cleaning up camera resources...")
