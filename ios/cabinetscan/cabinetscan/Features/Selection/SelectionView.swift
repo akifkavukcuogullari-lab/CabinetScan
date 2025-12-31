@@ -117,11 +117,11 @@ struct SelectionView: View {
                         }
                         .padding(.vertical, 8)
 
-                        // Swipe hint
-                        Text("Swipe to browse \(currentProducts.count) products • Tap to select")
+                        // Product count
+                        Text("\(currentProductIndex + 1) of \(currentProducts.count)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .padding(.bottom, 8)
+                            .padding(.bottom, 4)
                     }
 
                     // Navigation buttons
@@ -266,7 +266,7 @@ struct SelectionView: View {
     }
 }
 
-// MARK: - Product Carousel Card (Large Single Product Display)
+// MARK: - Product Carousel Card (Elegant Tappable Card)
 struct ProductCarouselCard: View {
     let product: Product
     let isSelected: Bool
@@ -274,145 +274,144 @@ struct ProductCarouselCard: View {
     let onSelect: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
-            // Large product image
-            ZStack {
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color(.systemGray6))
+        Button(action: onSelect) {
+            VStack(spacing: 12) {
+                // Product image
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24)
+                        .fill(Color(.systemGray6))
 
-                if let imageUrl = product.imageUrl,
-                   let url = URL(string: imageUrl) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                        case .failure:
-                            Image(systemName: "cube")
-                                .font(.system(size: 60))
-                                .foregroundStyle(.tertiary)
-                        case .empty:
-                            ProgressView()
-                        @unknown default:
-                            ProgressView()
+                    if let imageUrl = product.imageUrl,
+                       let url = URL(string: imageUrl) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                            case .failure:
+                                Image(systemName: "cube")
+                                    .font(.system(size: 50))
+                                    .foregroundStyle(.tertiary)
+                            case .empty:
+                                ProgressView()
+                            @unknown default:
+                                ProgressView()
+                            }
                         }
+                        .padding(24)
+                    } else {
+                        Image(systemName: "cube")
+                            .font(.system(size: 50))
+                            .foregroundStyle(.tertiary)
                     }
-                    .padding(20)
-                } else {
-                    Image(systemName: "cube")
-                        .font(.system(size: 60))
-                        .foregroundStyle(.tertiary)
-                }
 
-                // Selection indicator
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 20)
-                        .strokeBorder(.green, lineWidth: 4)
+                    // Selection indicator
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 24)
+                            .strokeBorder(.green, lineWidth: 3)
 
+                        VStack {
+                            HStack {
+                                Spacer()
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.title)
+                                    .foregroundStyle(.green)
+                                    .background(Circle().fill(.white).padding(2))
+                            }
+                            Spacer()
+                        }
+                        .padding(12)
+                    }
+
+                    // Badges
                     VStack {
                         HStack {
-                            Spacer()
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.largeTitle)
-                                .foregroundStyle(.green)
-                                .background(Circle().fill(.white).padding(4))
-                        }
-                        Spacer()
-                    }
-                    .padding(16)
-                }
-
-                // Badges
-                VStack {
-                    HStack {
-                        if product.isFeatured {
-                            Text("Featured")
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(.yellow)
-                                .clipShape(Capsule())
-                        }
-                        Spacer()
-                        if product.hasVariants && !product.variants.isEmpty {
-                            HStack(spacing: 4) {
-                                Image(systemName: "paintpalette.fill")
-                                    .font(.caption)
-                                Text("\(product.variants.count) colors")
-                                    .font(.caption)
-                                    .fontWeight(.bold)
+                            if product.isFeatured {
+                                Text("Featured")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(.yellow)
+                                    .clipShape(Capsule())
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(.blue)
-                            .foregroundStyle(.white)
-                            .clipShape(Capsule())
+                            Spacer()
+                            if product.hasVariants && !product.variants.isEmpty {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "paintpalette.fill")
+                                        .font(.caption2)
+                                    Text("\(product.variants.count)")
+                                        .font(.caption2)
+                                        .fontWeight(.semibold)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(.blue)
+                                .foregroundStyle(.white)
+                                .clipShape(Capsule())
+                            }
                         }
+                        Spacer()
                     }
-                    Spacer()
-                }
-                .padding(16)
-            }
-            .frame(maxWidth: .infinity)
-            .aspectRatio(1, contentMode: .fit)
-
-            // Product info
-            VStack(spacing: 8) {
-                Text(product.name)
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .multilineTextAlignment(.center)
-
-                if let description = product.description {
-                    Text(description)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                }
-
-                if let variant = selectedVariant {
-                    Text(variant.name)
-                        .font(.subheadline)
-                        .foregroundStyle(.blue)
-                }
-
-                // Price display
-                if let price = selectedVariant?.price ?? product.price {
-                    Text("$\(price, specifier: "%.2f")")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                } else if product.hasVariants {
-                    let prices = product.variants.compactMap { $0.price }
-                    if let minPrice = prices.min(), let maxPrice = prices.max() {
-                        if minPrice == maxPrice {
-                            Text("$\(minPrice, specifier: "%.2f")")
-                                .font(.headline)
-                        } else {
-                            Text("$\(minPrice, specifier: "%.0f") - $\(maxPrice, specifier: "%.0f")")
-                                .font(.headline)
-                        }
-                    }
-                }
-            }
-
-            // Select button
-            Button(action: onSelect) {
-                HStack {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "plus.circle.fill")
-                    Text(isSelected ? "Selected" : "Select This Product")
-                        .fontWeight(.semibold)
+                    .padding(12)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
+                .aspectRatio(1, contentMode: .fit)
+
+                // Product info
+                VStack(spacing: 4) {
+                    Text(product.name)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+
+                    if let description = product.description {
+                        Text(description)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                    }
+
+                    if let variant = selectedVariant {
+                        Text(variant.name)
+                            .font(.subheadline)
+                            .foregroundStyle(.blue)
+                    }
+
+                    // Price display
+                    if let price = selectedVariant?.price ?? product.price {
+                        Text("$\(price, specifier: "%.2f")")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                    } else if product.hasVariants {
+                        let prices = product.variants.compactMap { $0.price }
+                        if let minPrice = prices.min(), let maxPrice = prices.max() {
+                            if minPrice == maxPrice {
+                                Text("$\(minPrice, specifier: "%.2f")")
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                            } else {
+                                Text("$\(minPrice, specifier: "%.0f") - $\(maxPrice, specifier: "%.0f")")
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                            }
+                        }
+                    }
+                }
+
+                // Subtle tap hint
+                Text("Tap to select")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(isSelected ? .green : .blue)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 8)
+        .buttonStyle(.plain)
     }
 }
 
@@ -478,10 +477,10 @@ struct ColorSelectionView: View {
             }
             .padding(.vertical, 8)
 
-            Text("Swipe to browse \(product.variants.count) colors • Tap to select")
+            Text("\(currentColorIndex + 1) of \(product.variants.count) colors")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.bottom, 8)
+                .padding(.bottom, 4)
 
             // Back button
             HStack {
@@ -499,103 +498,101 @@ struct ColorSelectionView: View {
     }
 }
 
-// MARK: - Color Carousel Card
+// MARK: - Color Carousel Card (Elegant Tappable Card)
 struct ColorCarouselCard: View {
     let variant: ProductVariant
     let onSelect: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
-            // Large color/door image
-            ZStack {
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color(.systemGray6))
+        Button(action: onSelect) {
+            VStack(spacing: 12) {
+                // Color/door image
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24)
+                        .fill(Color(.systemGray6))
 
-                if let imageUrl = variant.imageUrl,
-                   let url = URL(string: imageUrl) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                        case .failure:
-                            colorSwatch
-                        case .empty:
-                            ProgressView()
-                        @unknown default:
-                            ProgressView()
+                    if let imageUrl = variant.imageUrl,
+                       let url = URL(string: imageUrl) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                            case .failure:
+                                colorSwatch
+                            case .empty:
+                                ProgressView()
+                            @unknown default:
+                                ProgressView()
+                            }
                         }
+                        .padding(24)
+                    } else {
+                        colorSwatch
                     }
-                    .padding(20)
-                } else {
-                    colorSwatch
-                }
 
-                // Default badge
-                if variant.isDefault {
-                    VStack {
-                        HStack {
-                            Text("Popular Choice")
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(.yellow)
-                                .clipShape(Capsule())
+                    // Popular badge
+                    if variant.isDefault {
+                        VStack {
+                            HStack {
+                                Text("Popular")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(.yellow)
+                                    .clipShape(Capsule())
+                                Spacer()
+                            }
                             Spacer()
                         }
-                        Spacer()
+                        .padding(12)
                     }
-                    .padding(16)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .aspectRatio(0.8, contentMode: .fit)
-
-            // Color info
-            VStack(spacing: 8) {
-                Text(variant.name)
-                    .font(.title3)
-                    .fontWeight(.semibold)
-
-                if let price = variant.price {
-                    Text("$\(price, specifier: "%.2f")")
-                        .font(.headline)
-                }
-            }
-
-            // Select button
-            Button(action: onSelect) {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                    Text("Select This Color")
-                        .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
+                .aspectRatio(0.85, contentMode: .fit)
+
+                // Color info
+                VStack(spacing: 4) {
+                    Text(variant.name)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
+
+                    if let price = variant.price {
+                        Text("$\(price, specifier: "%.2f")")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                    }
+                }
+
+                // Subtle tap hint
+                Text("Tap to select")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
-            .buttonStyle(.borderedProminent)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 8)
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
     private var colorSwatch: some View {
         if let colorCode = variant.colorCode,
            let color = Color(hex: colorCode) {
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 20)
                 .fill(color)
-                .padding(40)
+                .padding(32)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: 20)
                         .strokeBorder(Color(.systemGray4), lineWidth: 1)
-                        .padding(40)
+                        .padding(32)
                 )
         } else {
             Image(systemName: "paintpalette")
-                .font(.system(size: 60))
+                .font(.system(size: 50))
                 .foregroundStyle(.tertiary)
         }
     }
