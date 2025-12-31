@@ -135,9 +135,9 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   const createQuote = async () => {
     'use server'
 
-    // Call the Edge Function to generate the quote email
+    // Trigger the webhook for this project
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/generate-quote-email`,
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/trigger-webhook`,
       {
         method: 'POST',
         headers: {
@@ -150,9 +150,19 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
 
     if (!response.ok) {
       const error = await response.json()
-      console.error('Failed to generate quote:', error)
-      throw new Error('Failed to generate quote email')
+      console.error('Failed to trigger webhook:', error)
+      throw new Error(error.error || 'Failed to trigger webhook')
     }
+
+    // Update project status to quoted
+    const supabase = await createClient()
+    await supabase
+      .from('projects')
+      .update({
+        status: 'quoted',
+        quoted_at: new Date().toISOString(),
+      })
+      .eq('id', id)
 
     revalidatePath(`/showroom/projects/${id}`)
   }
