@@ -60,6 +60,7 @@ interface ProjectSidebarProps {
   onStatusChange?: (status: string) => void
   onCreateQuote?: () => void
   onVisualizeKitchen?: () => void
+  isCreatingQuote?: boolean
   className?: string
 }
 
@@ -80,6 +81,7 @@ export function ProjectSidebar({
   onStatusChange,
   onCreateQuote,
   onVisualizeKitchen,
+  isCreatingQuote = false,
   className = ''
 }: ProjectSidebarProps) {
   const currentStatus = statusOptions.find(s => s.value === project.status) || statusOptions[0]
@@ -279,10 +281,19 @@ export function ProjectSidebar({
               className="w-full justify-start gap-2"
               variant="outline"
               onClick={hasAiAgent ? onCreateQuote : undefined}
-              disabled={!hasAiAgent}
+              disabled={!hasAiAgent || isCreatingQuote}
             >
-              <Send className="h-4 w-4" />
-              Create Quote
+              {isCreatingQuote ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Generating Quote...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Create Quote
+                </>
+              )}
             </Button>
           </LockedFeature>
           <LockedFeature feature="aiAgent" isLocked={!hasAiAgent}>

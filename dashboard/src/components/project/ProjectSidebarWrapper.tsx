@@ -4,6 +4,7 @@ import { ProjectSidebar } from './ProjectSidebar'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSubscriptionContextOptional } from '@/contexts/subscription-context'
+import { createClient } from '@/lib/supabase/client'
 
 interface Project {
   id: string
@@ -36,7 +37,7 @@ interface ProjectSidebarWrapperProps {
   measurement?: Measurement | null
   canExportDxf?: boolean
   onStatusChange: (status: string) => Promise<void>
-  onCreateQuote?: () => void
+  onCreateQuote?: () => Promise<void>
 }
 
 export function ProjectSidebarWrapper({
@@ -49,6 +50,7 @@ export function ProjectSidebarWrapper({
   const router = useRouter()
   const subscription = useSubscriptionContextOptional()
   const [isVisualizing, setIsVisualizing] = useState(false)
+  const [isCreatingQuote, setIsCreatingQuote] = useState(false)
 
   const currentPlan = subscription?.subscription?.plan || null
 
@@ -89,9 +91,51 @@ export function ProjectSidebarWrapper({
     }
   }
 
-  const handleCreateQuote = () => {
-    if (onCreateQuote) {
-      onCreateQuote()
+  const handleCreateQuote = async () => {
+    if (!onCreateQuote) return
+
+    try {
+      setIsCreatingQuote(true)
+
+      // Trigger the webhook
+      await onCreateQuote()
+
+      // Poll for quote email to appear (n8n takes a few seconds to process)
+      const supabase = createClient()
+      const maxAttempts = 15 // 15 attempts * 2 seconds = 30 seconds max
+      let attempts = 0
+
+      const pollForQuote = async (): Promise<boolean> => {
+        const { data } = await supabase
+          .from('quote_emails')
+          .select('id')
+          .eq('project_id', project.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        return data && data.length > 0
+      }
+
+      // Wait a moment for n8n to start processing
+      await new Promise(resolve => setTimeout(resolve, 2000))
+
+      while (attempts < maxAttempts) {
+        const found = await pollForQuote()
+        if (found) {
+          router.refresh()
+          return
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        attempts++
+      }
+
+      // If we get here, quote wasn't found in time - refresh anyway
+      router.refresh()
+    } catch (error) {
+      console.error('Error creating quote:', error)
+      alert('Failed to create quote. Please try again.')
+    } finally {
+      setIsCreatingQuote(false)
     }
   }
 
@@ -104,6 +148,7 @@ export function ProjectSidebarWrapper({
       onStatusChange={onStatusChange}
       onCreateQuote={handleCreateQuote}
       onVisualizeKitchen={handleVisualizeKitchen}
+      isCreatingQuote={isCreatingQuote}
     />
   )
 }
