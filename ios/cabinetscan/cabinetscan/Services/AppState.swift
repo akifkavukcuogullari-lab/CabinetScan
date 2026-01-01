@@ -119,13 +119,8 @@ class AppState: ObservableObject {
     }
 
     func proceedToReview() {
-        // Check if there are active addons to show
-        let addons = showroomConfig?.addons ?? []
-        if !addons.isEmpty {
-            currentScreen = .addons
-        } else {
-            currentScreen = .review
-        }
+        // Addons are now integrated into the selection flow
+        currentScreen = .review
     }
 
     func proceedFromAddons() {

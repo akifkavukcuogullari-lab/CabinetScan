@@ -51,6 +51,7 @@ export function ProjectSidebarWrapper({
   const subscription = useSubscriptionContextOptional()
   const [isVisualizing, setIsVisualizing] = useState(false)
   const [isCreatingQuote, setIsCreatingQuote] = useState(false)
+  const [quoteError, setQuoteError] = useState<string | null>(null)
 
   const currentPlan = subscription?.subscription?.plan || null
 
@@ -96,6 +97,7 @@ export function ProjectSidebarWrapper({
 
     try {
       setIsCreatingQuote(true)
+      setQuoteError(null)
 
       // Trigger the webhook
       await onCreateQuote()
@@ -122,6 +124,7 @@ export function ProjectSidebarWrapper({
       while (attempts < maxAttempts) {
         const found = await pollForQuote()
         if (found) {
+          setQuoteError(null)
           router.refresh()
           return
         }
@@ -129,11 +132,11 @@ export function ProjectSidebarWrapper({
         attempts++
       }
 
-      // If we get here, quote wasn't found in time - refresh anyway
-      router.refresh()
+      // If we get here, quote wasn't found in time - show error
+      setQuoteError('Quote generation timed out. The AI service may be busy or unavailable.')
     } catch (error) {
       console.error('Error creating quote:', error)
-      alert('Failed to create quote. Please try again.')
+      setQuoteError('Failed to generate quote. Please check your connection and try again.')
     } finally {
       setIsCreatingQuote(false)
     }
@@ -149,6 +152,8 @@ export function ProjectSidebarWrapper({
       onCreateQuote={handleCreateQuote}
       onVisualizeKitchen={handleVisualizeKitchen}
       isCreatingQuote={isCreatingQuote}
+      quoteError={quoteError}
+      onDismissQuoteError={() => setQuoteError(null)}
     />
   )
 }

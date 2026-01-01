@@ -50,6 +50,7 @@ interface ProductVariant {
   name: string
   color_code: string | null
   price: number | null
+  price_coefficient: number
   image_url: string | null
   display_order: number
   is_active: boolean
@@ -67,6 +68,7 @@ interface Product {
   is_active: boolean
   is_featured: boolean
   has_variants: boolean
+  use_color_coefficient: boolean
   image_url: string | null
 }
 
@@ -101,12 +103,14 @@ export default function EditProductPage({
     is_active: true,
     is_featured: false,
     has_variants: false,
+    use_color_coefficient: false,
     image_url: '',
   })
 
   const [variantForm, setVariantForm] = useState({
     name: '',
     price: '',
+    price_coefficient: '1.00',
     image_url: '',
     is_default: false,
   })
@@ -157,6 +161,7 @@ export default function EditProductPage({
         is_active: productData.is_active,
         is_featured: productData.is_featured,
         has_variants: productData.has_variants || false,
+        use_color_coefficient: productData.use_color_coefficient || false,
         image_url: productData.image_url || '',
       })
 
@@ -237,13 +242,15 @@ export default function EditProductPage({
           is_active: formData.is_active,
           is_featured: formData.is_featured,
           has_variants: formData.has_variants,
+          use_color_coefficient: formData.use_color_coefficient,
           image_url: formData.image_url || null,
         })
         .eq('id', product.id)
 
       if (updateError) throw updateError
 
-      router.push('/showroom/products')
+      // Redirect back to products page with the same category tab selected
+      router.push(`/showroom/products?category=${formData.category_id}`)
     } catch (err) {
       console.error('Error updating product:', err)
       setError('Failed to update product. Please try again.')
@@ -269,7 +276,8 @@ export default function EditProductPage({
 
       if (deleteError) throw deleteError
 
-      router.push('/showroom/products')
+      // Redirect back to products page with the same category tab selected
+      router.push(`/showroom/products?category=${formData.category_id}`)
     } catch (err) {
       console.error('Error deleting product:', err)
       setError('Failed to delete product. Please try again.')
@@ -286,6 +294,7 @@ export default function EditProductPage({
     setVariantForm({
       name: '',
       price: '',
+      price_coefficient: '1.00',
       image_url: '',
       is_default: false,
     })
@@ -325,6 +334,8 @@ export default function EditProductPage({
   const handleSaveVariant = async () => {
     if (!product || !variantForm.name) return
 
+    const coefficient = parseFloat(variantForm.price_coefficient) || 1.0
+
     try {
       if (editingVariant) {
         // Update existing variant
@@ -334,6 +345,7 @@ export default function EditProductPage({
             name: variantForm.name,
             color_code: null,
             price: variantForm.price ? parseFloat(variantForm.price) : null,
+            price_coefficient: coefficient,
             image_url: variantForm.image_url || null,
             is_default: variantForm.is_default,
           })
@@ -349,6 +361,7 @@ export default function EditProductPage({
                   name: variantForm.name,
                   color_code: null,
                   price: variantForm.price ? parseFloat(variantForm.price) : null,
+                  price_coefficient: coefficient,
                   image_url: variantForm.image_url || null,
                   is_default: variantForm.is_default,
                 }
@@ -364,6 +377,7 @@ export default function EditProductPage({
             name: variantForm.name,
             color_code: null,
             price: variantForm.price ? parseFloat(variantForm.price) : null,
+            price_coefficient: coefficient,
             image_url: variantForm.image_url || null,
             is_default: variantForm.is_default,
             display_order: variants.length,
@@ -393,6 +407,7 @@ export default function EditProductPage({
     setVariantForm({
       name: variant.name,
       price: variant.price?.toString() || '',
+      price_coefficient: variant.price_coefficient?.toString() || '1.00',
       image_url: variant.image_url || '',
       is_default: variant.is_default,
     })
@@ -690,6 +705,11 @@ export default function EditProductPage({
                                     Default
                                   </Badge>
                                 )}
+                                {variant.price_coefficient !== 1.0 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    ×{variant.price_coefficient.toFixed(2)}
+                                  </Badge>
+                                )}
                               </div>
                               {variant.price && (
                                 <span className="text-sm text-gray-500">
@@ -792,23 +812,41 @@ export default function EditProductPage({
                             </label>
                           )}
                         </div>
-                        <div className="space-y-2">
-                          <Label>Price (optional)</Label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
-                              $
-                            </span>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Price (optional)</Label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                                $
+                              </span>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={variantForm.price}
+                                onChange={(e) =>
+                                  setVariantForm((prev) => ({ ...prev, price: e.target.value }))
+                                }
+                                placeholder="0.00"
+                                className="pl-7"
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Price Coefficient</Label>
                             <Input
                               type="number"
                               step="0.01"
                               min="0"
-                              value={variantForm.price}
+                              value={variantForm.price_coefficient}
                               onChange={(e) =>
-                                setVariantForm((prev) => ({ ...prev, price: e.target.value }))
+                                setVariantForm((prev) => ({ ...prev, price_coefficient: e.target.value }))
                               }
-                              placeholder="0.00"
-                              className="pl-7"
+                              placeholder="1.00"
                             />
+                            <p className="text-xs text-gray-500">
+                              Multiplier for other products/addons
+                            </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -895,6 +933,24 @@ export default function EditProductPage({
                     }
                   />
                 </div>
+
+                {!isCabinetModel && (
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <div>
+                      <Label htmlFor="use_color_coefficient">Apply Cabinet Color Coefficient</Label>
+                      <p className="text-sm text-gray-500">
+                        Price multiplied by cabinet color
+                      </p>
+                    </div>
+                    <Switch
+                      id="use_color_coefficient"
+                      checked={formData.use_color_coefficient}
+                      onCheckedChange={(checked) =>
+                        setFormData((prev) => ({ ...prev, use_color_coefficient: checked }))
+                      }
+                    />
+                  </div>
+                )}
               </CardContent>
             </Card>
 

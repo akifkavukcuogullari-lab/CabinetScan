@@ -194,13 +194,26 @@ export default function BrandingPage() {
               <CardContent className="space-y-6">
                 {/* Logo dimension guidelines */}
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm font-medium text-blue-800 mb-2">Recommended Logo Specifications</p>
-                  <ul className="text-sm text-blue-700 space-y-1">
-                    <li>• <strong>Dimensions:</strong> 600 x 200 pixels (3:1 ratio) for best display</li>
-                    <li>• <strong>Minimum size:</strong> 400px wide for crisp display on Retina screens</li>
-                    <li>• <strong>Format:</strong> PNG, JPG, SVG, WebP, or AVIF (PNG with transparency recommended)</li>
-                    <li>• <strong>File size:</strong> Under 500KB for optimal loading speed</li>
+                  <p className="text-sm font-medium text-blue-800 mb-2">📐 Recommended Logo Specifications</p>
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div>
+                      <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Ideal Size</p>
+                      <p className="text-lg font-bold text-blue-800">1000 × 400 px</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Aspect Ratio</p>
+                      <p className="text-lg font-bold text-blue-800">2:1 to 4:1</p>
+                    </div>
+                  </div>
+                  <ul className="text-sm text-blue-700 space-y-1 mt-3">
+                    <li>• <strong>Width:</strong> 800 - 1200 pixels (horizontal/wide logos work best)</li>
+                    <li>• <strong>Height:</strong> 300 - 500 pixels</li>
+                    <li>• <strong>Format:</strong> PNG with transparent background (recommended)</li>
+                    <li>• <strong>File size:</strong> Under 300KB for fast loading</li>
                   </ul>
+                  <p className="text-xs text-blue-600 mt-3 italic">
+                    💡 These dimensions ensure your logo displays crisp and clear on all iPhone models including 3x Retina displays.
+                  </p>
                 </div>
 
                 {/* Hidden file inputs */}

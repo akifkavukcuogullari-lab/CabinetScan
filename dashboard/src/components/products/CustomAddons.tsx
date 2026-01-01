@@ -36,6 +36,7 @@ interface ShowroomAddon {
   display_order: number
   price_per_unit: number | null
   image_url: string | null
+  use_color_coefficient: boolean
 }
 
 interface CustomAddonsProps {
@@ -54,6 +55,7 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
   const [addonDescription, setAddonDescription] = useState('')
   const [addonUnit, setAddonUnit] = useState('pieces')
   const [addonPrice, setAddonPrice] = useState('')
+  const [useColorCoefficient, setUseColorCoefficient] = useState(false)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -181,6 +183,7 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
           description: addonDescription.trim() || null,
           unit: addonUnit,
           price_per_unit: addonPrice ? parseFloat(addonPrice) : null,
+          use_color_coefficient: useColorCoefficient,
           image_url: imageUrl
         })
         .eq('id', editingAddon.id)
@@ -208,6 +211,7 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
           is_enabled: true,
           display_order: addons.length,
           price_per_unit: addonPrice ? parseFloat(addonPrice) : null,
+          use_color_coefficient: useColorCoefficient,
           image_url: imageUrl
         })
         .select()
@@ -237,6 +241,7 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
     setAddonDescription(addon.description || '')
     setAddonUnit(addon.unit)
     setAddonPrice(addon.price_per_unit ? addon.price_per_unit.toString() : '')
+    setUseColorCoefficient(addon.use_color_coefficient || false)
     setImagePreview(addon.image_url)
     setImageFile(null)
     setError(null)
@@ -249,6 +254,7 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
     setAddonDescription('')
     setAddonUnit('pieces')
     setAddonPrice('')
+    setUseColorCoefficient(false)
     setImageFile(null)
     setImagePreview(null)
     setError(null)
@@ -360,6 +366,14 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
                         <span className="font-medium text-gray-900">
                           ${addon.price_per_unit.toFixed(2)}
                         </span>
+                      </>
+                    )}
+                    {addon.use_color_coefficient && (
+                      <>
+                        <span>•</span>
+                        <Badge variant="outline" className="text-xs">
+                          Color coeff.
+                        </Badge>
                       </>
                     )}
                   </div>
@@ -522,6 +536,23 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
                   placeholder="150.00"
                 />
               </div>
+            </div>
+
+            {/* Color Coefficient Toggle */}
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div>
+                <Label htmlFor="use_color_coefficient" className="text-sm font-medium">
+                  Apply Cabinet Color Coefficient
+                </Label>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Price multiplied by cabinet color coefficient
+                </p>
+              </div>
+              <Switch
+                id="use_color_coefficient"
+                checked={useColorCoefficient}
+                onCheckedChange={setUseColorCoefficient}
+              />
             </div>
 
             {error && (

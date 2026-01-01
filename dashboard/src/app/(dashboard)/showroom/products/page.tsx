@@ -8,8 +8,14 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import { CustomAddons } from '@/components/products/CustomAddons'
+import { CategoryPriceToggle } from '@/components/products/CategoryPriceToggle'
 
-export default async function ProductsPage() {
+export default async function ProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ category?: string }>
+}) {
+  const { category: selectedCategory } = await searchParams
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -32,6 +38,7 @@ export default async function ProductsPage() {
       category_id,
       custom_name,
       is_enabled,
+      show_price_to_customer,
       categories (
         name,
         slug
@@ -61,6 +68,12 @@ export default async function ProductsPage() {
 
   const enabledCategoryIds = new Set(showroomCategories?.map((sc: any) => sc.category_id) || [])
 
+  // Map category_id to showroom_category data for toggle
+  const showroomCategoryMap = (showroomCategories || []).reduce((acc: Record<string, any>, sc: any) => {
+    acc[sc.category_id] = sc
+    return acc
+  }, {} as Record<string, any>)
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -77,7 +90,7 @@ export default async function ProductsPage() {
       </div>
 
       {categories && categories.length > 0 ? (
-        <Tabs defaultValue={categories[0]?.id} className="space-y-4">
+        <Tabs defaultValue={selectedCategory || categories[0]?.id} className="space-y-4">
           <TabsList className="flex-wrap h-auto gap-1">
             {categories.map((category: any) => (
               <TabsTrigger
@@ -104,6 +117,21 @@ export default async function ProductsPage() {
                     </Link>{' '}
                     to make products visible to customers.
                   </p>
+                </div>
+              )}
+
+              {/* Category-level price toggle */}
+              {showroomCategoryMap[category.id] && (
+                <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-md flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Price Visibility</p>
+                    <p className="text-xs text-gray-500">Control whether prices are shown for all {category.name} products</p>
+                  </div>
+                  <CategoryPriceToggle
+                    showroomCategoryId={showroomCategoryMap[category.id].id}
+                    categoryName={category.name}
+                    initialValue={showroomCategoryMap[category.id].show_price_to_customer ?? true}
+                  />
                 </div>
               )}
 

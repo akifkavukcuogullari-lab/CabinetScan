@@ -7,6 +7,7 @@ interface ProductVariant {
   name: string
   color_code: string | null
   price: number | null
+  price_coefficient: number
   image_url: string | null
   thumbnail_url: string | null
   display_order: number
@@ -21,6 +22,7 @@ interface Addon {
   price_per_unit: number | null
   image_url: string | null
   display_order: number
+  use_color_coefficient: boolean
 }
 
 interface Product {
@@ -34,6 +36,7 @@ interface Product {
   is_featured: boolean
   specifications: Record<string, unknown>
   has_variants: boolean
+  use_color_coefficient: boolean
   variants: ProductVariant[]
 }
 
@@ -64,6 +67,7 @@ interface ShowroomConfig {
     icon_name: string | null
     display_order: number
     is_required: boolean
+    show_price_to_customer: boolean
     products: Product[]
   }>
   addons: Addon[]
@@ -143,6 +147,7 @@ serve(async (req) => {
         display_order,
         custom_name,
         is_required,
+        show_price_to_customer,
         categories (
           name,
           slug,
@@ -166,7 +171,7 @@ serve(async (req) => {
     // Fetch enabled addons for this showroom
     const { data: addons } = await supabaseAdmin
       .from('showroom_addons')
-      .select('id, question, description, unit, price_per_unit, image_url, display_order')
+      .select('id, question, description, unit, price_per_unit, image_url, display_order, use_color_coefficient')
       .eq('showroom_id', showroom.id)
       .eq('is_enabled', true)
       .order('display_order')
@@ -191,6 +196,7 @@ serve(async (req) => {
         name: v.name,
         color_code: v.color_code,
         price: v.price,
+        price_coefficient: v.price_coefficient || 1.0,
         image_url: v.image_url,
         thumbnail_url: v.thumbnail_url,
         display_order: v.display_order,
@@ -213,6 +219,7 @@ serve(async (req) => {
           is_featured: p.is_featured,
           specifications: p.specifications,
           has_variants: p.has_variants || false,
+          use_color_coefficient: p.use_color_coefficient || false,
           variants: variantsByProduct[p.id] || [],
         }))
 
@@ -226,6 +233,7 @@ serve(async (req) => {
         icon_name: sc.categories.icon_name,
         display_order: sc.display_order,
         is_required: sc.is_required,
+        show_price_to_customer: sc.show_price_to_customer ?? true,
         products: categoryProducts,
       }
     })
@@ -290,6 +298,7 @@ serve(async (req) => {
         price_per_unit: a.price_per_unit,
         image_url: a.image_url,
         display_order: a.display_order,
+        use_color_coefficient: a.use_color_coefficient || false,
       })),
       subscription: {
         status: showroom.subscription_status,

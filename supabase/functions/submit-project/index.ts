@@ -385,12 +385,17 @@ async function buildWebhookPayload(
       if (Array.isArray(selections)) {
         selections.forEach((s: any) => {
           const categorySlug = s.categories?.slug || 'unknown'
+          const basePrice = s.product_price_snapshot
+          const coefficient = s.coefficient_applied || null
+          const effectivePrice = coefficient && basePrice ? basePrice * coefficient : basePrice
 
           selectionsObj[categorySlug] = {
             category_name: s.categories?.name || 'Unknown',
             product: s.product_name_snapshot,
             variant: s.variant_name_snapshot || null,
-            price: s.product_price_snapshot,
+            price: basePrice,
+            effective_price: effectivePrice,
+            coefficient_applied: coefficient,
             pricing_unit: s.pricing_unit_snapshot,
             quantity: s.quantity,
             notes: s.customer_notes,
@@ -411,17 +416,25 @@ async function buildWebhookPayload(
         return []
       }
 
-      return addonSelections.map((a: any) => ({
-        addon_id: a.addon_id,
-        question: a.addon_question_snapshot,
-        description: a.addon_description_snapshot,
-        is_selected: a.is_selected,
-        quantity: a.quantity,
-        unit: a.addon_unit_snapshot,
-        price_per_unit: a.addon_price_snapshot,
-        image_url: a.addon_image_url_snapshot,
-        customer_notes: a.customer_notes || null,
-      }))
+      return addonSelections.map((a: any) => {
+        const basePrice = a.addon_price_snapshot
+        const coefficient = a.coefficient_applied || null
+        const effectivePrice = coefficient && basePrice ? basePrice * coefficient : basePrice
+
+        return {
+          addon_id: a.addon_id,
+          question: a.addon_question_snapshot,
+          description: a.addon_description_snapshot,
+          is_selected: a.is_selected,
+          quantity: a.quantity,
+          unit: a.addon_unit_snapshot,
+          price_per_unit: basePrice,
+          effective_price_per_unit: effectivePrice,
+          coefficient_applied: coefficient,
+          image_url: a.addon_image_url_snapshot,
+          customer_notes: a.customer_notes || null,
+        }
+      })
     })(),
     showroom: {
       id: showroom.id,
@@ -685,17 +698,19 @@ serve(async (req) => {
     }
 
     // Create product selections
+    let cabinetColorCoefficient = 1.0 // Default coefficient from Cabinet Model color variant
+
     if (submission.selections && submission.selections.length > 0) {
-      // Fetch product details for snapshots
+      // Fetch product details for snapshots (including use_color_coefficient)
       const productIds = submission.selections.map((s) => s.product_id)
       const { data: products } = await supabaseAdmin
         .from('products')
-        .select('id, name, price, has_variants, category_id, categories(pricing_unit)')
+        .select('id, name, price, has_variants, use_color_coefficient, category_id, categories(pricing_unit, slug)')
         .in('id', productIds)
 
       const productMap = new Map(products?.map((p: any) => [p.id, p]) || [])
 
-      // Fetch variant details for selections that include variants
+      // Fetch variant details for selections that include variants (including price_coefficient)
       const variantIds = submission.selections
         .filter((s) => s.variant_id)
         .map((s) => s.variant_id as string)
@@ -704,10 +719,24 @@ serve(async (req) => {
       if (variantIds.length > 0) {
         const { data: variants } = await supabaseAdmin
           .from('product_variants')
-          .select('id, name, price, product_id')
+          .select('id, name, price, price_coefficient, product_id')
           .in('id', variantIds)
 
         variantMap = new Map(variants?.map((v: any) => [v.id, v]) || [])
+      }
+
+      // Find Cabinet Model selection and get its variant's coefficient
+      const cabinetSelection = submission.selections.find((s) => {
+        const product = productMap.get(s.product_id) as any
+        return product?.categories?.slug === 'cabinet-model'
+      })
+
+      if (cabinetSelection?.variant_id) {
+        const cabinetVariant = variantMap.get(cabinetSelection.variant_id)
+        if (cabinetVariant?.price_coefficient) {
+          cabinetColorCoefficient = cabinetVariant.price_coefficient
+          console.log(`[COEFFICIENT] Using Cabinet Model color coefficient: ${cabinetColorCoefficient}`)
+        }
       }
 
       const selectionsToInsert = submission.selections
@@ -722,6 +751,9 @@ serve(async (req) => {
             ? `${product.name} - ${variant.name}`
             : product.name
 
+          // Apply coefficient if product has use_color_coefficient enabled
+          const coefficientApplied = product.use_color_coefficient ? cabinetColorCoefficient : null
+
           return {
             project_id: project.id,
             category_id: s.category_id,
@@ -732,6 +764,7 @@ serve(async (req) => {
             variant_name_snapshot: variant?.name || null,
             product_price_snapshot: effectivePrice,
             pricing_unit_snapshot: product.categories?.pricing_unit || 'none',
+            coefficient_applied: coefficientApplied,
             customer_notes: s.customer_notes,
           }
         })
@@ -750,11 +783,11 @@ serve(async (req) => {
 
     // Create addon selections
     if (submission.addon_selections && submission.addon_selections.length > 0) {
-      // Fetch addon details for snapshots
+      // Fetch addon details for snapshots (including use_color_coefficient)
       const addonIds = submission.addon_selections.map((s) => s.addon_id)
       const { data: addons } = await supabaseAdmin
         .from('showroom_addons')
-        .select('id, question, description, unit, price_per_unit, image_url')
+        .select('id, question, description, unit, price_per_unit, image_url, use_color_coefficient')
         .in('id', addonIds)
 
       const addonMap = new Map(addons?.map((a: any) => [a.id, a]) || [])
@@ -763,6 +796,9 @@ serve(async (req) => {
         .filter((s) => addonMap.has(s.addon_id))
         .map((s) => {
           const addon = addonMap.get(s.addon_id) as any
+          // Apply coefficient if addon has use_color_coefficient enabled
+          const coefficientApplied = addon.use_color_coefficient ? cabinetColorCoefficient : null
+
           return {
             project_id: project.id,
             addon_id: s.addon_id,
@@ -774,6 +810,7 @@ serve(async (req) => {
             addon_unit_snapshot: addon.unit,
             addon_price_snapshot: addon.price_per_unit,
             addon_image_url_snapshot: addon.image_url,
+            coefficient_applied: coefficientApplied,
           }
         })
 

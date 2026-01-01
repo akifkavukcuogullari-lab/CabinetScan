@@ -21,6 +21,25 @@ struct AddonsView: View {
         return Double(currentAddonIndex + 1) / Double(addons.count)
     }
 
+    /// Get the price coefficient from the selected Cabinet Model color variant
+    private var cabinetColorCoefficient: Double {
+        guard let config = appState.showroomConfig,
+              let cabinetCategory = config.categories.first(where: { $0.slug == "cabinet-model" }),
+              let selectedProduct = appState.selections[cabinetCategory.categoryId],
+              let selectedVariant = appState.getSelectedVariant(for: selectedProduct) else {
+            return 1.0
+        }
+        return selectedVariant.priceCoefficient
+    }
+
+    /// Calculate effective price with coefficient if applicable
+    private func effectivePrice(_ basePrice: Double, for addon: Addon) -> Double {
+        if addon.useColorCoefficient {
+            return basePrice * cabinetColorCoefficient
+        }
+        return basePrice
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -86,7 +105,7 @@ struct AddonsView: View {
 
                             // Price info (if available)
                             if let price = addon.pricePerUnit {
-                                Text("$\(price, specifier: "%.2f") / \(addon.unit)")
+                                Text("$\(effectivePrice(price, for: addon), specifier: "%.2f") / \(addon.unit)")
                                     .font(.subheadline)
                                     .foregroundStyle(.blue)
                                     .padding(.horizontal)

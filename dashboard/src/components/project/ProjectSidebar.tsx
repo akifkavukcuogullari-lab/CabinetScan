@@ -61,6 +61,8 @@ interface ProjectSidebarProps {
   onCreateQuote?: () => void
   onVisualizeKitchen?: () => void
   isCreatingQuote?: boolean
+  quoteError?: string | null
+  onDismissQuoteError?: () => void
   className?: string
 }
 
@@ -82,6 +84,8 @@ export function ProjectSidebar({
   onCreateQuote,
   onVisualizeKitchen,
   isCreatingQuote = false,
+  quoteError = null,
+  onDismissQuoteError,
   className = ''
 }: ProjectSidebarProps) {
   const currentStatus = statusOptions.find(s => s.value === project.status) || statusOptions[0]
@@ -296,6 +300,29 @@ export function ProjectSidebar({
               )}
             </Button>
           </LockedFeature>
+          {quoteError && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+              <p className="text-sm text-red-700 mb-2">{quoteError}</p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-red-700 border-red-300 hover:bg-red-100"
+                  onClick={onCreateQuote}
+                >
+                  Try Again
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-gray-500"
+                  onClick={onDismissQuoteError}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          )}
           <LockedFeature feature="aiAgent" isLocked={!hasAiAgent}>
             <Button
               className="w-full justify-start gap-2 bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100 border-purple-200"

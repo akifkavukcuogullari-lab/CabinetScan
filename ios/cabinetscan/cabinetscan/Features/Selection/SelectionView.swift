@@ -2,11 +2,16 @@ import SwiftUI
 
 struct SelectionView: View {
     @EnvironmentObject var appState: AppState
-    @State private var currentCategoryIndex = 0
+    @State private var currentStepIndex = 0
     @State private var currentProductIndex = 0
     @State private var showingColorSelection = false
     @State private var selectedModelForColors: Product? = nil
     @State private var showSelectionsSummary = false
+
+    // Addon-specific state
+    @State private var showAddonDetails = false
+    @State private var addonQuantity: Int = 1
+    @State private var addonNotes: String = ""
 
     private var categories: [Category] {
         appState.showroomConfig?.categories ?? []
@@ -16,10 +21,41 @@ struct SelectionView: View {
         appState.showroomConfig?.addons ?? []
     }
 
+    /// Total number of steps (categories + addons)
+    private var totalSteps: Int {
+        categories.count + addons.count
+    }
+
+    /// Whether we're currently in the addon section
+    private var isInAddonSection: Bool {
+        currentStepIndex >= categories.count
+    }
+
+    /// Current addon index (0-based within addons array)
+    private var currentAddonIndex: Int {
+        currentStepIndex - categories.count
+    }
+
+    /// Current addon being displayed
+    private var currentAddon: Addon? {
+        guard isInAddonSection, currentAddonIndex < addons.count else { return nil }
+        return addons[currentAddonIndex]
+    }
+
     private var selectedAddonsCount: Int {
         addons.filter { addon in
             appState.getAddonSelection(addon.id)?.isSelected == true
         }.count
+    }
+
+    /// Get the price coefficient from the selected Cabinet Model color variant
+    private var cabinetColorCoefficient: Double {
+        guard let cabinetCategory = categories.first(where: { $0.slug == "cabinet-model" }),
+              let selectedProduct = appState.selections[cabinetCategory.categoryId],
+              let selectedVariant = appState.getSelectedVariant(for: selectedProduct) else {
+            return 1.0
+        }
+        return selectedVariant.priceCoefficient
     }
 
     private var selectedProductsCount: Int {
@@ -27,8 +63,8 @@ struct SelectionView: View {
     }
 
     private var currentCategory: Category? {
-        guard currentCategoryIndex < categories.count else { return nil }
-        return categories[currentCategoryIndex]
+        guard !isInAddonSection, currentStepIndex < categories.count else { return nil }
+        return categories[currentStepIndex]
     }
 
     private var currentProducts: [Product] {
@@ -36,28 +72,105 @@ struct SelectionView: View {
     }
 
     private var progress: Double {
-        guard categories.count > 0 else { return 0 }
-        return Double(currentCategoryIndex + 1) / Double(categories.count)
+        guard totalSteps > 0 else { return 0 }
+        return Double(currentStepIndex + 1) / Double(totalSteps)
+    }
+
+    // MARK: - Helper UI to reduce type-checking complexity
+    private func isNextDisabled(for category: Category) -> Bool {
+        category.isRequired && appState.selections[category.categoryId] == nil
+    }
+
+    @ViewBuilder
+    private func nextButton(for category: Category) -> some View {
+        let disabled = isNextDisabled(for: category)
+        Button {
+            advanceToNextStep()
+        } label: {
+            HStack(spacing: 4) {
+                Text("Next")
+                    .font(.subheadline.weight(.semibold))
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(
+                Capsule().fill(
+                    disabled
+                    ? AnyShapeStyle(Color.gray.opacity(0.5))
+                    : AnyShapeStyle(
+                        LinearGradient(
+                            colors: [Color.blue.opacity(0.9), Color.blue],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                )
+            )
+            .shadow(
+                color: disabled ? .clear : .blue.opacity(0.25),
+                radius: 6, y: 3
+            )
+        }
+        .disabled(disabled)
+    }
+
+    private struct PageIndicatorView: View {
+        let count: Int
+        let currentIndex: Int
+        var body: some View {
+            HStack(spacing: 8) {
+                ForEach(0..<min(count, 20), id: \.self) { index in
+                    Circle()
+                        .fill(index == currentIndex ? Color.blue : Color(.systemGray4))
+                        .frame(width: index == currentIndex ? 10 : 8, height: index == currentIndex ? 10 : 8)
+                        .animation(.spring(response: 0.3), value: currentIndex)
+                }
+                if count > 20 {
+                    Text("+\(count - 20)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// Calculate effective addon price with coefficient if applicable
+    private func effectiveAddonPrice(_ basePrice: Double, for addon: Addon) -> Double {
+        if addon.useColorCoefficient {
+            return basePrice * cabinetColorCoefficient
+        }
+        return basePrice
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Showroom logo
+                // Large showroom logo
                 if let config = appState.showroomConfig {
                     ShowroomLogo(
                         logoUrl: config.branding.logoUrl,
                         logoDarkUrl: config.branding.logoDarkUrl,
-                        maxHeight: 36,
-                        maxWidth: 140
+                        maxHeight: 100,
+                        maxWidth: 300
                     )
-                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
                 }
 
                 // Progress bar
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
                     .tint(.blue)
+                    .padding(.horizontal, 16)
+
+                // Step indicator
+                Text("Step \(currentStepIndex + 1) of \(totalSteps)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
 
                 if showingColorSelection, let product = selectedModelForColors, let category = currentCategory {
                     // Color Selection View
@@ -76,21 +189,16 @@ struct SelectionView: View {
                             }
                         }
                     )
-                } else if let category = currentCategory {
-                    // Category header
+                } else if !isInAddonSection, let category = currentCategory {
+                    // PRODUCT CATEGORY VIEW
                     VStack(spacing: 4) {
                         Text(category.name)
                             .font(.title2)
                             .fontWeight(.bold)
-
-                        Text("\(currentCategoryIndex + 1) of \(categories.count)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
-                    .padding(.top, 16)
+                    .padding(.top, 8)
                     .padding(.bottom, 8)
 
-                    // Products carousel
                     if currentProducts.isEmpty {
                         ContentUnavailableView(
                             "No Products",
@@ -106,6 +214,8 @@ struct SelectionView: View {
                                     product: product,
                                     isSelected: appState.selections[category.categoryId]?.id == product.id,
                                     selectedVariant: appState.getSelectedVariant(for: product),
+                                    showPrice: category.showPriceToCustomer,
+                                    colorCoefficient: cabinetColorCoefficient,
                                     onSelect: {
                                         selectProduct(product, in: category)
                                     }
@@ -116,111 +226,307 @@ struct SelectionView: View {
                         .tabViewStyle(.page(indexDisplayMode: .never))
                         .frame(maxHeight: .infinity)
 
-                        // Custom page indicator
-                        HStack(spacing: 8) {
-                            ForEach(0..<min(currentProducts.count, 20), id: \.self) { index in
-                                Circle()
-                                    .fill(index == currentProductIndex ? Color.blue : Color(.systemGray4))
-                                    .frame(width: index == currentProductIndex ? 10 : 8, height: index == currentProductIndex ? 10 : 8)
-                                    .animation(.spring(response: 0.3), value: currentProductIndex)
-                            }
-                            if currentProducts.count > 20 {
-                                Text("+\(currentProducts.count - 20)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .padding(.vertical, 8)
+                        // Custom page indicator replaced
+                        PageIndicatorView(count: currentProducts.count, currentIndex: currentProductIndex)
+                            .padding(.vertical, 8)
 
                         // Product count
-                        Text("\(currentProductIndex + 1) of \(currentProducts.count)")
+                        Text("\(currentProductIndex + 1) of \(currentProducts.count) products")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.bottom, 4)
                     }
 
-                    // Selections summary bar
-                    if selectedProductsCount > 0 || selectedAddonsCount > 0 {
-                        Button {
-                            showSelectionsSummary = true
-                        } label: {
-                            HStack(spacing: 12) {
-                                if selectedProductsCount > 0 {
-                                    Label("\(selectedProductsCount) products", systemImage: "cube.fill")
-                                        .font(.caption)
-                                }
-                                if selectedAddonsCount > 0 {
-                                    Label("\(selectedAddonsCount) add-ons", systemImage: "plus.circle.fill")
-                                        .font(.caption)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.up")
-                                    .font(.caption)
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Color(.systemGray6))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal)
-                    }
-
-                    // Navigation buttons
-                    HStack(spacing: 16) {
-                        if currentCategoryIndex > 0 {
+                    // Elegant navigation buttons for products
+                    HStack(spacing: 12) {
+                        if currentStepIndex > 0 {
                             Button {
-                                withAnimation {
-                                    currentCategoryIndex -= 1
-                                    currentProductIndex = 0
-                                }
+                                goToPreviousStep()
                             } label: {
-                                Label("Back", systemImage: "chevron.left")
+                                HStack(spacing: 4) {
+                                    Image(systemName: "chevron.left")
+                                        .font(.caption.weight(.semibold))
+                                    Text("Back")
+                                        .font(.subheadline.weight(.medium))
+                                }
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .strokeBorder(Color(.systemGray4), lineWidth: 0.5)
+                                )
                             }
-                            .buttonStyle(.bordered)
                         }
 
                         Spacer()
 
                         // Skip this category
                         Button {
-                            skipCategory()
+                            skipCurrentStep()
                         } label: {
                             Text("Skip")
-                                .foregroundStyle(.secondary)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.tertiary)
                         }
 
-                        if currentCategoryIndex < categories.count - 1 {
-                            Button {
-                                withAnimation {
-                                    currentCategoryIndex += 1
-                                    currentProductIndex = 0
+                        nextButton(for: category)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+
+                } else if isInAddonSection, let addon = currentAddon {
+                    // ADDON VIEW (integrated)
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            // Addon image (if available)
+                            if let imageUrl = addon.imageUrl,
+                               let url = URL(string: imageUrl) {
+                                AsyncImage(url: url) { image in
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                } placeholder: {
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(Color(.systemGray5))
+                                        .overlay(ProgressView())
                                 }
-                            } label: {
-                                Label("Next", systemImage: "chevron.right")
+                                .frame(maxHeight: 250)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .padding(.horizontal)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(category.isRequired && appState.selections[category.categoryId] == nil)
-                        } else {
-                            Button {
-                                appState.proceedToReview()
-                            } label: {
-                                Label("Continue", systemImage: "chevron.right")
+
+                            // Question/Title
+                            Text(addon.question)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+
+                            // Description (if available)
+                            if let description = addon.description {
+                                Text(description)
+                                    .font(.body)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
                             }
-                            .buttonStyle(.borderedProminent)
+
+                            // Price info (if available)
+                            if let price = addon.pricePerUnit {
+                                Text("$\(effectiveAddonPrice(price, for: addon), specifier: "%.2f") / \(addon.unit)")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.blue)
+                                    .padding(.horizontal)
+                            }
+
+                            if !showAddonDetails {
+                                // Elegant Yes/No buttons
+                                HStack(spacing: 12) {
+                                    Button {
+                                        selectAddonNo(addon)
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "xmark")
+                                                .font(.subheadline.weight(.medium))
+                                            Text("No thanks")
+                                                .font(.subheadline.weight(.medium))
+                                        }
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 12)
+                                        .background(.ultraThinMaterial)
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule()
+                                                .strokeBorder(Color(.systemGray4), lineWidth: 0.5)
+                                        )
+                                    }
+
+                                    Button {
+                                        selectAddonYes()
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "checkmark")
+                                                .font(.subheadline.weight(.semibold))
+                                            Text("Yes, add this")
+                                                .font(.subheadline.weight(.semibold))
+                                        }
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 12)
+                                        .background(
+                                            Capsule()
+                                                .fill(
+                                                    LinearGradient(
+                                                        colors: [Color.green.opacity(0.9), Color.green],
+                                                        startPoint: .top,
+                                                        endPoint: .bottom
+                                                    )
+                                                )
+                                        )
+                                        .shadow(color: .green.opacity(0.3), radius: 8, y: 4)
+                                    }
+                                }
+                                .padding(.top, 16)
+                            } else {
+                                // Elegant quantity and details section
+                                VStack(spacing: 20) {
+                                    // Quantity stepper with glass effect
+                                    HStack {
+                                        Text("Quantity")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+
+                                        Spacer()
+
+                                        HStack(spacing: 0) {
+                                            Button {
+                                                withAnimation(.spring(response: 0.25)) {
+                                                    if addonQuantity > 1 { addonQuantity -= 1 }
+                                                }
+                                            } label: {
+                                                Image(systemName: "minus")
+                                                    .font(.subheadline.weight(.medium))
+                                                    .foregroundStyle(addonQuantity > 1 ? .primary : .tertiary)
+                                                    .frame(width: 36, height: 36)
+                                            }
+                                            .disabled(addonQuantity <= 1)
+
+                                            Text("\(addonQuantity)")
+                                                .font(.body.weight(.semibold))
+                                                .frame(minWidth: 40)
+                                                .contentTransition(.numericText())
+
+                                            Button {
+                                                withAnimation(.spring(response: 0.25)) {
+                                                    addonQuantity += 1
+                                                }
+                                            } label: {
+                                                Image(systemName: "plus")
+                                                    .font(.subheadline.weight(.medium))
+                                                    .foregroundStyle(.primary)
+                                                    .frame(width: 36, height: 36)
+                                            }
+                                        }
+                                        .background(.ultraThinMaterial)
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule()
+                                                .strokeBorder(Color(.systemGray4), lineWidth: 0.5)
+                                        )
+                                    }
+                                    .padding(.horizontal, 24)
+
+                                    // Notes field with subtle styling
+                                    TextField("Add a note (optional)", text: $addonNotes, axis: .vertical)
+                                        .lineLimit(2...3)
+                                        .font(.subheadline)
+                                        .padding(12)
+                                        .background(Color(.systemGray6).opacity(0.5))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .strokeBorder(Color(.systemGray4), lineWidth: 0.5)
+                                        )
+                                        .padding(.horizontal, 24)
+
+                                    // Action buttons
+                                    HStack(spacing: 12) {
+                                        Button {
+                                            withAnimation(.spring(response: 0.3)) {
+                                                showAddonDetails = false
+                                            }
+                                        } label: {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "chevron.left")
+                                                    .font(.caption.weight(.semibold))
+                                                Text("Change")
+                                                    .font(.subheadline.weight(.medium))
+                                            }
+                                            .foregroundStyle(.secondary)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 10)
+                                            .background(.ultraThinMaterial)
+                                            .clipShape(Capsule())
+                                            .overlay(
+                                                Capsule()
+                                                    .strokeBorder(Color(.systemGray4), lineWidth: 0.5)
+                                            )
+                                        }
+
+                                        Button {
+                                            confirmAddonAndContinue(addon)
+                                        } label: {
+                                            HStack(spacing: 4) {
+                                                Text("Continue")
+                                                    .font(.subheadline.weight(.semibold))
+                                                Image(systemName: "chevron.right")
+                                                    .font(.caption.weight(.semibold))
+                                            }
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 20)
+                                            .padding(.vertical, 10)
+                                            .background(
+                                                Capsule()
+                                                    .fill(
+                                                        LinearGradient(
+                                                            colors: [Color.blue.opacity(0.9), Color.blue],
+                                                            startPoint: .top,
+                                                            endPoint: .bottom
+                                                        )
+                                                    )
+                                            )
+                                            .shadow(color: .blue.opacity(0.25), radius: 6, y: 3)
+                                        }
+                                    }
+                                    .padding(.horizontal, 24)
+                                }
+                                .padding(.top, 12)
+                            }
+
+                            Spacer(minLength: 20)
                         }
                     }
-                    .padding()
+
+                    // Back button for addons (when not showing details)
+                    if !showAddonDetails && currentStepIndex > 0 {
+                        HStack {
+                            Button {
+                                goToPreviousStep()
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "chevron.left")
+                                        .font(.caption.weight(.semibold))
+                                    Text("Back")
+                                        .font(.subheadline.weight(.medium))
+                                }
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .strokeBorder(Color(.systemGray4), lineWidth: 0.5)
+                                )
+                            }
+
+                            Spacer()
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                    }
                 } else {
                     ContentUnavailableView(
-                        "No Categories",
+                        "No Items",
                         systemImage: "folder",
-                        description: Text("No product categories configured")
+                        description: Text("No product categories or addons configured")
                     )
                 }
             }
-            .navigationTitle("Select Products")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -229,6 +535,10 @@ struct SelectionView: View {
                             withAnimation {
                                 showingColorSelection = false
                                 selectedModelForColors = nil
+                            }
+                        } else if showAddonDetails {
+                            withAnimation {
+                                showAddonDetails = false
                             }
                         } else {
                             appState.currentScreen = .scanning
@@ -244,8 +554,9 @@ struct SelectionView: View {
                 }
             }
         }
-        .onChange(of: currentCategoryIndex) { _, _ in
+        .onChange(of: currentStepIndex) { _, _ in
             currentProductIndex = 0
+            resetAddonState()
         }
         .sheet(isPresented: $showSelectionsSummary) {
             SelectionsSummarySheet(categories: categories, addons: addons)
@@ -255,8 +566,9 @@ struct SelectionView: View {
         }
     }
 
+    // MARK: - Product Selection Methods
+
     private func selectProduct(_ product: Product, in category: Category) {
-        // If product has variants (colors), show color selection
         if product.hasVariants && !product.variants.isEmpty {
             withAnimation(.spring(response: 0.3)) {
                 appState.selectProduct(for: category.categoryId, product: product)
@@ -270,12 +582,14 @@ struct SelectionView: View {
             return
         }
 
-        // Select product and advance
         withAnimation(.spring(response: 0.3)) {
             appState.selectProduct(for: category.categoryId, product: product)
         }
 
-        advanceToNextCategory()
+        // Auto-advance to next step
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            advanceToNextStep()
+        }
     }
 
     private func selectColor(_ variant: ProductVariant, for product: Product, in category: Category) {
@@ -288,29 +602,67 @@ struct SelectionView: View {
                 showingColorSelection = false
                 selectedModelForColors = nil
             }
-            advanceToNextCategory()
+            // Auto-advance to next step
+            advanceToNextStep()
         }
     }
 
-    private func skipCategory() {
-        if currentCategoryIndex < categories.count - 1 {
+    // MARK: - Addon Selection Methods
+
+    private func selectAddonNo(_ addon: Addon) {
+        appState.selectAddon(addonId: addon.id, isSelected: false, quantity: 0, notes: "")
+        // Auto-advance to next step
+        advanceToNextStep()
+    }
+
+    private func selectAddonYes() {
+        withAnimation(.spring(response: 0.3)) {
+            showAddonDetails = true
+        }
+    }
+
+    private func confirmAddonAndContinue(_ addon: Addon) {
+        appState.selectAddon(addonId: addon.id, isSelected: true, quantity: addonQuantity, notes: addonNotes)
+        advanceToNextStep()
+    }
+
+    private func resetAddonState() {
+        showAddonDetails = false
+        addonQuantity = 1
+        addonNotes = ""
+
+        // Load existing selection if any
+        if let addon = currentAddon,
+           let selection = appState.getAddonSelection(addon.id),
+           selection.isSelected {
+            showAddonDetails = true
+            addonQuantity = selection.quantity
+            addonNotes = selection.notes
+        }
+    }
+
+    // MARK: - Navigation Methods
+
+    private func skipCurrentStep() {
+        advanceToNextStep()
+    }
+
+    private func goToPreviousStep() {
+        if currentStepIndex > 0 {
             withAnimation {
-                currentCategoryIndex += 1
-                currentProductIndex = 0
+                currentStepIndex -= 1
+            }
+        }
+    }
+
+    private func advanceToNextStep() {
+        if currentStepIndex < totalSteps - 1 {
+            withAnimation {
+                currentStepIndex += 1
             }
         } else {
+            // All steps completed, proceed to review
             appState.proceedToReview()
-        }
-    }
-
-    private func advanceToNextCategory() {
-        if currentCategoryIndex < categories.count - 1 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                withAnimation {
-                    currentCategoryIndex += 1
-                    currentProductIndex = 0
-                }
-            }
         }
     }
 }
@@ -320,7 +672,17 @@ struct ProductCarouselCard: View {
     let product: Product
     let isSelected: Bool
     let selectedVariant: ProductVariant?
+    let showPrice: Bool
+    let colorCoefficient: Double
     let onSelect: () -> Void
+
+    /// Calculate effective price with coefficient if applicable
+    private func effectivePrice(_ basePrice: Double) -> Double {
+        if product.useColorCoefficient {
+            return basePrice * colorCoefficient
+        }
+        return basePrice
+    }
 
     var body: some View {
         Button(action: onSelect) {
@@ -355,22 +717,21 @@ struct ProductCarouselCard: View {
                             .foregroundStyle(.tertiary)
                     }
 
-                    // Selection indicator
+                    // Selection indicator - centered checkmark
                     if isSelected {
                         RoundedRectangle(cornerRadius: 24)
                             .strokeBorder(.green, lineWidth: 3)
 
-                        VStack {
-                            HStack {
-                                Spacer()
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.title)
-                                    .foregroundStyle(.green)
-                                    .background(Circle().fill(.white).padding(2))
-                            }
-                            Spacer()
-                        }
-                        .padding(12)
+                        // Centered checkmark
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 56))
+                            .foregroundStyle(.green)
+                            .background(
+                                Circle()
+                                    .fill(.white)
+                                    .frame(width: 50, height: 50)
+                            )
+                            .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
                     }
 
                     // Badges
@@ -431,22 +792,26 @@ struct ProductCarouselCard: View {
                             .foregroundStyle(.blue)
                     }
 
-                    // Price display
-                    if let price = selectedVariant?.price ?? product.price {
-                        Text("$\(price, specifier: "%.2f")")
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                    } else if product.hasVariants {
-                        let prices = product.variants.compactMap { $0.price }
-                        if let minPrice = prices.min(), let maxPrice = prices.max() {
-                            if minPrice == maxPrice {
-                                Text("$\(minPrice, specifier: "%.2f")")
-                                    .font(.headline)
-                                    .foregroundStyle(.primary)
-                            } else {
-                                Text("$\(minPrice, specifier: "%.0f") - $\(maxPrice, specifier: "%.0f")")
-                                    .font(.headline)
-                                    .foregroundStyle(.primary)
+                    // Price display (only if showPrice is enabled)
+                    if showPrice {
+                        if let price = selectedVariant?.price ?? product.price {
+                            Text("$\(effectivePrice(price), specifier: "%.2f")")
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                        } else if product.hasVariants {
+                            let prices = product.variants.compactMap { $0.price }
+                            if let minPrice = prices.min(), let maxPrice = prices.max() {
+                                let effectiveMin = effectivePrice(minPrice)
+                                let effectiveMax = effectivePrice(maxPrice)
+                                if effectiveMin == effectiveMax {
+                                    Text("$\(effectiveMin, specifier: "%.2f")")
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                } else {
+                                    Text("$\(effectiveMin, specifier: "%.0f") - $\(effectiveMax, specifier: "%.0f")")
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                }
                             }
                         }
                     }
@@ -471,225 +836,56 @@ struct ColorSelectionView: View {
     let onSelect: (ProductVariant) -> Void
     let onBack: () -> Void
 
-    @State private var currentColorIndex = 0
-
     var body: some View {
-        VStack(spacing: 0) {
-            // Header showing selected model
-            HStack(spacing: 12) {
-                if let imageUrl = product.imageUrl,
-                   let url = URL(string: imageUrl) {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                    } placeholder: {
-                        ProgressView()
-                    }
-                    .frame(width: 50, height: 50)
-                    .background(Color(.systemGray6))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
+        VStack(spacing: 16) {
+            Text("Select Color")
+                .font(.title2)
+                .fontWeight(.bold)
+                .padding(.top, 16)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(product.name)
-                        .font(.headline)
-                    Text("Select Color")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                }
-
-                Spacer()
-            }
-            .padding()
-            .background(Color(.systemGray6))
-
-            // Color carousel
-            TabView(selection: $currentColorIndex) {
-                ForEach(Array(product.variants.enumerated()), id: \.element.id) { index, variant in
-                    ColorCarouselCard(variant: variant) {
-                        onSelect(variant)
-                    }
-                    .tag(index)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(maxHeight: .infinity)
-
-            // Page indicator
-            HStack(spacing: 8) {
-                ForEach(0..<min(product.variants.count, 20), id: \.self) { index in
-                    Circle()
-                        .fill(index == currentColorIndex ? Color.blue : Color(.systemGray4))
-                        .frame(width: index == currentColorIndex ? 10 : 8, height: index == currentColorIndex ? 10 : 8)
-                }
-            }
-            .padding(.vertical, 8)
-
-            Text("\(currentColorIndex + 1) of \(product.variants.count) colors")
-                .font(.caption)
+            Text(product.name)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .padding(.bottom, 4)
 
-            // Back button
-            HStack {
-                Button {
-                    onBack()
-                } label: {
-                    Label("Change Model", systemImage: "chevron.left")
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                    ForEach(product.variants) { variant in
+                        ColorOptionCard(
+                            variant: variant,
+                            showPrice: category.showPriceToCustomer,
+                            onSelect: { onSelect(variant) }
+                        )
+                    }
                 }
-                .buttonStyle(.bordered)
-
-                Spacer()
+                .padding(.horizontal)
             }
-            .padding()
+
+            Button {
+                onBack()
+            } label: {
+                Label("Change Model", systemImage: "chevron.left")
+            }
+            .buttonStyle(.bordered)
+            .padding(.bottom)
         }
     }
 }
 
-// MARK: - Color Carousel Card (Elegant Tappable Card)
-struct ColorCarouselCard: View {
+// MARK: - Color Option Card
+struct ColorOptionCard: View {
     let variant: ProductVariant
+    let showPrice: Bool
     let onSelect: () -> Void
-
-    var body: some View {
-        Button(action: onSelect) {
-            VStack(spacing: 12) {
-                // Color/door image
-                ZStack {
-                    RoundedRectangle(cornerRadius: 24)
-                        .fill(Color(.systemGray6))
-
-                    if let imageUrl = variant.imageUrl,
-                       let url = URL(string: imageUrl) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                            case .failure:
-                                colorSwatch
-                            case .empty:
-                                ProgressView()
-                            @unknown default:
-                                ProgressView()
-                            }
-                        }
-                        .padding(24)
-                    } else {
-                        colorSwatch
-                    }
-
-                    // Popular badge
-                    if variant.isDefault {
-                        VStack {
-                            HStack {
-                                Text("Popular")
-                                    .font(.caption2)
-                                    .fontWeight(.semibold)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(.yellow)
-                                    .clipShape(Capsule())
-                                Spacer()
-                            }
-                            Spacer()
-                        }
-                        .padding(12)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .aspectRatio(0.85, contentMode: .fit)
-
-                // Color info
-                VStack(spacing: 4) {
-                    Text(variant.name)
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
-
-                    if let price = variant.price {
-                        Text("$\(price, specifier: "%.2f")")
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                    }
-                }
-
-                // Subtle tap hint
-                Text("Tap to select")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8)
-        }
-        .buttonStyle(.plain)
-    }
-
-    @ViewBuilder
-    private var colorSwatch: some View {
-        if let colorCode = variant.colorCode,
-           let color = Color(hex: colorCode) {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(color)
-                .padding(32)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .strokeBorder(Color(.systemGray4), lineWidth: 1)
-                        .padding(32)
-                )
-        } else {
-            Image(systemName: "paintpalette")
-                .font(.system(size: 50))
-                .foregroundStyle(.tertiary)
-        }
-    }
-}
-
-// MARK: - Color Extension for Hex
-extension Color {
-    init?(hex: String) {
-        var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")
-
-        var rgb: UInt64 = 0
-
-        guard Scanner(string: hexSanitized).scanHexInt64(&rgb) else {
-            return nil
-        }
-
-        let red = Double((rgb & 0xFF0000) >> 16) / 255.0
-        let green = Double((rgb & 0x00FF00) >> 8) / 255.0
-        let blue = Double(rgb & 0x0000FF) / 255.0
-
-        self.init(red: red, green: green, blue: blue)
-    }
-}
-
-// MARK: - Product Card (kept for backwards compatibility)
-struct ProductCard: View {
-    let product: Product
-    let isSelected: Bool
-    let selectedVariant: ProductVariant?
-    let onSelect: () -> Void
-
-    init(product: Product, isSelected: Bool, selectedVariant: ProductVariant? = nil, onSelect: @escaping () -> Void) {
-        self.product = product
-        self.isSelected = isSelected
-        self.selectedVariant = selectedVariant
-        self.onSelect = onSelect
-    }
 
     var body: some View {
         Button(action: onSelect) {
             VStack(spacing: 8) {
+                // Variant image or color swatch
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: 16)
                         .fill(Color(.systemGray6))
-                        .aspectRatio(1, contentMode: .fit)
 
-                    if let imageUrl = product.imageUrl,
+                    if let imageUrl = variant.imageUrl,
                        let url = URL(string: imageUrl) {
                         AsyncImage(url: url) { image in
                             image
@@ -698,52 +894,32 @@ struct ProductCard: View {
                         } placeholder: {
                             ProgressView()
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(12)
                     } else {
-                        Image(systemName: "cube")
-                            .font(.system(size: 40))
+                        Image(systemName: "paintpalette")
+                            .font(.title)
                             .foregroundStyle(.tertiary)
                     }
-
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(.blue, lineWidth: 3)
-
-                        VStack {
-                            HStack {
-                                Spacer()
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(.blue)
-                                    .background(Circle().fill(.white))
-                            }
-                            Spacer()
-                        }
-                        .padding(8)
-                    }
                 }
+                .aspectRatio(1, contentMode: .fit)
 
-                VStack(spacing: 2) {
-                    Text(product.name)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
+                Text(variant.name)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
 
-                    if let variant = selectedVariant {
-                        Text(variant.name)
-                            .font(.caption)
-                            .foregroundStyle(.blue)
-                    }
-
-                    if let price = selectedVariant?.price ?? product.price {
-                        Text("$\(price, specifier: "%.2f")")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                if showPrice, let price = variant.price {
+                    Text("$\(price, specifier: "%.2f")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
+            .padding(8)
+            .background(Color(.systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
     }
@@ -752,40 +928,23 @@ struct ProductCard: View {
 // MARK: - Selections Summary Sheet
 struct SelectionsSummarySheet: View {
     @EnvironmentObject var appState: AppState
-    @Environment(\.dismiss) var dismiss
     let categories: [Category]
     let addons: [Addon]
-
-    private var selectedProducts: [(category: Category, product: Product, variant: ProductVariant?)] {
-        categories.compactMap { category in
-            guard let product = appState.selections[category.categoryId] else { return nil }
-            let variant = appState.getSelectedVariant(for: product)
-            return (category: category, product: product, variant: variant)
-        }
-    }
-
-    private var selectedAddons: [(addon: Addon, quantity: Int, notes: String)] {
-        addons.compactMap { addon in
-            guard let selection = appState.getAddonSelection(addon.id),
-                  selection.isSelected else { return nil }
-            return (addon: addon, quantity: selection.quantity, notes: selection.notes)
-        }
-    }
 
     var body: some View {
         NavigationStack {
             List {
-                if !selectedProducts.isEmpty {
-                    Section("Selected Products") {
-                        ForEach(selectedProducts, id: \.product.id) { item in
+                Section("Products") {
+                    ForEach(categories) { category in
+                        if let product = appState.selections[category.categoryId] {
                             HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(item.category.name)
+                                VStack(alignment: .leading) {
+                                    Text(category.name)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                    Text(item.product.name)
+                                    Text(product.name)
                                         .font(.subheadline)
-                                    if let variant = item.variant {
+                                    if let variant = appState.getSelectedVariant(for: product) {
                                         Text(variant.name)
                                             .font(.caption)
                                             .foregroundStyle(.blue)
@@ -795,53 +954,51 @@ struct SelectionsSummarySheet: View {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.green)
                             }
-                        }
-                    }
-                }
-
-                if !selectedAddons.isEmpty {
-                    Section("Selected Add-ons") {
-                        ForEach(selectedAddons, id: \.addon.id) { item in
+                        } else {
                             HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(item.addon.question)
-                                        .font(.subheadline)
-                                    if !item.notes.isEmpty {
-                                        Text(item.notes)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                                Text("×\(item.quantity)")
-                                    .font(.caption)
+                                Text(category.name)
                                     .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 2)
-                                    .background(Color(.systemGray5))
-                                    .clipShape(Capsule())
+                                Spacer()
+                                Text("Skipped")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
                             }
                         }
                     }
                 }
 
-                if selectedProducts.isEmpty && selectedAddons.isEmpty {
-                    ContentUnavailableView(
-                        "No Selections Yet",
-                        systemImage: "cube.transparent",
-                        description: Text("Tap on products to select them")
-                    )
+                if !addons.isEmpty {
+                    Section("Add-ons") {
+                        ForEach(addons) { addon in
+                            if let selection = appState.getAddonSelection(addon.id), selection.isSelected {
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(addon.question)
+                                            .font(.subheadline)
+                                        Text("Qty: \(selection.quantity)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.green)
+                                }
+                            } else {
+                                HStack {
+                                    Text(addon.question)
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Text("No")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                        }
+                    }
                 }
             }
             .navigationTitle("Your Selections")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
         }
     }
 }
@@ -850,3 +1007,4 @@ struct SelectionsSummarySheet: View {
     SelectionView()
         .environmentObject(AppState.shared)
 }
+
