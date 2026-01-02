@@ -311,22 +311,35 @@ export function ProjectSidebar({
             )}
 
             {hasFloorPlanData && (
-              <LockedFeature feature="autocadExport" isLocked={!hasAutocadExport}>
-                <a
-                  href={hasAutocadExport ? `/api/export/dxf?project_id=${project.id}` : '#'}
-                  download={hasAutocadExport ? `${project.reference_number || project.id}.dxf` : undefined}
-                  className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
-                >
-                  <div className="flex-shrink-0 w-8 h-8 rounded bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                    <FileCode className="h-4 w-4 text-blue-600" />
+              isArchived || isRestoring ? (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed">
+                  <div className="flex-shrink-0 w-8 h-8 rounded bg-gray-200 flex items-center justify-center">
+                    <FileCode className="h-4 w-4 text-gray-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">DXF Floor Plan</p>
-                    <p className="text-xs text-gray-500">AutoCAD format</p>
+                    <p className="text-sm font-medium text-gray-500">DXF Floor Plan</p>
+                    <p className="text-xs text-gray-400">AutoCAD format</p>
                   </div>
-                  <Download className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
-                </a>
-              </LockedFeature>
+                  <Archive className="h-4 w-4 text-gray-400" />
+                </div>
+              ) : (
+                <LockedFeature feature="autocadExport" isLocked={!hasAutocadExport}>
+                  <a
+                    href={hasAutocadExport ? `/api/export/dxf?project_id=${project.id}` : '#'}
+                    download={hasAutocadExport ? `${project.reference_number || project.id}.dxf` : undefined}
+                    className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
+                  >
+                    <div className="flex-shrink-0 w-8 h-8 rounded bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                      <FileCode className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">DXF Floor Plan</p>
+                      <p className="text-xs text-gray-500">AutoCAD format</p>
+                    </div>
+                    <Download className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+                  </a>
+                </LockedFeature>
+              )
             )}
             {hasVideoFile && (
               isArchived || isRestoring ? (
