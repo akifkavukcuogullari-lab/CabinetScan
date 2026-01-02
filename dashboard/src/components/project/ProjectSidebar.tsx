@@ -222,10 +222,12 @@ export function ProjectSidebar({
               <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Downloads
               </CardTitle>
-              <TooltipProvider>
+              <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Info className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600 cursor-help" />
+                    <button type="button" className="inline-flex">
+                      <Info className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600 cursor-help" />
+                    </button>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="max-w-[250px] text-xs">
                     <p className="font-medium mb-1">Storage Policy</p>
