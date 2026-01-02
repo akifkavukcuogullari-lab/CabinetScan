@@ -102,12 +102,32 @@ export function ProjectSidebarWrapper({
       setIsRequestingRestore(true)
       const supabase = createClient()
 
-      // Call the restore function
-      const { error } = await supabase.rpc('request_project_restore', {
-        project_uuid: project.id
-      })
+      // Get session for auth token
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        throw new Error('Not authenticated')
+      }
 
-      if (error) throw error
+      // Call the restore Edge Function
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/restore-project-files`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({
+            project_id: project.id,
+            restore_tier: 'Expedited'
+          })
+        }
+      )
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to request restore')
+      }
 
       router.refresh()
     } catch (error) {
