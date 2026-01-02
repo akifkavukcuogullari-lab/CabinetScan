@@ -3,8 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  ArrowLeft, User, Phone, Mail, MapPin, Calendar, ChevronRight,
-  FolderKanban, Building, Home, Rotate3d, Layers, Ruler, Box
+  ArrowLeft, User, Phone, Mail, MapPin,
+  FolderKanban, Building, Home
 } from 'lucide-react'
 import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
@@ -181,112 +181,38 @@ export default async function CustomerDetailPage({ params }: CustomerDetailPageP
         <h2 className="text-xl font-semibold mb-4">Project History</h2>
 
         {projects && projects.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
             {projects.map((project: any) => {
-              const measurement = project.project_measurements?.[0]
-              const hasUsdzFile = measurement?.usdz_file_url
-              const hasFloorPlanImage = measurement?.preview_image_url
-              const hasScanData = hasUsdzFile || hasFloorPlanImage
-
               return (
                 <Link
                   key={project.id}
                   href={`/showroom/projects/${project.id}`}
                   className="group"
                 >
-                  <Card className="h-full overflow-hidden hover:shadow-lg transition-all duration-200 hover:border-blue-400">
-                    {/* Visual Preview Section */}
-                    <div className="relative h-32 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
-                      {hasUsdzFile ? (
-                        <div className="relative w-full h-full">
-                          {hasFloorPlanImage ? (
-                            <img
-                              src={measurement.preview_image_url}
-                              alt={`${project.project_name} scan preview`}
-                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                            />
-                          ) : (
-                            <div className="flex items-center justify-center h-full bg-blue-50">
-                              <Rotate3d className="h-10 w-10 text-blue-300" />
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                          <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                            <Rotate3d className="h-3 w-3" />
-                            3D
-                          </div>
-                        </div>
-                      ) : hasFloorPlanImage ? (
-                        <div className="relative w-full h-full">
-                          <img
-                            src={measurement.preview_image_url}
-                            alt={`${project.project_name} floor plan`}
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                          <div className="absolute top-2 right-2 bg-gray-700 text-white text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                            <Layers className="h-3 w-3" />
-                            2D
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center h-full">
-                          <Box className="h-10 w-10 text-gray-300 mb-1" />
-                          <span className="text-xs text-gray-400">No scan</span>
-                        </div>
-                      )}
-
-                      {hasScanData && (measurement?.total_linear_ft || measurement?.total_sq_ft) && (
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2 pt-6">
-                          <div className="flex items-center gap-3 text-white text-xs">
-                            {measurement.total_sq_ft && (
-                              <span className="flex items-center gap-1">
-                                <Ruler className="h-3 w-3" />
-                                {measurement.total_sq_ft.toFixed(0)} sq ft
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
+                  <Card className="h-full hover:shadow-md transition-all duration-200 hover:border-blue-400">
                     <CardContent className="p-4">
-                      <div className="flex items-start justify-between mb-2">
+                      {/* Header: Project Name + Status */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex-1 min-w-0">
                           <h3 className="font-semibold truncate group-hover:text-blue-600 transition-colors">
-                            {project.project_name}
+                            {project.project_name || 'Room Scan'}
                           </h3>
-                          <code className="text-xs px-1 py-0.5 bg-gray-100 rounded text-gray-600 font-mono">
-                            {project.reference_number}
-                          </code>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <code className="font-mono">{project.reference_number}</code>
+                            <span>|</span>
+                            <span>
+                              {project.submitted_at
+                                ? new Date(project.submitted_at).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric'
+                                  })
+                                : '-'}
+                            </span>
+                          </div>
                         </div>
-                        <Badge className={`${statusColors[project.status]} shrink-0 ml-2 text-xs`}>
+                        <Badge className={`${statusColors[project.status]} shrink-0 text-xs`}>
                           {project.status.replace('_', ' ')}
                         </Badge>
-                      </div>
-
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Calendar className="h-4 w-4" />
-                        <span>
-                          {project.submitted_at
-                            ? new Date(project.submitted_at).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric'
-                              })
-                            : 'Not submitted'}
-                        </span>
-                      </div>
-
-                      <div className="mt-3 pt-3 border-t flex items-center justify-end">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 -mr-2"
-                        >
-                          View
-                          <ChevronRight className="h-4 w-4 ml-1" />
-                        </Button>
                       </div>
                     </CardContent>
                   </Card>

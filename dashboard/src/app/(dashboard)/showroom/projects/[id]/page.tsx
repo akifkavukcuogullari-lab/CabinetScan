@@ -135,23 +135,37 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   const createQuote = async () => {
     'use server'
 
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase environment variables')
+      throw new Error('Server configuration error: Missing Supabase credentials')
+    }
+
     // Trigger the webhook for this project
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/trigger-webhook`,
+      `${supabaseUrl}/functions/v1/trigger-webhook`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+          'Authorization': `Bearer ${supabaseKey}`
         },
         body: JSON.stringify({ project_id: id })
       }
     )
 
     if (!response.ok) {
-      const error = await response.json()
-      console.error('Failed to trigger webhook:', error)
-      throw new Error(error.error || 'Failed to trigger webhook')
+      let errorMessage = 'Failed to trigger webhook'
+      try {
+        const error = await response.json()
+        console.error('Failed to trigger webhook:', error)
+        errorMessage = error.error || errorMessage
+      } catch {
+        console.error('Failed to trigger webhook, status:', response.status)
+      }
+      throw new Error(errorMessage)
     }
 
     // Update project status to quoted

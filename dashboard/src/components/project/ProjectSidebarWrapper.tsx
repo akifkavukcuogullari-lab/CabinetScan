@@ -21,6 +21,10 @@ interface Project {
   device_model?: string
   ios_version?: string
   app_version?: string
+  storage_tier?: 'hot' | 'archived' | 'restoring'
+  archived_at?: string
+  restore_requested_at?: string
+  restore_available_until?: string
 }
 
 interface Measurement {
@@ -52,6 +56,7 @@ export function ProjectSidebarWrapper({
   const [isVisualizing, setIsVisualizing] = useState(false)
   const [isCreatingQuote, setIsCreatingQuote] = useState(false)
   const [quoteError, setQuoteError] = useState<string | null>(null)
+  const [isRequestingRestore, setIsRequestingRestore] = useState(false)
 
   const currentPlan = subscription?.subscription?.plan || null
 
@@ -89,6 +94,27 @@ export function ProjectSidebarWrapper({
       alert('Failed to generate kitchen visualization. Please try again.')
     } finally {
       setIsVisualizing(false)
+    }
+  }
+
+  const handleRequestRestore = async () => {
+    try {
+      setIsRequestingRestore(true)
+      const supabase = createClient()
+
+      // Call the restore function
+      const { error } = await supabase.rpc('request_project_restore', {
+        project_uuid: project.id
+      })
+
+      if (error) throw error
+
+      router.refresh()
+    } catch (error) {
+      console.error('Error requesting restore:', error)
+      alert('Failed to request file restore. Please try again.')
+    } finally {
+      setIsRequestingRestore(false)
     }
   }
 
@@ -154,6 +180,8 @@ export function ProjectSidebarWrapper({
       isCreatingQuote={isCreatingQuote}
       quoteError={quoteError}
       onDismissQuoteError={() => setQuoteError(null)}
+      onRequestRestore={handleRequestRestore}
+      isRequestingRestore={isRequestingRestore}
     />
   )
 }

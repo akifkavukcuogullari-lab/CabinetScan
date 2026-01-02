@@ -562,7 +562,7 @@ export default function BillingPage() {
                   </CardContent>
                   <CardFooter className="mt-auto">
                     {plan.slug === 'enterprise' ? (
-                      <Button className="w-full" variant="outline" asChild>
+                      <Button className="w-full bg-gray-900 hover:bg-gray-800" asChild>
                         <a href="mailto:sales@nextlyn.ai">Contact Sales</a>
                       </Button>
                     ) : isCurrentPlan ? (

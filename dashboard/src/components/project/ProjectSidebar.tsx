@@ -16,8 +16,19 @@ import {
   Image,
   Send,
   ChevronDown,
-  Sparkles
+  Sparkles,
+  Archive,
+  RotateCcw,
+  Clock,
+  AlertTriangle,
+  Info
 } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,6 +51,10 @@ interface Project {
   device_model?: string
   ios_version?: string
   app_version?: string
+  storage_tier?: 'hot' | 'archived' | 'restoring'
+  archived_at?: string
+  restore_requested_at?: string
+  restore_available_until?: string
 }
 
 interface Measurement {
@@ -63,6 +78,8 @@ interface ProjectSidebarProps {
   isCreatingQuote?: boolean
   quoteError?: string | null
   onDismissQuoteError?: () => void
+  onRequestRestore?: () => void
+  isRequestingRestore?: boolean
   className?: string
 }
 
@@ -86,6 +103,8 @@ export function ProjectSidebar({
   isCreatingQuote = false,
   quoteError = null,
   onDismissQuoteError,
+  onRequestRestore,
+  isRequestingRestore = false,
   className = ''
 }: ProjectSidebarProps) {
   const currentStatus = statusOptions.find(s => s.value === project.status) || statusOptions[0]
@@ -100,6 +119,23 @@ export function ProjectSidebar({
   const hasVisualizationPhotos = visualizationPhotos.length > 0
   const hasFloorPlanData = measurement?.measurements?.walls?.length > 0 || measurement?.measurements?.room
   const hasDownloadableFiles = hasUsdzFile || hasVideoFile || hasVisualizationPhotos || hasFloorPlanData
+
+  // Storage tier states
+  const isArchived = project.storage_tier === 'archived'
+  const isRestoring = project.storage_tier === 'restoring'
+  const hasTemporaryAccess = project.storage_tier === 'hot' && project.restore_available_until
+
+  // Format dates for display
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return ''
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    })
+  }
 
   return (
     <div className={`space-y-3 ${className}`}>
@@ -182,11 +218,99 @@ export function ProjectSidebar({
       {hasDownloadableFiles && (
         <Card className="py-0 gap-0">
           <CardHeader className="px-3 pt-3 pb-1">
-            <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Downloads
-            </CardTitle>
+            <div className="flex items-center gap-1.5">
+              <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Downloads
+              </CardTitle>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[250px] text-xs">
+                    <p className="font-medium mb-1">Storage Policy</p>
+                    <p>Files (videos, photos, 3D scans) are automatically archived after 60 days to optimize storage.</p>
+                    <p className="mt-1 text-gray-400">Archived files can be restored on request. Restoration typically takes 3-5 hours.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
           </CardHeader>
           <CardContent className="space-y-2 px-3 pb-3">
+            {/* Archived Files Warning */}
+            {isArchived && (
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                <div className="flex items-start gap-3">
+                  <Archive className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-amber-800">Files Archived</p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      This project&apos;s files (video, photos, 3D scan) were automatically archived on{' '}
+                      <span className="font-medium">{formatDate(project.archived_at)}</span> to optimize storage costs.
+                    </p>
+                    <p className="text-xs text-amber-600 mt-2">
+                      Click restore to make files available for download. This typically takes 3-5 hours.
+                    </p>
+                    <Button
+                      size="sm"
+                      className="mt-3 bg-amber-600 hover:bg-amber-700"
+                      onClick={onRequestRestore}
+                      disabled={isRequestingRestore}
+                    >
+                      {isRequestingRestore ? (
+                        <>
+                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
+                          Requesting...
+                        </>
+                      ) : (
+                        <>
+                          <RotateCcw className="h-3 w-3 mr-2" />
+                          Request Restore
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Restore In Progress */}
+            {isRestoring && (
+              <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                <div className="flex items-start gap-3">
+                  <Clock className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5 animate-pulse" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-blue-800">Restore In Progress</p>
+                    <p className="text-xs text-blue-700 mt-1">
+                      Restore requested on {formatDate(project.restore_requested_at)}
+                    </p>
+                    <p className="text-xs text-blue-600 mt-2">
+                      Files are being restored from archive. You&apos;ll receive an email when they&apos;re ready (typically 3-5 hours).
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Temporary Access Warning */}
+            {hasTemporaryAccess && (
+              <div className="p-3 rounded-lg bg-green-50 border border-green-200">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-green-800">Files Available</p>
+                    <p className="text-xs text-green-700 mt-1">
+                      Restored files are temporarily available until{' '}
+                      <span className="font-medium">{formatDate(project.restore_available_until)}</span>.
+                    </p>
+                    <p className="text-xs text-green-600 mt-1">
+                      Download them before they return to archive.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {hasFloorPlanData && (
               <LockedFeature feature="autocadExport" isLocked={!hasAutocadExport}>
                 <a
@@ -206,67 +330,108 @@ export function ProjectSidebar({
               </LockedFeature>
             )}
             {hasVideoFile && (
-              <a
-                href={measurement?.video_url}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-colors group"
-              >
-                <div className="flex-shrink-0 w-8 h-8 rounded bg-red-100 flex items-center justify-center group-hover:bg-red-200 transition-colors">
-                  <Video className="h-4 w-4 text-red-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">Scan Video</p>
-                  <p className="text-xs text-gray-500">MP4 recording</p>
-                </div>
-                <Download className="h-4 w-4 text-gray-400 group-hover:text-red-600" />
-              </a>
-            )}
-            {hasUsdzFile && (
-              <a
-                href={measurement?.usdz_file_url}
-                download
-                className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-colors group"
-              >
-                <div className="flex-shrink-0 w-8 h-8 rounded bg-purple-100 flex items-center justify-center group-hover:bg-purple-200 transition-colors">
-                  <FileBox className="h-4 w-4 text-purple-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">3D Model (USDZ)</p>
-                  <p className="text-xs text-gray-500">AR Quick Look</p>
-                </div>
-                <Download className="h-4 w-4 text-gray-400 group-hover:text-purple-600" />
-              </a>
-            )}
-            {hasVisualizationPhotos && (
-              <div className="p-2.5 rounded-lg border border-gray-200">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="flex-shrink-0 w-8 h-8 rounded bg-green-100 flex items-center justify-center">
-                    <Image className="h-4 w-4 text-green-600" />
+              isArchived || isRestoring ? (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed">
+                  <div className="flex-shrink-0 w-8 h-8 rounded bg-gray-200 flex items-center justify-center">
+                    <Video className="h-4 w-4 text-gray-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">Photos ({visualizationPhotos.length})</p>
+                    <p className="text-sm font-medium text-gray-500">Scan Video</p>
+                    <p className="text-xs text-gray-400">MP4 recording</p>
+                  </div>
+                  <Archive className="h-4 w-4 text-gray-400" />
+                </div>
+              ) : (
+                <a
+                  href={measurement?.video_url}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-colors group"
+                >
+                  <div className="flex-shrink-0 w-8 h-8 rounded bg-red-100 flex items-center justify-center group-hover:bg-red-200 transition-colors">
+                    <Video className="h-4 w-4 text-red-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">Scan Video</p>
+                    <p className="text-xs text-gray-500">MP4 recording</p>
+                  </div>
+                  <Download className="h-4 w-4 text-gray-400 group-hover:text-red-600" />
+                </a>
+              )
+            )}
+            {hasUsdzFile && (
+              isArchived || isRestoring ? (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed">
+                  <div className="flex-shrink-0 w-8 h-8 rounded bg-gray-200 flex items-center justify-center">
+                    <FileBox className="h-4 w-4 text-gray-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-500">3D Model (USDZ)</p>
+                    <p className="text-xs text-gray-400">AR Quick Look</p>
+                  </div>
+                  <Archive className="h-4 w-4 text-gray-400" />
+                </div>
+              ) : (
+                <a
+                  href={measurement?.usdz_file_url}
+                  download
+                  className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-colors group"
+                >
+                  <div className="flex-shrink-0 w-8 h-8 rounded bg-purple-100 flex items-center justify-center group-hover:bg-purple-200 transition-colors">
+                    <FileBox className="h-4 w-4 text-purple-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">3D Model (USDZ)</p>
+                    <p className="text-xs text-gray-500">AR Quick Look</p>
+                  </div>
+                  <Download className="h-4 w-4 text-gray-400 group-hover:text-purple-600" />
+                </a>
+              )
+            )}
+            {hasVisualizationPhotos && (
+              isArchived || isRestoring ? (
+                <div className="p-2.5 rounded-lg border border-gray-200 bg-gray-50 opacity-60">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 rounded bg-gray-200 flex items-center justify-center">
+                      <Image className="h-4 w-4 text-gray-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-500">Photos ({visualizationPhotos.length})</p>
+                      <p className="text-xs text-gray-400">Archived</p>
+                    </div>
+                    <Archive className="h-4 w-4 text-gray-400" />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-1.5 mt-2">
-                  {visualizationPhotos.slice(0, 6).map((photoUrl: string, index: number) => (
-                    <a
-                      key={index}
-                      href={photoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="aspect-square rounded overflow-hidden hover:opacity-80 transition-opacity"
-                    >
-                      <img
-                        src={photoUrl}
-                        alt={`Photo ${index + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                    </a>
-                  ))}
+              ) : (
+                <div className="p-2.5 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex-shrink-0 w-8 h-8 rounded bg-green-100 flex items-center justify-center">
+                      <Image className="h-4 w-4 text-green-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">Photos ({visualizationPhotos.length})</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 mt-2">
+                    {visualizationPhotos.slice(0, 6).map((photoUrl: string, index: number) => (
+                      <a
+                        key={index}
+                        href={photoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="aspect-square rounded overflow-hidden hover:opacity-80 transition-opacity"
+                      >
+                        <img
+                          src={photoUrl}
+                          alt={`Photo ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </a>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )
             )}
           </CardContent>
         </Card>
