@@ -24,11 +24,10 @@ import {
   Info
 } from 'lucide-react'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from '@/components/ui/hover-card'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -222,20 +221,18 @@ export function ProjectSidebar({
               <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Downloads
               </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" className="inline-flex">
-                      <Info className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600 cursor-help" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[250px] text-xs">
-                    <p className="font-medium mb-1">Storage Policy</p>
-                    <p>Files (videos, photos, 3D scans) are automatically archived after 60 days to optimize storage.</p>
-                    <p className="mt-1 text-gray-400">Archived files can be restored on request. Restoration typically takes 3-5 hours.</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <HoverCard openDelay={0} closeDelay={200}>
+                <HoverCardTrigger asChild>
+                  <button type="button" className="inline-flex">
+                    <Info className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600 cursor-help" />
+                  </button>
+                </HoverCardTrigger>
+                <HoverCardContent side="top" className="w-64 text-xs p-3">
+                  <p className="font-semibold mb-1.5">Storage Policy</p>
+                  <p className="text-gray-600">Files (videos, photos, 3D scans) are automatically archived after 60 days to optimize storage.</p>
+                  <p className="mt-2 text-gray-500">Archived files can be restored on request. Restoration typically takes 3-5 hours.</p>
+                </HoverCardContent>
+              </HoverCard>
             </div>
           </CardHeader>
           <CardContent className="space-y-2 px-3 pb-3">
