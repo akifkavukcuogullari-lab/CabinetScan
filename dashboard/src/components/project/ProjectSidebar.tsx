@@ -284,7 +284,7 @@ export function ProjectSidebar({
                       Restore requested on {formatDate(project.restore_requested_at)}
                     </p>
                     <p className="text-xs text-blue-600 mt-2">
-                      Files are being restored from archive. You&apos;ll receive an email when they&apos;re ready (typically 3-5 hours).
+                      Files are being restored from archive. Your notification emails will be notified when ready (typically 3-5 hours).
                     </p>
                   </div>
                 </div>
