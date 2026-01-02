@@ -32,9 +32,12 @@ import {
   LayoutGrid,
   List,
   ArrowUpDown,
+  Lock,
+  TrendingUp,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useSubscriptionContext } from '@/contexts/subscription-context'
 
 const statusOptions = [
   { value: 'all', label: 'All Statuses' },
@@ -60,10 +63,14 @@ const statusColors: Record<string, string> = {
 export default function ProjectsPage() {
   const router = useRouter()
   const supabase = createClient()
+  const { usage, loading: subscriptionLoading } = useSubscriptionContext()
 
   const [loading, setLoading] = useState(true)
   const [projects, setProjects] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
+
+  // Check if project limit is exceeded
+  const isProjectLimitExceeded = usage.projects.exceeded && !usage.projects.unlimited
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState('')
@@ -219,10 +226,44 @@ export default function ProjectsPage() {
 
   const hasActiveFilters = searchQuery.trim() || statusFilter !== 'all'
 
-  if (loading) {
+  if (loading || subscriptionLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
+  // Show blocked view if project limit is exceeded
+  if (isProjectLimitExceeded) {
+    return (
+      <div className="max-w-full space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Projects</h1>
+          <p className="text-gray-500">View and manage customer room scans and selections</p>
+        </div>
+
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-16 text-center">
+            <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-6">
+              <Lock className="h-10 w-10 text-red-600" />
+            </div>
+            <h3 className="text-xl font-medium mb-2 text-red-800">Project Limit Exceeded</h3>
+            <p className="text-red-700 max-w-md mx-auto mb-2">
+              You have exceeded your monthly project limit ({usage.projects.current}/{usage.projects.limit} projects).
+            </p>
+            <p className="text-gray-600 max-w-md mx-auto mb-6">
+              Upgrade your plan to view all projects and continue receiving new submissions.
+              Your customers can still submit projects - they will be available after you upgrade.
+            </p>
+            <Button asChild className="bg-red-600 hover:bg-red-700">
+              <Link href="/showroom/billing">
+                <TrendingUp className="h-4 w-4 mr-2" />
+                Upgrade Plan
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }
