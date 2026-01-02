@@ -58,6 +58,15 @@ class AppState: ObservableObject {
     func setCustomerInfo(_ info: CustomerInfo, endClient: EndClientInfo? = nil) {
         customerInfo = info
         endClientInfo = endClient
+
+        // Clear any previous scan data when starting a new scan
+        // This ensures clean state when user goes back and re-enters info
+        measurementData = nil
+        selections = [:]
+        variantSelections = [:]
+        addonSelections = [:]
+        specialRequests = ""
+
         currentScreen = .scanning
     }
 
@@ -132,6 +141,17 @@ class AppState: ObservableObject {
               let customer = customerInfo,
               let measurements = measurementData else {
             error = APIError.invalidRequest
+            return
+        }
+
+        // Note: Scan quality validation is now done in ScanningView before reaching this point
+        // This is a fallback check for edge cases
+        let wallCount = measurements.wallCount ?? 0
+        let hasFloorPlan = measurements.previewImageUrl != nil
+        let hasScanFile = measurements.usdzFileUrl != nil
+
+        if wallCount == 0 && !hasFloorPlan && !hasScanFile {
+            error = APIError.submissionFailed(message: "The scan data is incomplete. Please go back and rescan the room.")
             return
         }
 

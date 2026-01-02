@@ -25,6 +25,9 @@ struct ScanningView: View {
     @State private var keepFullScreenOpen = false // Keep fullScreenCover open until room data received
     @State private var showScanError = false // Show error alert if scan fails
     @State private var scanErrorMessage = "" // Error message to display
+    @State private var showPoorScanWarning = false // Show warning for poor quality scan
+    @State private var poorScanMessage = "" // Warning message for poor scan
+    @State private var pendingPoorScanMeasurements: MeasurementData? // Store measurements when showing poor scan warning
 
     var body: some View {
         NavigationStack {
@@ -202,6 +205,27 @@ struct ScanningView: View {
             }
         } message: {
             Text(scanErrorMessage)
+        }
+        .alert("Poor Scan Quality", isPresented: $showPoorScanWarning) {
+            Button("Rescan", role: .destructive) {
+                // Reset and allow user to scan again
+                isProcessing = false
+                capturedRoom = nil
+                pendingMeasurements = nil
+                pendingPoorScanMeasurements = nil
+                keepFullScreenOpen = false
+                poorScanMessage = ""
+            }
+            Button("Continue Anyway", role: .cancel) {
+                // User chooses to proceed despite warning
+                if let measurements = pendingPoorScanMeasurements {
+                    pendingPoorScanMeasurements = nil
+                    poorScanMessage = ""
+                    appState.setMeasurementData(measurements)
+                }
+            }
+        } message: {
+            Text(poorScanMessage)
         }
     }
 
@@ -425,8 +449,8 @@ struct ScanningView: View {
             let measurements = extractMeasurements(from: room, floorPlanUrl: nil, usdzUrl: nil, glbUrl: nil, videoData: nil)
             await MainActor.run {
                 isProcessing = false
+                validateAndProceedWithMeasurements(measurements)
             }
-            appState.setMeasurementData(measurements)
             return
         }
 
@@ -525,7 +549,7 @@ struct ScanningView: View {
                 await MainActor.run {
                     if let measurements = pendingMeasurements {
                         pendingMeasurements = nil
-                        appState.setMeasurementData(measurements)
+                        validateAndProceedWithMeasurements(measurements)
                     }
                 }
                 return
@@ -554,11 +578,11 @@ struct ScanningView: View {
             // Small delay before navigation to ensure UI stability
             try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
 
-            print("📤 [handleVisualizationPhotos] About to call setMeasurementData and navigate...")
+            print("📤 [handleVisualizationPhotos] About to validate and navigate...")
             await MainActor.run {
                 pendingMeasurements = nil
-                appState.setMeasurementData(measurements)
-                print("✅ [handleVisualizationPhotos] Called setMeasurementData - navigation should happen now")
+                validateAndProceedWithMeasurements(measurements)
+                print("✅ [handleVisualizationPhotos] Validation complete - navigation should happen now")
             }
         }
     }
@@ -575,7 +599,7 @@ struct ScanningView: View {
             await MainActor.run {
                 if let measurements = pendingMeasurements {
                     pendingMeasurements = nil
-                    appState.setMeasurementData(measurements)
+                    validateAndProceedWithMeasurements(measurements)
                 }
             }
         }
@@ -1103,11 +1127,37 @@ struct ScanningView: View {
         var matchedUpperIndices: Set<Int> = []
         var matchedLowerIndices: Set<Int> = []
 
+        // ===========================================
+        // CABINET CLASSIFICATION THRESHOLDS
+        // Based on industry standard cabinet dimensions:
+        // - Base cabinets: 34.5" tall, on floor
+        // - Upper cabinets: 30-42" tall, mounted 54" from floor
+        // - Tall/Pantry: 84-96" tall, 12-30" wide, floor to near-ceiling
+        // - Wall Oven: 84-96" tall, 30-33" wide (wider for oven cutout)
+        // ===========================================
+
+        // Gap thresholds (in meters)
+        let maxPantryGap: Float = 0.15  // 6 inches - pantry has minimal/no gap between sections
+        let normalKitchenGap: Float = 0.38  // 15 inches - normal gap for backsplash area
+
+        // Height thresholds (in meters)
+        let minTallCabinetHeight: Float = 2.0  // 79 inches (~80") - minimum for tall cabinets
+
+        // Width thresholds (in meters)
+        let maxPantryWidth: Float = 0.76  // 30 inches - pantry cabinets are narrow
+        let minWallOvenWidth: Float = 0.71  // 28 inches - wall oven cabinets are wider (30-33")
+
         for (upperIdx, upperInfo) in upperStorageObjects.enumerated() {
             for (lowerIdx, lowerInfo) in lowerStorageObjects.enumerated() {
                 guard !matchedUpperIndices.contains(upperIdx) && !matchedLowerIndices.contains(lowerIdx) else { continue }
 
                 if areHorizontallyAligned(upperInfo.position, lowerInfo.position) {
+                    // Calculate gap between upper and lower sections (in meters)
+                    let gapHeightMeters = upperInfo.position.y - lowerInfo.position.y - upperInfo.dimensions.y/2 - lowerInfo.dimensions.y/2
+                    let totalHeightMeters = upperInfo.dimensions.y + lowerInfo.dimensions.y + max(0, gapHeightMeters)
+                    let maxWidth = max(upperInfo.dimensions.x, lowerInfo.dimensions.x)
+
+                    // Check for oven between sections
                     var hasOvenBetween = false
                     for ovenPos in ovenPositions {
                         if isOvenBetween(upper: upperInfo.position, lower: lowerInfo.position, oven: ovenPos) {
@@ -1116,12 +1166,45 @@ struct ScanningView: View {
                         }
                     }
 
-                    // Calculate combined dimensions
+                    // ===========================================
+                    // CLASSIFICATION LOGIC (based on industry standards):
+                    //
+                    // 1. WALL OVEN CABINET:
+                    //    - Has oven detected between sections, OR
+                    //    - Tall (>80") AND wide (>28") - oven cabinets are 30-33" wide
+                    //
+                    // 2. PANTRY CABINET:
+                    //    - Tall (>80") AND narrow (<=30") AND small gap (<6")
+                    //    - Pantry cabinets are typically 12-30" wide
+                    //
+                    // 3. REGULAR UPPER + LOWER (not combined):
+                    //    - Gap > 6" (normal backsplash/countertop area ~15-18")
+                    //    - These remain as separate upper_cabinet + lower_cabinet
+                    // ===========================================
+
+                    // Skip if gap is too large (normal kitchen layout with backsplash)
+                    let isNormalKitchenLayout = gapHeightMeters >= normalKitchenGap
+
+                    let isWallOven = hasOvenBetween ||
+                                     (totalHeightMeters >= minTallCabinetHeight &&
+                                      maxWidth >= minWallOvenWidth &&
+                                      !isNormalKitchenLayout)
+
+                    let isPantry = !isWallOven &&
+                                   !isNormalKitchenLayout &&
+                                   gapHeightMeters < maxPantryGap &&
+                                   totalHeightMeters >= minTallCabinetHeight &&
+                                   maxWidth <= maxPantryWidth
+
+                    // Only create combined cabinet if it's truly a wall oven or pantry
+                    guard isWallOven || isPantry else { continue }
+
+                    // Calculate combined dimensions for output
                     let upperHeightFt = Double(upperInfo.dimensions.y) * 3.28084
                     let lowerHeightFt = Double(lowerInfo.dimensions.y) * 3.28084
-                    let gapHeight = Double(upperInfo.position.y - lowerInfo.position.y - upperInfo.dimensions.y/2 - lowerInfo.dimensions.y/2) * 3.28084
+                    let gapHeight = Double(gapHeightMeters) * 3.28084
                     let totalHeightFt = upperHeightFt + lowerHeightFt + max(0, gapHeight)
-                    let widthFt = max(Double(upperInfo.dimensions.x), Double(lowerInfo.dimensions.x)) * 3.28084
+                    let widthFt = Double(maxWidth) * 3.28084
                     let depthFt = max(Double(upperInfo.dimensions.z), Double(lowerInfo.dimensions.z)) * 3.28084
 
                     var cabinetData = createBaseObjectData(for: lowerInfo.object)
@@ -1131,11 +1214,12 @@ struct ScanningView: View {
                     cabinetData["lower_section_height_ft"] = lowerHeightFt
                     cabinetData["width_ft"] = widthFt
                     cabinetData["depth_ft"] = depthFt
+                    cabinetData["gap_inches"] = gapHeight * 12  // Add gap info for debugging
 
-                    if hasOvenBetween {
+                    if isWallOven {
                         cabinetData["id"] = "wall_oven_\(wallOvenIndex)"
                         cabinetData["type"] = "wall_oven_cabinet"
-                        cabinetData["has_oven"] = true
+                        cabinetData["has_oven"] = hasOvenBetween
                         wallOvenCabinets.append(cabinetData)
                         wallOvenIndex += 1
                     } else {
@@ -1216,14 +1300,24 @@ struct ScanningView: View {
         print("Wall oven cabinets: \(wallOvenCabinets.count)")
         print("Pantry cabinets: \(pantryCabinets.count)")
         print("Upper small cabinets: \(upperSmallCabinets.count)")
+        print("--- Classification Thresholds (Industry Standard) ---")
+        print("Pantry: gap<6\", height>=80\", width<=30\"")
+        print("Wall Oven: has oven OR (height>=80\" AND width>=28\")")
+        print("Regular: gap>=15\" (normal backsplash area)")
         print("======================================")
 
-        // Room dimensions
+        // Room dimensions - handle case where no walls were detected (poor scan)
+        // Replace infinity values with 0 to prevent JSON encoding failures
+        let safeMinX = minX.isFinite ? Double(minX) * 3.28084 : 0.0
+        let safeMaxX = maxX.isFinite ? Double(maxX) * 3.28084 : 0.0
+        let safeMinZ = minZ.isFinite ? Double(minZ) * 3.28084 : 0.0
+        let safeMaxZ = maxZ.isFinite ? Double(maxZ) * 3.28084 : 0.0
+
         let roomBounds: [String: Any] = [
-            "min_x": Double(minX) * 3.28084,
-            "max_x": Double(maxX) * 3.28084,
-            "min_z": Double(minZ) * 3.28084,
-            "max_z": Double(maxZ) * 3.28084,
+            "min_x": safeMinX,
+            "max_x": safeMaxX,
+            "min_z": safeMinZ,
+            "max_z": safeMaxZ,
             "ceiling_height_ft": Double(ceilingHeight) * 3.28084
         ]
 
@@ -1348,6 +1442,58 @@ struct ScanningView: View {
         let wholeFeet = Int(feet)
         let inches = Int((feet - Double(wholeFeet)) * 12)
         return "\(wholeFeet)' \(inches)\""
+    }
+
+    // MARK: - Scan Quality Validation
+
+    /// Validates scan quality and either navigates to selection or shows warning
+    /// Returns true if scan is acceptable, false if warning was shown
+    private func validateAndProceedWithMeasurements(_ measurements: MeasurementData) {
+        let wallCount = measurements.wallCount ?? 0
+        let hasFloorPlan = measurements.previewImageUrl != nil
+        let hasScanFile = measurements.usdzFileUrl != nil
+
+        // Check scan quality indicators
+        var issues: [String] = []
+
+        if wallCount == 0 {
+            issues.append("No walls were detected")
+        }
+
+        if !hasFloorPlan {
+            issues.append("Floor plan image could not be generated")
+        }
+
+        if !hasScanFile {
+            issues.append("3D model could not be created")
+        }
+
+        // If multiple issues or critical issues, show warning
+        let isCriticallyPoor = wallCount == 0 && !hasFloorPlan && !hasScanFile
+        let hasMultipleIssues = issues.count >= 2
+
+        if isCriticallyPoor || hasMultipleIssues {
+            // Store measurements and show warning
+            pendingPoorScanMeasurements = measurements
+            poorScanMessage = """
+            The scan quality appears to be poor:
+
+            \(issues.map { "• \($0)" }.joined(separator: "\n"))
+
+            For best results:
+            • Ensure good lighting
+            • Move slowly and steadily
+            • Scan for at least 15-20 seconds
+            • Cover all walls and corners
+
+            Would you like to rescan?
+            """
+            isProcessing = false
+            showPoorScanWarning = true
+        } else {
+            // Scan quality is acceptable, proceed
+            appState.setMeasurementData(measurements)
+        }
     }
 }
 

@@ -163,13 +163,8 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     })
     .eq('id', targetShowroomId)
 
-  // Reset project count at start of new period
-  if (subscription.status === 'active') {
-    await supabaseAdmin
-      .from('showrooms')
-      .update({ project_count_this_period: 0 })
-      .eq('id', targetShowroomId)
-  }
+  // Note: Project count is now reset monthly via pg_cron job (1st of each month)
+  // See migration 055_monthly_project_count_reset.sql
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {

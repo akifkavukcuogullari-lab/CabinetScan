@@ -133,6 +133,9 @@ interface LayerVisibility {
   WALLS: boolean
   CABINETS_LOWER: boolean
   CABINETS_UPPER: boolean
+  CABINETS_WALL_OVEN: boolean
+  CABINETS_PANTRY: boolean
+  CABINETS_UPPER_SMALL: boolean
   APPLIANCES: boolean
   DOORS: boolean
   WINDOWS: boolean
@@ -201,6 +204,9 @@ export function InteractiveFloorPlan({
     WALLS: true,
     CABINETS_LOWER: true,
     CABINETS_UPPER: true,
+    CABINETS_WALL_OVEN: true,
+    CABINETS_PANTRY: true,
+    CABINETS_UPPER_SMALL: true,
     APPLIANCES: true,
     DOORS: true,
     WINDOWS: true
@@ -804,11 +810,11 @@ export function InteractiveFloorPlan({
   // Count entities in each layer
   const layerCounts = useMemo(() => ({
     WALLS: measurements?.walls?.length || 0,
-    CABINETS_LOWER: (measurements?.cabinets?.lower?.length || 0) +
-                    (measurements?.cabinets?.wall_oven?.length || 0) +
-                    (measurements?.cabinets?.pantry?.length || 0),
-    CABINETS_UPPER: (measurements?.cabinets?.upper?.length || 0) +
-                    (measurements?.cabinets?.upper_small?.length || 0),
+    CABINETS_LOWER: measurements?.cabinets?.lower?.length || 0,
+    CABINETS_UPPER: measurements?.cabinets?.upper?.length || 0,
+    CABINETS_WALL_OVEN: measurements?.cabinets?.wall_oven?.length || 0,
+    CABINETS_PANTRY: measurements?.cabinets?.pantry?.length || 0,
+    CABINETS_UPPER_SMALL: measurements?.cabinets?.upper_small?.length || 0,
     APPLIANCES: (measurements?.appliances?.length || 0) + (measurements?.sinks?.length || 0),
     DOORS: measurements?.doors?.length || 0,
     WINDOWS: measurements?.windows?.length || 0
@@ -1617,6 +1623,93 @@ export function InteractiveFloorPlan({
               )
             })}
 
+            {/* Wall Oven Cabinets */}
+            {layerVisibility.CABINETS_WALL_OVEN && wallOvenCabinets.map((cabinet, idx) => {
+              const id = `cabinet-wall-oven-${idx}`
+              const isHovered = hoveredObject === id
+              const isSelected = selectedObject?.data?.id === cabinet.id
+              const screen = toScreen(cabinet.position.x, cabinet.position.z)
+              const w = cabinet.width_ft * viewConfig.scale
+              const d = cabinet.depth_ft * viewConfig.scale
+
+              if (cabinet.corners && cabinet.corners.length >= 4) {
+                const screenCorners = cabinet.corners.map(c => toScreen(c.x, c.z))
+                const points = screenCorners.map(s => `${s.x},${s.y}`).join(' ')
+                const centerX = screenCorners.reduce((sum, c) => sum + c.x, 0) / screenCorners.length
+                const centerY = screenCorners.reduce((sum, c) => sum + c.y, 0) / screenCorners.length
+                return (
+                  <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                    <polygon points={points} fill={isSelected ? 'rgba(251, 146, 60, 0.4)' : isHovered ? 'rgba(251, 146, 60, 0.3)' : 'rgba(251, 146, 60, 0.2)'} stroke={isSelected ? '#c2410c' : isHovered ? '#ea580c' : '#f97316'} strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 2} className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Wall Oven: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Wall Oven Cabinet' })} />
+                    {showLabels && (<text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="bold" fill="#c2410c" className="pointer-events-none">WO</text>)}
+                  </g>
+                )
+              }
+              return (
+                <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                  <rect x={screen.x - w / 2} y={screen.y - d / 2} width={w} height={d} fill={isSelected ? 'rgba(251, 146, 60, 0.4)' : isHovered ? 'rgba(251, 146, 60, 0.3)' : 'rgba(251, 146, 60, 0.2)'} stroke={isSelected ? '#c2410c' : isHovered ? '#ea580c' : '#f97316'} strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 2} rx="2" className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Wall Oven: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Wall Oven Cabinet' })} />
+                  {showLabels && (<text x={screen.x} y={screen.y} textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="bold" fill="#c2410c" className="pointer-events-none">WO</text>)}
+                </g>
+              )
+            })}
+
+            {/* Pantry Cabinets */}
+            {layerVisibility.CABINETS_PANTRY && pantryCabinets.map((cabinet, idx) => {
+              const id = `cabinet-pantry-${idx}`
+              const isHovered = hoveredObject === id
+              const isSelected = selectedObject?.data?.id === cabinet.id
+              const screen = toScreen(cabinet.position.x, cabinet.position.z)
+              const w = cabinet.width_ft * viewConfig.scale
+              const d = cabinet.depth_ft * viewConfig.scale
+
+              if (cabinet.corners && cabinet.corners.length >= 4) {
+                const screenCorners = cabinet.corners.map(c => toScreen(c.x, c.z))
+                const points = screenCorners.map(s => `${s.x},${s.y}`).join(' ')
+                const centerX = screenCorners.reduce((sum, c) => sum + c.x, 0) / screenCorners.length
+                const centerY = screenCorners.reduce((sum, c) => sum + c.y, 0) / screenCorners.length
+                return (
+                  <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                    <polygon points={points} fill={isSelected ? 'rgba(34, 197, 94, 0.3)' : isHovered ? 'rgba(34, 197, 94, 0.2)' : 'rgba(34, 197, 94, 0.15)'} stroke={isSelected ? '#15803d' : isHovered ? '#16a34a' : '#22c55e'} strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 2} className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Pantry: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Pantry Cabinet' })} />
+                    {showLabels && (<text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="bold" fill="#15803d" className="pointer-events-none">P</text>)}
+                  </g>
+                )
+              }
+              return (
+                <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                  <rect x={screen.x - w / 2} y={screen.y - d / 2} width={w} height={d} fill={isSelected ? 'rgba(34, 197, 94, 0.3)' : isHovered ? 'rgba(34, 197, 94, 0.2)' : 'rgba(34, 197, 94, 0.15)'} stroke={isSelected ? '#15803d' : isHovered ? '#16a34a' : '#22c55e'} strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 2} rx="2" className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Pantry: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Pantry Cabinet' })} />
+                  {showLabels && (<text x={screen.x} y={screen.y} textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="bold" fill="#15803d" className="pointer-events-none">P</text>)}
+                </g>
+              )
+            })}
+
+            {/* Upper Small Cabinets */}
+            {layerVisibility.CABINETS_UPPER_SMALL && upperSmallCabinets.map((cabinet, idx) => {
+              const id = `cabinet-upper-small-${idx}`
+              const isHovered = hoveredObject === id
+              const isSelected = selectedObject?.data?.id === cabinet.id
+              const screen = toScreen(cabinet.position.x, cabinet.position.z)
+              const w = cabinet.width_ft * viewConfig.scale
+              const d = cabinet.depth_ft * viewConfig.scale
+
+              if (cabinet.corners && cabinet.corners.length >= 4) {
+                const screenCorners = cabinet.corners.map(c => toScreen(c.x, c.z))
+                const points = screenCorners.map(s => `${s.x},${s.y}`).join(' ')
+                const centerX = screenCorners.reduce((sum, c) => sum + c.x, 0) / screenCorners.length
+                const centerY = screenCorners.reduce((sum, c) => sum + c.y, 0) / screenCorners.length
+                return (
+                  <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                    <polygon points={points} fill={isSelected ? 'rgba(168, 85, 247, 0.2)' : isHovered ? 'rgba(168, 85, 247, 0.15)' : 'rgba(168, 85, 247, 0.1)'} stroke={isSelected ? '#7e22ce' : isHovered ? '#9333ea' : '#a855f7'} strokeWidth={isSelected ? 2 : isHovered ? 1.5 : 1.5} strokeDasharray="4,2" className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Upper Small: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Upper Small Cabinet' })} />
+                    {showLabels && (<text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" fontSize="7" fontWeight="bold" fill="#7e22ce" className="pointer-events-none">US</text>)}
+                  </g>
+                )
+              }
+              return (
+                <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                  <rect x={screen.x - w / 2} y={screen.y - d / 2} width={w} height={d} fill={isSelected ? 'rgba(168, 85, 247, 0.2)' : isHovered ? 'rgba(168, 85, 247, 0.15)' : 'rgba(168, 85, 247, 0.1)'} stroke={isSelected ? '#7e22ce' : isHovered ? '#9333ea' : '#a855f7'} strokeWidth={isSelected ? 2 : isHovered ? 1.5 : 1.5} strokeDasharray="4,2" rx="2" className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Upper Small: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Upper Small Cabinet' })} />
+                  {showLabels && (<text x={screen.x} y={screen.y} textAnchor="middle" dominantBaseline="middle" fontSize="7" fontWeight="bold" fill="#7e22ce" className="pointer-events-none">US</text>)}
+                </g>
+              )
+            })}
+
             {/* Windows */}
             {layerVisibility.WINDOWS && windows.map((windowItem, idx) => {
               const id = `window-${idx}`
@@ -2318,6 +2411,93 @@ export function InteractiveFloorPlan({
                       U
                     </text>
                   )}
+                </g>
+              )
+            })}
+
+            {/* Wall Oven Cabinets */}
+            {layerVisibility.CABINETS_WALL_OVEN && wallOvenCabinets.map((cabinet, idx) => {
+              const id = `cabinet-wall-oven-${idx}`
+              const isHovered = hoveredObject === id
+              const isSelected = selectedObject?.data?.id === cabinet.id
+              const screen = toScreen(cabinet.position.x, cabinet.position.z)
+              const w = cabinet.width_ft * viewConfig.scale
+              const d = cabinet.depth_ft * viewConfig.scale
+
+              if (cabinet.corners && cabinet.corners.length >= 4) {
+                const screenCorners = cabinet.corners.map(c => toScreen(c.x, c.z))
+                const points = screenCorners.map(s => `${s.x},${s.y}`).join(' ')
+                const centerX = screenCorners.reduce((sum, c) => sum + c.x, 0) / screenCorners.length
+                const centerY = screenCorners.reduce((sum, c) => sum + c.y, 0) / screenCorners.length
+                return (
+                  <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                    <polygon points={points} fill={isSelected ? 'rgba(251, 146, 60, 0.4)' : isHovered ? 'rgba(251, 146, 60, 0.3)' : 'rgba(251, 146, 60, 0.2)'} stroke={isSelected ? '#c2410c' : isHovered ? '#ea580c' : '#f97316'} strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 2} className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Wall Oven: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Wall Oven Cabinet' })} />
+                    {showLabels && (<text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="bold" fill="#c2410c" className="pointer-events-none">WO</text>)}
+                  </g>
+                )
+              }
+              return (
+                <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                  <rect x={screen.x - w / 2} y={screen.y - d / 2} width={w} height={d} fill={isSelected ? 'rgba(251, 146, 60, 0.4)' : isHovered ? 'rgba(251, 146, 60, 0.3)' : 'rgba(251, 146, 60, 0.2)'} stroke={isSelected ? '#c2410c' : isHovered ? '#ea580c' : '#f97316'} strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 2} rx="2" className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Wall Oven: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Wall Oven Cabinet' })} />
+                  {showLabels && (<text x={screen.x} y={screen.y} textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="bold" fill="#c2410c" className="pointer-events-none">WO</text>)}
+                </g>
+              )
+            })}
+
+            {/* Pantry Cabinets */}
+            {layerVisibility.CABINETS_PANTRY && pantryCabinets.map((cabinet, idx) => {
+              const id = `cabinet-pantry-${idx}`
+              const isHovered = hoveredObject === id
+              const isSelected = selectedObject?.data?.id === cabinet.id
+              const screen = toScreen(cabinet.position.x, cabinet.position.z)
+              const w = cabinet.width_ft * viewConfig.scale
+              const d = cabinet.depth_ft * viewConfig.scale
+
+              if (cabinet.corners && cabinet.corners.length >= 4) {
+                const screenCorners = cabinet.corners.map(c => toScreen(c.x, c.z))
+                const points = screenCorners.map(s => `${s.x},${s.y}`).join(' ')
+                const centerX = screenCorners.reduce((sum, c) => sum + c.x, 0) / screenCorners.length
+                const centerY = screenCorners.reduce((sum, c) => sum + c.y, 0) / screenCorners.length
+                return (
+                  <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                    <polygon points={points} fill={isSelected ? 'rgba(34, 197, 94, 0.3)' : isHovered ? 'rgba(34, 197, 94, 0.2)' : 'rgba(34, 197, 94, 0.15)'} stroke={isSelected ? '#15803d' : isHovered ? '#16a34a' : '#22c55e'} strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 2} className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Pantry: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Pantry Cabinet' })} />
+                    {showLabels && (<text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="bold" fill="#15803d" className="pointer-events-none">P</text>)}
+                  </g>
+                )
+              }
+              return (
+                <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                  <rect x={screen.x - w / 2} y={screen.y - d / 2} width={w} height={d} fill={isSelected ? 'rgba(34, 197, 94, 0.3)' : isHovered ? 'rgba(34, 197, 94, 0.2)' : 'rgba(34, 197, 94, 0.15)'} stroke={isSelected ? '#15803d' : isHovered ? '#16a34a' : '#22c55e'} strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 2} rx="2" className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Pantry: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Pantry Cabinet' })} />
+                  {showLabels && (<text x={screen.x} y={screen.y} textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="bold" fill="#15803d" className="pointer-events-none">P</text>)}
+                </g>
+              )
+            })}
+
+            {/* Upper Small Cabinets */}
+            {layerVisibility.CABINETS_UPPER_SMALL && upperSmallCabinets.map((cabinet, idx) => {
+              const id = `cabinet-upper-small-${idx}`
+              const isHovered = hoveredObject === id
+              const isSelected = selectedObject?.data?.id === cabinet.id
+              const screen = toScreen(cabinet.position.x, cabinet.position.z)
+              const w = cabinet.width_ft * viewConfig.scale
+              const d = cabinet.depth_ft * viewConfig.scale
+
+              if (cabinet.corners && cabinet.corners.length >= 4) {
+                const screenCorners = cabinet.corners.map(c => toScreen(c.x, c.z))
+                const points = screenCorners.map(s => `${s.x},${s.y}`).join(' ')
+                const centerX = screenCorners.reduce((sum, c) => sum + c.x, 0) / screenCorners.length
+                const centerY = screenCorners.reduce((sum, c) => sum + c.y, 0) / screenCorners.length
+                return (
+                  <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                    <polygon points={points} fill={isSelected ? 'rgba(168, 85, 247, 0.2)' : isHovered ? 'rgba(168, 85, 247, 0.15)' : 'rgba(168, 85, 247, 0.1)'} stroke={isSelected ? '#7e22ce' : isHovered ? '#9333ea' : '#a855f7'} strokeWidth={isSelected ? 2 : isHovered ? 1.5 : 1.5} strokeDasharray="4,2" className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Upper Small: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Upper Small Cabinet' })} />
+                    {showLabels && (<text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" fontSize="7" fontWeight="bold" fill="#7e22ce" className="pointer-events-none">US</text>)}
+                  </g>
+                )
+              }
+              return (
+                <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
+                  <rect x={screen.x - w / 2} y={screen.y - d / 2} width={w} height={d} fill={isSelected ? 'rgba(168, 85, 247, 0.2)' : isHovered ? 'rgba(168, 85, 247, 0.15)' : 'rgba(168, 85, 247, 0.1)'} stroke={isSelected ? '#7e22ce' : isHovered ? '#9333ea' : '#a855f7'} strokeWidth={isSelected ? 2 : isHovered ? 1.5 : 1.5} strokeDasharray="4,2" rx="2" className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Upper Small: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Upper Small Cabinet' })} />
+                  {showLabels && (<text x={screen.x} y={screen.y} textAnchor="middle" dominantBaseline="middle" fontSize="7" fontWeight="bold" fill="#7e22ce" className="pointer-events-none">US</text>)}
                 </g>
               )
             })}

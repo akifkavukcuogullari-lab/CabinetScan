@@ -52,8 +52,15 @@ export function SubscriptionProviderWrapper({
 }: SubscriptionProviderWrapperProps) {
   return (
     <SubscriptionProvider showroomId={showroomId} initialData={initialData}>
-      <UsageWarningBanner />
       {children}
     </SubscriptionProvider>
   )
+}
+
+/**
+ * Separate component for the usage warning banner.
+ * Must be used inside SubscriptionProviderWrapper.
+ */
+export function SubscriptionWarningBanner() {
+  return <UsageWarningBanner />
 }

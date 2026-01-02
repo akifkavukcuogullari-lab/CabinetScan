@@ -288,8 +288,20 @@ struct AnyCodable: Codable {
             try container.encode(bool)
         case let int as Int:
             try container.encode(int)
+        case let float as Float:
+            // Handle non-finite Float values (NaN, Infinity) - JSON doesn't support these
+            if float.isFinite {
+                try container.encode(Double(float))
+            } else {
+                try container.encode(0.0)
+            }
         case let double as Double:
-            try container.encode(double)
+            // Handle non-finite Double values (NaN, Infinity) - JSON doesn't support these
+            if double.isFinite {
+                try container.encode(double)
+            } else {
+                try container.encode(0.0)
+            }
         case let string as String:
             try container.encode(string)
         case let array as [Any]:

@@ -89,7 +89,15 @@ actor APIService {
         request.httpMethod = "POST"
         request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try encoder.encode(submission)
+        request.timeoutInterval = 60 // 60 second timeout for submission
+
+        // Encode the submission - catch encoding errors for better debugging
+        do {
+            request.httpBody = try encoder.encode(submission)
+        } catch {
+            Config.logError("❌ Failed to encode submission: \(error.localizedDescription)")
+            throw APIError.submissionFailed(message: "Failed to prepare submission data. Please try scanning again.")
+        }
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -97,13 +105,23 @@ actor APIService {
             throw APIError.invalidResponse
         }
 
-        let submissionResponse = try decoder.decode(SubmissionResponse.self, from: data)
+        // Try to decode response
+        do {
+            let submissionResponse = try decoder.decode(SubmissionResponse.self, from: data)
 
-        guard httpResponse.statusCode == 201 else {
-            throw APIError.submissionFailed(message: submissionResponse.error ?? "Unknown error")
+            guard httpResponse.statusCode == 201 else {
+                throw APIError.submissionFailed(message: submissionResponse.error ?? "Server error (code: \(httpResponse.statusCode))")
+            }
+
+            return submissionResponse
+        } catch let decodingError as DecodingError {
+            Config.logError("❌ Failed to decode response: \(decodingError)")
+            // Try to get raw error message from response
+            if let errorString = String(data: data, encoding: .utf8) {
+                Config.logError("❌ Raw response: \(errorString)")
+            }
+            throw APIError.submissionFailed(message: "Server returned an unexpected response. Please try again.")
         }
-
-        return submissionResponse
     }
 
     // MARK: - Upload File to Storage

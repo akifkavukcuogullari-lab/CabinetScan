@@ -136,12 +136,12 @@ function WarningBanner({
 
   return (
     <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-3">
-      <div className="flex items-center justify-between max-w-7xl mx-auto">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="flex-shrink-0">
             <AlertTriangle className="h-5 w-5 text-yellow-600" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0">
             <p className="text-sm font-medium text-yellow-800">
               Approaching {primaryWarning.label} limit
             </p>
@@ -159,7 +159,7 @@ function WarningBanner({
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <Button
             variant="outline"
             size="sm"
@@ -198,12 +198,12 @@ function LimitExceededBanner({
 
   return (
     <div className="bg-red-50 border-b border-red-200 px-4 py-3">
-      <div className="flex items-center justify-between max-w-7xl mx-auto">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="flex-shrink-0">
             <AlertTriangle className="h-5 w-5 text-red-600" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0">
             <p className="text-sm font-medium text-red-800">
               {primaryExceeded.label.charAt(0).toUpperCase() + primaryExceeded.label.slice(1)} limit
               reached
@@ -219,7 +219,7 @@ function LimitExceededBanner({
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <Button
             size="sm"
             asChild
@@ -264,12 +264,12 @@ function TrialExpiringBanner({
 
   return (
     <div className={cn(bgColor, borderColor, 'border-b px-4 py-3')}>
-      <div className="flex items-center justify-between max-w-7xl mx-auto">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="flex-shrink-0">
             <AlertTriangle className={cn('h-5 w-5', iconColor)} />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0">
             <p className={cn('text-sm font-medium', textColor)}>
               {daysRemaining === 0
                 ? 'Your trial expires today!'
@@ -282,7 +282,7 @@ function TrialExpiringBanner({
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <Button
             size="sm"
             asChild
@@ -308,19 +308,19 @@ function TrialExpiringBanner({
 function TrialExpiredBanner() {
   return (
     <div className="bg-red-600 px-4 py-3">
-      <div className="flex items-center justify-between max-w-7xl mx-auto">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="flex-shrink-0">
             <AlertTriangle className="h-5 w-5 text-white" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0">
             <p className="text-sm font-medium text-white">Your trial has expired</p>
             <p className="text-sm text-red-100">
               Subscribe now to restore access to your account and all features.
             </p>
           </div>
         </div>
-        <div className="flex-shrink-0 ml-4">
+        <div className="flex-shrink-0">
           <Button size="sm" variant="secondary" asChild>
             <Link href="/showroom/billing">Subscribe Now</Link>
           </Button>
@@ -346,12 +346,12 @@ function GracePeriodBanner({
 
   return (
     <div className="bg-orange-50 border-b border-orange-200 px-4 py-3">
-      <div className="flex items-center justify-between max-w-7xl mx-auto">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="flex-shrink-0">
             <AlertTriangle className="h-5 w-5 text-orange-600" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0">
             <p className="text-sm font-medium text-orange-800">Grace period active</p>
             <p className="text-sm text-orange-700">
               You have {daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining in your grace
@@ -359,7 +359,7 @@ function GracePeriodBanner({
             </p>
           </div>
         </div>
-        <div className="flex-shrink-0 ml-4">
+        <div className="flex-shrink-0">
           <Button size="sm" asChild className="bg-orange-600 hover:bg-orange-700">
             <Link href="/showroom/billing">Subscribe Now</Link>
           </Button>
@@ -372,12 +372,12 @@ function GracePeriodBanner({
 function PaymentOverdueBanner() {
   return (
     <div className="bg-red-50 border-b border-red-200 px-4 py-3">
-      <div className="flex items-center justify-between max-w-7xl mx-auto">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="flex-shrink-0">
             <AlertTriangle className="h-5 w-5 text-red-600" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0">
             <p className="text-sm font-medium text-red-800">Payment overdue</p>
             <p className="text-sm text-red-700">
               Your payment is past due. Please update your payment method to avoid service
@@ -385,7 +385,7 @@ function PaymentOverdueBanner() {
             </p>
           </div>
         </div>
-        <div className="flex-shrink-0 ml-4">
+        <div className="flex-shrink-0">
           <Button size="sm" asChild className="bg-red-600 hover:bg-red-700">
             <Link href="/showroom/billing">Update Payment</Link>
           </Button>

@@ -523,7 +523,7 @@ export default function BillingPage() {
               return (
                 <Card
                   key={plan.id}
-                  className={`relative ${plan.is_featured ? 'border-blue-500 border-2' : ''}`}
+                  className={`relative flex flex-col ${plan.is_featured ? 'border-blue-500 border-2' : ''}`}
                 >
                   {plan.is_featured && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -537,7 +537,7 @@ export default function BillingPage() {
                     </div>
                     <CardDescription>{plan.description}</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-4 flex-grow">
                     <div>
                       {plan.slug === 'enterprise' ? (
                         <p className="text-3xl font-bold">Custom</p>
@@ -560,7 +560,7 @@ export default function BillingPage() {
                       ))}
                     </ul>
                   </CardContent>
-                  <CardFooter>
+                  <CardFooter className="mt-auto">
                     {plan.slug === 'enterprise' ? (
                       <Button className="w-full" variant="outline" asChild>
                         <a href="mailto:sales@nextlyn.ai">Contact Sales</a>

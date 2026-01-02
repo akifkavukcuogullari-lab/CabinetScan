@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/shared/sidebar'
-import { SubscriptionProviderWrapper } from './subscription-provider-wrapper'
+import { SubscriptionProviderWrapper, SubscriptionWarningBanner } from './subscription-provider-wrapper'
 
 export default async function DashboardLayout({
   children,
@@ -121,6 +121,7 @@ export default async function DashboardLayout({
       <div className="min-h-screen bg-gray-50">
         <Sidebar userInfo={userInfo} />
         <main className="lg:pl-64">
+          <SubscriptionWarningBanner />
           <div className="p-6">{children}</div>
         </main>
       </div>

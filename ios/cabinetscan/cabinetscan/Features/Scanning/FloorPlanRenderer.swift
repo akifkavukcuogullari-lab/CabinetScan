@@ -150,13 +150,35 @@ struct FloorPlanRenderer {
                 }
             }
 
+            // ===========================================
+            // CABINET CLASSIFICATION THRESHOLDS
+            // Based on industry standard cabinet dimensions:
+            // - Base cabinets: 34.5" tall, on floor
+            // - Upper cabinets: 30-42" tall, mounted 54" from floor
+            // - Tall/Pantry: 84-96" tall, 12-30" wide, floor to near-ceiling
+            // - Wall Oven: 84-96" tall, 30-33" wide (wider for oven cutout)
+            // ===========================================
+
+            // Gap thresholds (in meters)
+            let maxPantryGap: Float = 0.15  // 6 inches - pantry has minimal/no gap between sections
+            let normalKitchenGap: Float = 0.38  // 15 inches - normal gap for backsplash area
+
+            // Height thresholds (in meters)
+            let minTallCabinetHeight: Float = 2.0  // 79 inches (~80") - minimum for tall cabinets
+
+            // Width thresholds (in meters)
+            let maxPantryWidth: Float = 0.76  // 30 inches - pantry cabinets are narrow
+            let minWallOvenWidth: Float = 0.71  // 28 inches - wall oven cabinets are wider (30-33")
+
+            let smallUpperCabinetMaxHeight: Float = 0.5
+
             // Detect tall cabinet pairs (wall oven and pantry)
             var matchedUpperIndices: Set<Int> = []
             var matchedLowerIndices: Set<Int> = []
             var wallOvenLowerObjects: [CapturedRoom.Object] = []
             var pantryLowerObjects: [CapturedRoom.Object] = []
-
-            let smallUpperCabinetMaxHeight: Float = 0.5
+            var wallOvenUpperObjects: [CapturedRoom.Object] = []
+            var pantryUpperObjects: [CapturedRoom.Object] = []
 
             for (upperIdx, upperObj) in upperStorageObjects.enumerated() {
                 for (lowerIdx, lowerObj) in lowerStorageObjects.enumerated() {
@@ -166,6 +188,11 @@ struct FloorPlanRenderer {
                     let lowerPos = lowerObj.transform.columns.3
 
                     if areHorizontallyAligned(upperPos, lowerPos) {
+                        // Calculate gap between upper and lower sections (in meters)
+                        let gapHeightMeters = upperPos.y - lowerPos.y - upperObj.dimensions.y/2 - lowerObj.dimensions.y/2
+                        let totalHeightMeters = upperObj.dimensions.y + lowerObj.dimensions.y + max(0, gapHeightMeters)
+                        let maxWidth = max(upperObj.dimensions.x, lowerObj.dimensions.x)
+
                         // Check for oven between
                         var hasOvenBetween = false
                         for ovenPos in ovenPositions {
@@ -178,10 +205,30 @@ struct FloorPlanRenderer {
                             }
                         }
 
-                        if hasOvenBetween {
+                        // Classification logic (matching ScanningView.swift):
+                        // Skip if gap is too large (normal kitchen layout with backsplash)
+                        let isNormalKitchenLayout = gapHeightMeters >= normalKitchenGap
+
+                        let isWallOven = hasOvenBetween ||
+                                         (totalHeightMeters >= minTallCabinetHeight &&
+                                          maxWidth >= minWallOvenWidth &&
+                                          !isNormalKitchenLayout)
+
+                        let isPantry = !isWallOven &&
+                                       !isNormalKitchenLayout &&
+                                       gapHeightMeters < maxPantryGap &&
+                                       totalHeightMeters >= minTallCabinetHeight &&
+                                       maxWidth <= maxPantryWidth
+
+                        // Only match if it's truly a wall oven or pantry
+                        guard isWallOven || isPantry else { continue }
+
+                        if isWallOven {
                             wallOvenLowerObjects.append(lowerObj)
+                            wallOvenUpperObjects.append(upperObj)
                         } else {
                             pantryLowerObjects.append(lowerObj)
+                            pantryUpperObjects.append(upperObj)
                         }
 
                         matchedUpperIndices.insert(upperIdx)
@@ -205,17 +252,27 @@ struct FloorPlanRenderer {
             }
 
             // Draw wall oven cabinets - orange/amber fill with brown outline
-            for object in wallOvenLowerObjects {
+            // Draw both upper and lower sections with same footprint (they overlap in 2D view)
+            for (index, lowerObject) in wallOvenLowerObjects.enumerated() {
                 wallOvenCount += 1
-                drawObject(ctx: ctx, object: object, scale: scale, minX: minX, minZ: minZ,
+                // Use lower object footprint (larger footprint typically)
+                drawObject(ctx: ctx, object: lowerObject, scale: scale, minX: minX, minZ: minZ,
                           fillColor: UIColor.systemOrange.withAlphaComponent(0.3), strokeColor: UIColor.systemBrown, strokeWidth: 2.0)
+                // Draw label
+                if index < wallOvenUpperObjects.count {
+                    drawCabinetLabel(ctx: ctx, object: lowerObject, scale: scale, minX: minX, minZ: minZ, label: "WO", color: UIColor.systemBrown)
+                }
             }
 
             // Draw pantry cabinets - green fill with dark green outline
-            for object in pantryLowerObjects {
+            for (index, lowerObject) in pantryLowerObjects.enumerated() {
                 pantryCount += 1
-                drawObject(ctx: ctx, object: object, scale: scale, minX: minX, minZ: minZ,
+                drawObject(ctx: ctx, object: lowerObject, scale: scale, minX: minX, minZ: minZ,
                           fillColor: UIColor.systemGreen.withAlphaComponent(0.2), strokeColor: UIColor.systemGreen, strokeWidth: 2.0)
+                // Draw label
+                if index < pantryUpperObjects.count {
+                    drawCabinetLabel(ctx: ctx, object: lowerObject, scale: scale, minX: minX, minZ: minZ, label: "P", color: UIColor.systemGreen.darker())
+                }
             }
 
             // Draw appliances and sinks - white fill with icon
@@ -239,9 +296,10 @@ struct FloorPlanRenderer {
                 // Check if small cabinet above appliance/sink
                 if cabinetHeight < smallUpperCabinetMaxHeight && isAboveApplianceOrSink(position) {
                     upperSmallCount += 1
-                    // Upper small cabinet - purple dashed outline
+                    // Upper small cabinet - purple dashed outline with label
                     drawObject(ctx: ctx, object: object, scale: scale, minX: minX, minZ: minZ,
                               fillColor: UIColor.systemPurple.withAlphaComponent(0.15), strokeColor: UIColor.systemPurple, strokeWidth: 1.5, dashed: true)
+                    drawCabinetLabel(ctx: ctx, object: object, scale: scale, minX: minX, minZ: minZ, label: "US", color: UIColor.systemPurple)
                 } else {
                     upperCount += 1
                     // Standard upper cabinet - blue dashed outline
@@ -496,5 +554,38 @@ struct FloorPlanRenderer {
         default:
             break
         }
+    }
+
+    /// Draw a label inside a cabinet
+    private static func drawCabinetLabel(ctx: CGContext, object: CapturedRoom.Object, scale: Float, minX: Float, minZ: Float, label: String, color: UIColor) {
+        let transform = object.transform
+        let position = transform.columns.3
+
+        // Calculate center in image coordinates
+        let centerX = (position.x - minX) * scale + 50
+        let centerY = (position.z - minZ) * scale + 50
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.boldSystemFont(ofSize: 10),
+            .foregroundColor: color,
+            .paragraphStyle: paragraphStyle
+        ]
+
+        let labelRect = CGRect(x: CGFloat(centerX) - 15, y: CGFloat(centerY) - 6, width: 30, height: 12)
+        label.draw(in: labelRect, withAttributes: attrs)
+    }
+}
+
+// MARK: - UIColor Extension
+extension UIColor {
+    func darker(by percentage: CGFloat = 0.3) -> UIColor {
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        if getHue(&h, saturation: &s, brightness: &b, alpha: &a) {
+            return UIColor(hue: h, saturation: s, brightness: max(b - percentage, 0), alpha: a)
+        }
+        return self
     }
 }

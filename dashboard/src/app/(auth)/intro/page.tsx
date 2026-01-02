@@ -27,12 +27,26 @@ export default function IntroPage() {
             />
             <span className="text-xl font-semibold text-gray-900">CabinetScan</span>
           </div>
-          <Link
-            href="/login"
-            className="px-5 py-2.5 text-sm font-medium text-white rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hover:opacity-90 transition-opacity"
-          >
-            Sign In
-          </Link>
+          <div className="flex items-center gap-6">
+            <Link
+              href="/pricing"
+              className="text-sm font-medium text-gray-700 hover:text-purple-600 transition-colors"
+            >
+              Pricing
+            </Link>
+            <Link
+              href="/contact"
+              className="text-sm font-medium text-gray-700 hover:text-purple-600 transition-colors"
+            >
+              Contact
+            </Link>
+            <Link
+              href="/login"
+              className="px-5 py-2.5 text-sm font-medium text-white rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hover:opacity-90 transition-opacity"
+            >
+              Sign In
+            </Link>
+          </div>
         </div>
       </nav>
 
