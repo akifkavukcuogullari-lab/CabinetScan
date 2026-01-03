@@ -1221,40 +1221,9 @@ export function InteractiveFloorPlan({
   if (minimal) {
     return (
       <div className={`relative ${className}`}>
-        {/* Floating controls */}
-        <div className="absolute top-3 right-3 z-20 flex gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-sm border border-gray-200/50">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={resetView}
-            title="Reset view"
-            className="h-8 w-8 hover:bg-gray-100"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowLabels(!showLabels)}
-            title={showLabels ? "Hide labels" : "Show labels"}
-            className="h-8 w-8 hover:bg-gray-100"
-          >
-            {showLabels ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleFullscreen}
-            title="Fullscreen"
-            className="h-8 w-8 hover:bg-gray-100"
-          >
-            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </Button>
-        </div>
-
-        {/* Rotation slider (compact, at bottom) */}
-        <div className="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-full px-3 py-1.5 shadow-sm border border-gray-200/50">
-          <Move className="h-3 w-3 text-gray-400 flex-shrink-0" />
+        {/* Top right controls: Rotation + Reset + Labels + Fullscreen */}
+        <div className="absolute top-3 right-3 z-20 flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-sm border border-gray-200/50">
+          {/* Rotation slider */}
           <input
             type="range"
             min={0}
@@ -1262,21 +1231,72 @@ export function InteractiveFloorPlan({
             step={1}
             value={targetRotation}
             onChange={(e) => setTargetRotation(Number(e.target.value))}
-            className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            className="w-20 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            title="Rotate view"
           />
-          <span className="text-xs text-gray-500 w-8 text-right font-mono">{Math.round(rotation)}°</span>
+          <span className="text-xs text-gray-500 w-7 text-right font-mono">{Math.round(rotation)}°</span>
+          <div className="w-px h-5 bg-gray-200 mx-1" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={resetView}
+            title="Reset view"
+            className="h-7 w-7 hover:bg-gray-100"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowLabels(!showLabels)}
+            title={showLabels ? "Hide labels" : "Show labels"}
+            className="h-7 w-7 hover:bg-gray-100"
+          >
+            {showLabels ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleFullscreen}
+            title="Fullscreen"
+            className="h-7 w-7 hover:bg-gray-100"
+          >
+            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+          </Button>
         </div>
 
-        {/* Layer panel toggle button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute top-3 left-3 z-30 h-8 w-8 bg-white/90 hover:bg-gray-100 shadow-sm border border-gray-200/50"
-          onClick={() => setShowLayerPanel(!showLayerPanel)}
-          title={showLayerPanel ? "Hide layers" : "Show layers"}
-        >
-          {showLayerPanel ? <ChevronLeft className="h-4 w-4" /> : <Layers className="h-4 w-4" />}
-        </Button>
+        {/* Top left controls: Layers + Zoom */}
+        <div className="absolute top-3 left-3 z-30 flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-sm border border-gray-200/50">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 hover:bg-gray-100"
+            onClick={() => setShowLayerPanel(!showLayerPanel)}
+            title={showLayerPanel ? "Hide layers" : "Show layers"}
+          >
+            {showLayerPanel ? <ChevronLeft className="h-3.5 w-3.5" /> : <Layers className="h-3.5 w-3.5" />}
+          </Button>
+          <div className="w-px h-5 bg-gray-200 mx-1" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTargetZoom(Math.max(0.5, targetZoom - 0.1))}
+            title="Zoom out"
+            className="h-7 w-7 hover:bg-gray-100"
+          >
+            <ZoomOut className="h-3.5 w-3.5" />
+          </Button>
+          <span className="text-xs text-gray-500 w-8 text-center font-mono">{Math.round(zoom * 100)}%</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTargetZoom(Math.min(2, targetZoom + 0.1))}
+            title="Zoom in"
+            className="h-7 w-7 hover:bg-gray-100"
+          >
+            <ZoomIn className="h-3.5 w-3.5" />
+          </Button>
+        </div>
 
         {/* Layer panel */}
         {showLayerPanel && (
@@ -1303,7 +1323,7 @@ export function InteractiveFloorPlan({
 
         <div
           ref={containerRef}
-          className={`relative overflow-hidden ${isFullscreen ? 'h-screen' : 'h-[60vh] min-h-[400px]'}`}
+          className={`relative overflow-hidden ${isFullscreen ? 'h-screen' : 'h-[70vh] min-h-[500px]'}`}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}

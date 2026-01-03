@@ -325,7 +325,7 @@ export function ProjectSidebar({
               ) : (
                 <LockedFeature feature="autocadExport" isLocked={!hasAutocadExport}>
                   <a
-                    href={hasAutocadExport ? `/api/export/dxf?project_id=${project.id}` : '#'}
+                    href={hasAutocadExport ? `/api/download-dxf/${project.id}` : '#'}
                     download={hasAutocadExport ? `${project.reference_number || project.id}.dxf` : undefined}
                     className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
                   >

@@ -664,6 +664,24 @@ struct ScanningView: View {
 
         print("Video metadata: duration=\(metadata.durationSeconds)s, size=\(String(format: "%.2f", metadata.sizeMB))MB, resolution=\(metadata.resolution)")
 
+        // Compress video for faster upload and lower storage costs
+        print("Compressing video for upload...")
+        let videoToUpload: URL
+        var compressedURL: URL? = nil
+
+        if metadata.sizeMB > 20 {
+            // Only compress if file is larger than 20MB
+            if let compressed = await recorder.compressVideo() {
+                compressedURL = compressed
+                videoToUpload = compressed
+            } else {
+                print("Compression failed, using original video")
+                videoToUpload = videoURL
+            }
+        } else {
+            videoToUpload = videoURL
+        }
+
         // Upload video file
         let timestamp = Int(Date().timeIntervalSince1970)
         let randomId = UUID().uuidString.prefix(8)
@@ -672,7 +690,10 @@ struct ScanningView: View {
 
         var uploadedVideoUrl: String? = nil
         do {
-            let videoData = try Data(contentsOf: videoURL)
+            let videoData = try Data(contentsOf: videoToUpload)
+            let finalSizeMB = Double(videoData.count) / (1024 * 1024)
+            print("Uploading video: \(String(format: "%.2f", finalSizeMB))MB")
+
             uploadedVideoUrl = try await APIService.shared.uploadFile(
                 bucket: "scans",
                 path: videoPath,
@@ -682,6 +703,10 @@ struct ScanningView: View {
             print("Video uploaded: \(uploadedVideoUrl ?? "nil")")
         } catch {
             print("Failed to upload video: \(error)")
+            // Clean up compressed file if it exists
+            if let compressed = compressedURL {
+                try? FileManager.default.removeItem(at: compressed)
+            }
             return nil
         }
 
@@ -705,18 +730,36 @@ struct ScanningView: View {
             }
         }
 
-        // Clean up temp video file
-        try? FileManager.default.removeItem(at: videoURL)
-
         guard let finalVideoUrl = uploadedVideoUrl else {
+            // Clean up on failure
+            try? FileManager.default.removeItem(at: videoURL)
+            if let compressed = compressedURL {
+                try? FileManager.default.removeItem(at: compressed)
+            }
             return nil
+        }
+
+        // Get actual uploaded file size before cleanup
+        let uploadedSizeBytes: Int64
+        if let compressed = compressedURL,
+           let attrs = try? FileManager.default.attributesOfItem(atPath: compressed.path),
+           let size = attrs[.size] as? Int64 {
+            uploadedSizeBytes = size
+        } else {
+            uploadedSizeBytes = metadata.sizeBytes
+        }
+
+        // Clean up temp video files
+        try? FileManager.default.removeItem(at: videoURL)
+        if let compressed = compressedURL {
+            try? FileManager.default.removeItem(at: compressed)
         }
 
         return UploadedVideoData(
             videoUrl: finalVideoUrl,
             thumbnailUrl: thumbnailUrl,
             durationSeconds: metadata.durationSeconds,
-            sizeBytes: metadata.sizeBytes,
+            sizeBytes: uploadedSizeBytes,
             resolution: metadata.resolution
         )
     }
