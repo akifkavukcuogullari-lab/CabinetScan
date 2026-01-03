@@ -1069,15 +1069,34 @@ struct ScanningView: View {
 
         // Collect appliance positions for cabinet type detection
         var ovenPositions: [SIMD4<Float>] = []
+        var wallOvenPositions: [SIMD4<Float>] = []  // Stoves/ovens at elevated positions (wall ovens)
         var appliancePositionsForSmallCabinets: [SIMD4<Float>] = []  // Fridge, stove positions
         var sinkPositions: [SIMD4<Float>] = []
 
+        // Height threshold for wall oven detection - wall ovens are typically mounted 27-30" from floor
+        let wallOvenMinHeight: Float = 0.6  // ~24 inches from floor level
+
         for object in room.objects {
             let pos = object.transform.columns.3
+            let heightFromFloor = pos.y - (floorY ?? 0)
+
             switch object.category {
             case .oven:
                 ovenPositions.append(pos)
-            case .refrigerator, .stove:
+                // Wall ovens are mounted higher than floor level
+                if heightFromFloor > wallOvenMinHeight {
+                    wallOvenPositions.append(pos)
+                    print("[ScanAnalysis] Wall oven detected at height \(String(format: "%.2f", heightFromFloor))m from floor")
+                }
+            case .stove:
+                // Stoves at elevated positions might be wall ovens (RoomPlan sometimes misclassifies)
+                if heightFromFloor > wallOvenMinHeight {
+                    wallOvenPositions.append(pos)
+                    print("[ScanAnalysis] Elevated stove (possible wall oven) at height \(String(format: "%.2f", heightFromFloor))m")
+                } else {
+                    appliancePositionsForSmallCabinets.append(pos)
+                }
+            case .refrigerator:
                 appliancePositionsForSmallCabinets.append(pos)
             case .sink:
                 sinkPositions.append(pos)
@@ -1085,6 +1104,10 @@ struct ScanningView: View {
                 break
             }
         }
+
+        // Combine oven positions for wall oven cabinet detection
+        let allOvenPositions = ovenPositions + wallOvenPositions
+        print("[ScanAnalysis] Found \(ovenPositions.count) ovens, \(wallOvenPositions.count) wall ovens, \(appliancePositionsForSmallCabinets.count) floor appliances")
 
         // Helper function to check if two objects are horizontally aligned (same X/Z within threshold)
         func areHorizontallyAligned(_ pos1: SIMD4<Float>, _ pos2: SIMD4<Float>, threshold: Float = 0.4) -> Bool {
@@ -1200,11 +1223,12 @@ struct ScanningView: View {
                     let totalHeightMeters = upperInfo.dimensions.y + lowerInfo.dimensions.y + max(0, gapHeightMeters)
                     let maxWidth = max(upperInfo.dimensions.x, lowerInfo.dimensions.x)
 
-                    // Check for oven between sections
+                    // Check for oven between sections (using all detected ovens including wall ovens)
                     var hasOvenBetween = false
-                    for ovenPos in ovenPositions {
+                    for ovenPos in allOvenPositions {
                         if isOvenBetween(upper: upperInfo.position, lower: lowerInfo.position, oven: ovenPos) {
                             hasOvenBetween = true
+                            print("[ScanAnalysis] Oven found between upper and lower cabinet sections")
                             break
                         }
                     }
@@ -1214,24 +1238,35 @@ struct ScanningView: View {
                     //
                     // 1. WALL OVEN CABINET:
                     //    - Has oven detected between sections, OR
-                    //    - Tall (>80") AND wide (>28") - oven cabinets are 30-33" wide
+                    //    - Tall (>80") AND wide (>28") AND has oven-sized gap (17-30")
+                    //    - Wall oven cabinets are 30-33" wide with 24-30" oven cutout
                     //
                     // 2. PANTRY CABINET:
                     //    - Tall (>80") AND narrow (<=30") AND small gap (<6")
                     //    - Pantry cabinets are typically 12-30" wide
                     //
                     // 3. REGULAR UPPER + LOWER (not combined):
-                    //    - Gap > 6" (normal backsplash/countertop area ~15-18")
+                    //    - Gap > 15" (normal backsplash/countertop area ~15-18")
                     //    - These remain as separate upper_cabinet + lower_cabinet
                     // ===========================================
+
+                    // Wall oven cutout height range (in meters)
+                    let minOvenCutoutHeight: Float = 0.43  // 17 inches
+                    let maxOvenCutoutHeight: Float = 0.76  // 30 inches
+                    let hasOvenSizedGap = gapHeightMeters >= minOvenCutoutHeight && gapHeightMeters <= maxOvenCutoutHeight
 
                     // Skip if gap is too large (normal kitchen layout with backsplash)
                     let isNormalKitchenLayout = gapHeightMeters >= normalKitchenGap
 
+                    // Wall oven detection: oven between sections OR oven-sized gap in tall wide cabinet
                     let isWallOven = hasOvenBetween ||
                                      (totalHeightMeters >= minTallCabinetHeight &&
                                       maxWidth >= minWallOvenWidth &&
-                                      !isNormalKitchenLayout)
+                                      hasOvenSizedGap)
+
+                    if isWallOven {
+                        print("[ScanAnalysis] Wall oven cabinet detected: height=\(String(format: "%.2f", totalHeightMeters))m, width=\(String(format: "%.2f", maxWidth))m, gap=\(String(format: "%.2f", gapHeightMeters))m, ovenBetween=\(hasOvenBetween)")
+                    }
 
                     let isPantry = !isWallOven &&
                                    !isNormalKitchenLayout &&
