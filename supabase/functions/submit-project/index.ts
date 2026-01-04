@@ -597,6 +597,24 @@ serve(async (req) => {
       .eq('id', submission.showroom_id)
       .single()
 
+    // Check if subscription is active (block canceled/suspended)
+    const inactiveStatuses = ['canceled', 'suspended']
+    if (showroomWithPlan && inactiveStatuses.includes(showroomWithPlan.subscription_status)) {
+      console.log(`[SUBSCRIPTION] Submission blocked - status: ${showroomWithPlan.subscription_status}`)
+      return new Response(
+        JSON.stringify({
+          error: 'Subscription inactive',
+          message: 'This showroom subscription is no longer active.',
+          customer_message: 'This showroom is currently unavailable. Please contact the showroom directly for assistance.',
+          code: 'SUBSCRIPTION_INACTIVE',
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
+    }
+
     if (showroomWithPlan?.subscription_plans) {
       const plan = showroomWithPlan.subscription_plans as any
       const exceededLimits: string[] = []
