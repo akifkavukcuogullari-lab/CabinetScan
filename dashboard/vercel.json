@@ -5,17 +5,6 @@
       "has": [
         {
           "type": "host",
-          "value": "cabinetscan.nextlyn.ai"
-        }
-      ],
-      "destination": "https://cabinetscan.nextlyn.ai/:path*",
-      "permanent": true
-    },
-    {
-      "source": "/:path*",
-      "has": [
-        {
-          "type": "host",
           "value": "cabinet-scan-akifkavukcuogullari-labs-projects.vercel.app"
         }
       ],
