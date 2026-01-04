@@ -1,14 +1,17 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Clock, CreditCard, LogOut } from 'lucide-react'
+import { Clock, CreditCard, LogOut, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function TrialExpiredPage() {
   const router = useRouter()
   const supabase = createClient()
+  const [loading, setLoading] = useState(false)
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -16,8 +19,61 @@ export default function TrialExpiredPage() {
   }
 
   const handleSubscribe = async () => {
-    // Sign in and redirect to billing page
-    router.push('/showroom/billing')
+    setLoading(true)
+    try {
+      // Get session and showroom info
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        toast.error('Please sign in again')
+        router.push('/login')
+        return
+      }
+
+      const { data: { user } } = await supabase.auth.getUser()
+      const { data: showroomUser } = await supabase
+        .from('showroom_users')
+        .select('showroom_id')
+        .eq('user_id', user?.id)
+        .single()
+
+      if (!showroomUser) {
+        toast.error('Could not find your showroom')
+        return
+      }
+
+      // Create Stripe checkout session for Pro plan (default recommendation)
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-checkout-session`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+          },
+          body: JSON.stringify({
+            showroom_id: showroomUser.showroom_id,
+            plan_slug: 'pro', // Default to Pro plan
+            billing_period: 'monthly',
+            success_url: `${window.location.origin}/showroom/projects?success=true`,
+            cancel_url: `${window.location.origin}/trial-expired?canceled=true`,
+          }),
+        }
+      )
+
+      const data = await response.json()
+
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        toast.error(data.error || 'Failed to create checkout session')
+      }
+    } catch (error) {
+      console.error('Subscribe error:', error)
+      toast.error('Failed to start subscription process')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -57,9 +113,19 @@ export default function TrialExpiredPage() {
           <Button
             className="w-full gap-2"
             onClick={handleSubscribe}
+            disabled={loading}
           >
-            <CreditCard className="h-4 w-4" />
-            Subscribe Now
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Redirecting to checkout...
+              </>
+            ) : (
+              <>
+                <CreditCard className="h-4 w-4" />
+                Subscribe Now
+              </>
+            )}
           </Button>
           <Button
             variant="outline"

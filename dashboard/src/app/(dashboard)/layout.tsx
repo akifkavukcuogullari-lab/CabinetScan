@@ -95,15 +95,17 @@ export default async function DashboardLayout({
       showroom?.trial_ends_at &&
       new Date(showroom.trial_ends_at) < new Date()
 
-    if (isTrialExpired) {
-      redirect('/trial-expired')
-    }
-
-    // Block access for suspended or canceled subscriptions
+    // Block access for suspended subscriptions (admin action - no self-service)
     if (showroom?.subscription_status === 'suspended') {
       redirect('/account-suspended')
     }
 
+    // For trial expired - redirect to trial-expired page
+    if (isTrialExpired) {
+      redirect('/trial-expired')
+    }
+
+    // For canceled - redirect to account-canceled page
     if (showroom?.subscription_status === 'canceled') {
       redirect('/account-canceled')
     }

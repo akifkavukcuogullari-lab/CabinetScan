@@ -110,6 +110,7 @@ serve(async (req) => {
         name,
         showroom_code,
         subscription_status,
+        trial_ends_at,
         subscription_plans (
           slug,
           has_video_capture,
@@ -242,7 +243,15 @@ serve(async (req) => {
 
     // Build video capture settings based on subscription
     const plan = showroom.subscription_plans as any
-    const isSubscriptionActive = ['trial', 'active'].includes(showroom.subscription_status)
+
+    // Check if trial has expired
+    const isTrialExpired = showroom.subscription_status === 'trial' &&
+      showroom.trial_ends_at &&
+      new Date(showroom.trial_ends_at) < new Date()
+
+    // Subscription is active if status is 'active' OR ('trial' and not expired)
+    const isSubscriptionActive = showroom.subscription_status === 'active' ||
+      (showroom.subscription_status === 'trial' && !isTrialExpired)
 
     console.log(`[VIDEO CAPTURE] Showroom: ${showroom.name}`)
     console.log(`[VIDEO CAPTURE] Subscription status: ${showroom.subscription_status}`)
