@@ -258,54 +258,44 @@ export default function ProjectsPage() {
     )
   }
 
-  // Show blocked view if ANY plan limit is exceeded
-  if (hasAnyLimitExceeded) {
-    const exceededMessages = getExceededLimitMessage()
-    return (
-      <div className="max-w-full space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Projects</h1>
-          <p className="text-gray-500">View and manage customer room scans and selections</p>
-        </div>
-
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="py-16 text-center">
-            <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-6">
-              <Lock className="h-10 w-10 text-red-600" />
-            </div>
-            <h3 className="text-xl font-medium mb-2 text-red-800">Plan Limit Exceeded</h3>
-            <p className="text-red-700 max-w-md mx-auto mb-2">
-              You have exceeded one or more limits on your current plan:
-            </p>
-            <div className="flex flex-wrap justify-center gap-2 mb-4">
-              {exceededMessages.map((msg, idx) => (
-                <Badge key={idx} variant="destructive" className="text-sm">
-                  {msg}
-                </Badge>
-              ))}
-            </div>
-            <p className="text-gray-600 max-w-md mx-auto mb-6">
-              Upgrade your plan to unlock projects and continue receiving new submissions.
-              New customer submissions are paused until limits are resolved.
-            </p>
-            <Button asChild className="bg-red-600 hover:bg-red-700">
-              <Link href="/showroom/billing">
-                <TrendingUp className="h-4 w-4 mr-2" />
-                Upgrade Plan
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   return (
     <div className="max-w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Projects</h1>
         <p className="text-gray-500">View and manage customer room scans and selections</p>
       </div>
+
+      {/* Warning Banner when limits exceeded - new submissions blocked */}
+      {hasAnyLimitExceeded && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <Lock className="h-6 w-6 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-medium text-amber-800">New Submissions Paused</h3>
+                <p className="text-sm text-amber-700 mt-1">
+                  Plan limits exceeded. New customer submissions from the iOS app are blocked until resolved.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {getExceededLimitMessage().map((msg, idx) => (
+                    <Badge key={idx} variant="outline" className="border-amber-400 text-amber-800 text-xs">
+                      {msg}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              <Button asChild size="sm" className="flex-shrink-0 bg-amber-600 hover:bg-amber-700">
+                <Link href="/showroom/billing">
+                  <TrendingUp className="h-4 w-4 mr-1" />
+                  Upgrade
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters Section */}
       <Card>
