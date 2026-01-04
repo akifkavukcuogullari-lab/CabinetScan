@@ -69,8 +69,32 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  // Check if project limit is exceeded
-  const isProjectLimitExceeded = usage.projects.exceeded && !usage.projects.unlimited
+  // Check if ANY plan limit is exceeded (blocks new projects)
+  const exceededLimits = {
+    projects: usage.projects.exceeded && !usage.projects.unlimited,
+    products: usage.products.exceeded && !usage.products.unlimited,
+    storage: usage.storage.exceeded && !usage.storage.unlimited,
+    teamMembers: usage.teamMembers.exceeded && !usage.teamMembers.unlimited,
+  }
+  const hasAnyLimitExceeded = Object.values(exceededLimits).some(Boolean)
+
+  // Get the exceeded limit details for display
+  const getExceededLimitMessage = () => {
+    const messages: string[] = []
+    if (exceededLimits.projects) {
+      messages.push(`Projects: ${usage.projects.current}/${usage.projects.limit}`)
+    }
+    if (exceededLimits.products) {
+      messages.push(`Products: ${usage.products.current}/${usage.products.limit}`)
+    }
+    if (exceededLimits.storage) {
+      messages.push(`Storage: ${usage.storage.current}GB/${usage.storage.limit}GB`)
+    }
+    if (exceededLimits.teamMembers) {
+      messages.push(`Team Members: ${usage.teamMembers.current}/${usage.teamMembers.limit}`)
+    }
+    return messages
+  }
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState('')
@@ -234,8 +258,9 @@ export default function ProjectsPage() {
     )
   }
 
-  // Show blocked view if project limit is exceeded
-  if (isProjectLimitExceeded) {
+  // Show blocked view if ANY plan limit is exceeded
+  if (hasAnyLimitExceeded) {
+    const exceededMessages = getExceededLimitMessage()
     return (
       <div className="max-w-full space-y-6">
         <div>
@@ -248,13 +273,20 @@ export default function ProjectsPage() {
             <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-6">
               <Lock className="h-10 w-10 text-red-600" />
             </div>
-            <h3 className="text-xl font-medium mb-2 text-red-800">Project Limit Exceeded</h3>
+            <h3 className="text-xl font-medium mb-2 text-red-800">Plan Limit Exceeded</h3>
             <p className="text-red-700 max-w-md mx-auto mb-2">
-              You have exceeded your monthly project limit ({usage.projects.current}/{usage.projects.limit} projects).
+              You have exceeded one or more limits on your current plan:
             </p>
+            <div className="flex flex-wrap justify-center gap-2 mb-4">
+              {exceededMessages.map((msg, idx) => (
+                <Badge key={idx} variant="destructive" className="text-sm">
+                  {msg}
+                </Badge>
+              ))}
+            </div>
             <p className="text-gray-600 max-w-md mx-auto mb-6">
-              Upgrade your plan to view all projects and continue receiving new submissions.
-              Your customers can still submit projects - they will be available after you upgrade.
+              Upgrade your plan to unlock projects and continue receiving new submissions.
+              New customer submissions are paused until limits are resolved.
             </p>
             <Button asChild className="bg-red-600 hover:bg-red-700">
               <Link href="/showroom/billing">

@@ -577,6 +577,72 @@ serve(async (req) => {
       )
     }
 
+    // Check subscription plan limits
+    logTiming('Before plan limit check')
+    const { data: showroomWithPlan } = await supabaseAdmin
+      .from('showrooms')
+      .select(`
+        subscription_status,
+        project_count_this_period,
+        product_count,
+        storage_used_bytes,
+        team_member_count,
+        subscription_plans (
+          project_limit,
+          product_limit,
+          storage_limit_gb,
+          team_member_limit
+        )
+      `)
+      .eq('id', submission.showroom_id)
+      .single()
+
+    if (showroomWithPlan?.subscription_plans) {
+      const plan = showroomWithPlan.subscription_plans as any
+      const exceededLimits: string[] = []
+
+      // Check project limit
+      if (plan.project_limit !== null && showroomWithPlan.project_count_this_period >= plan.project_limit) {
+        exceededLimits.push(`Projects: ${showroomWithPlan.project_count_this_period}/${plan.project_limit}`)
+      }
+
+      // Check product limit
+      if (plan.product_limit !== null && showroomWithPlan.product_count >= plan.product_limit) {
+        exceededLimits.push(`Products: ${showroomWithPlan.product_count}/${plan.product_limit}`)
+      }
+
+      // Check storage limit (convert bytes to GB)
+      if (plan.storage_limit_gb !== null) {
+        const storageUsedGb = (showroomWithPlan.storage_used_bytes || 0) / (1024 * 1024 * 1024)
+        if (storageUsedGb >= plan.storage_limit_gb) {
+          exceededLimits.push(`Storage: ${storageUsedGb.toFixed(1)}GB/${plan.storage_limit_gb}GB`)
+        }
+      }
+
+      // Check team member limit
+      if (plan.team_member_limit !== null && showroomWithPlan.team_member_count > plan.team_member_limit) {
+        exceededLimits.push(`Team Members: ${showroomWithPlan.team_member_count}/${plan.team_member_limit}`)
+      }
+
+      // Reject if any limit is exceeded
+      if (exceededLimits.length > 0) {
+        console.log(`[LIMIT] Submission blocked - limits exceeded: ${exceededLimits.join(', ')}`)
+        return new Response(
+          JSON.stringify({
+            error: 'Plan limit exceeded',
+            message: 'Your showroom has exceeded one or more plan limits. Please upgrade your plan to continue accepting submissions.',
+            exceeded_limits: exceededLimits,
+            code: 'PLAN_LIMIT_EXCEEDED',
+          }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        )
+      }
+    }
+    logTiming('After plan limit check')
+
     // Generate unique reference number
     let referenceNumber = generateReferenceNumber()
     let attempts = 0
