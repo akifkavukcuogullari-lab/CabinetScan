@@ -183,3 +183,16 @@ struct SubmissionResponse: Codable {
         case showroomName = "showroom_name"
     }
 }
+
+// MARK: - API Error Response
+struct APIErrorResponse: Codable {
+    let error: String?
+    let message: String?
+    let customerMessage: String?
+    let code: String?
+
+    enum CodingKeys: String, CodingKey {
+        case error, message, code
+        case customerMessage = "customer_message"
+    }
+}

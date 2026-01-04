@@ -105,18 +105,32 @@ actor APIService {
             throw APIError.invalidResponse
         }
 
-        // Try to decode response
-        do {
-            let submissionResponse = try decoder.decode(SubmissionResponse.self, from: data)
-
-            guard httpResponse.statusCode == 201 else {
-                throw APIError.submissionFailed(message: submissionResponse.error ?? "Server error (code: \(httpResponse.statusCode))")
+        // Handle error status codes first
+        if httpResponse.statusCode != 201 {
+            // Try to parse error response
+            if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data) {
+                // Use customer-friendly message if available (for plan limit errors)
+                if let customerMessage = errorResponse.customerMessage {
+                    throw APIError.submissionFailed(message: customerMessage)
+                }
+                // Otherwise use the message or error field
+                let errorMessage = errorResponse.message ?? errorResponse.error ?? "Server error (code: \(httpResponse.statusCode))"
+                throw APIError.submissionFailed(message: errorMessage)
             }
 
+            // Log raw response for debugging
+            if let errorString = String(data: data, encoding: .utf8) {
+                Config.logError("❌ Raw error response: \(errorString)")
+            }
+            throw APIError.submissionFailed(message: "Server error (code: \(httpResponse.statusCode)). Please try again.")
+        }
+
+        // Try to decode success response
+        do {
+            let submissionResponse = try decoder.decode(SubmissionResponse.self, from: data)
             return submissionResponse
         } catch let decodingError as DecodingError {
             Config.logError("❌ Failed to decode response: \(decodingError)")
-            // Try to get raw error message from response
             if let errorString = String(data: data, encoding: .utf8) {
                 Config.logError("❌ Raw response: \(errorString)")
             }
