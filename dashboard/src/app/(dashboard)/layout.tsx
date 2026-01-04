@@ -90,6 +90,15 @@ export default async function DashboardLayout({
 
     subscriptionData = showroom
 
+    // Check if trial has expired
+    const isTrialExpired = showroom?.subscription_status === 'trial' &&
+      showroom?.trial_ends_at &&
+      new Date(showroom.trial_ends_at) < new Date()
+
+    if (isTrialExpired) {
+      redirect('/trial-expired')
+    }
+
     // Block access for suspended or canceled subscriptions
     if (showroom?.subscription_status === 'suspended') {
       redirect('/account-suspended')

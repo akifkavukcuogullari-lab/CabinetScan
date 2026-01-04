@@ -583,6 +583,7 @@ serve(async (req) => {
       .from('showrooms')
       .select(`
         subscription_status,
+        trial_ends_at,
         project_count_this_period,
         product_count,
         storage_used_bytes,
@@ -607,6 +608,27 @@ serve(async (req) => {
           message: 'This showroom subscription is no longer active.',
           customer_message: 'This showroom is currently unavailable. Please contact the showroom directly for assistance.',
           code: 'SUBSCRIPTION_INACTIVE',
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
+    }
+
+    // Check if trial has expired
+    const isTrialExpired = showroomWithPlan?.subscription_status === 'trial' &&
+      showroomWithPlan?.trial_ends_at &&
+      new Date(showroomWithPlan.trial_ends_at) < new Date()
+
+    if (isTrialExpired) {
+      console.log(`[SUBSCRIPTION] Submission blocked - trial expired`)
+      return new Response(
+        JSON.stringify({
+          error: 'Trial expired',
+          message: 'This showroom trial has expired.',
+          customer_message: 'This showroom is currently unavailable. Please contact the showroom directly for assistance.',
+          code: 'TRIAL_EXPIRED',
         }),
         {
           status: 403,
