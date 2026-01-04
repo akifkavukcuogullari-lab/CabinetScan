@@ -265,15 +265,20 @@ serve(async (req) => {
     // Check if product selection is available for this plan (Starter = scan-only)
     const hasProductSelection = plan?.has_product_selection ?? false
 
+    // Default CabinetScan branding for Starter plan
+    const CABINETSCAN_LOGO = 'https://wnyrnpeabhxdqvcpofmb.supabase.co/storage/v1/object/public/logos/cabinetscan-logo.png'
+    const CABINETSCAN_LOGO_DARK = 'https://wnyrnpeabhxdqvcpofmb.supabase.co/storage/v1/object/public/logos/cabinetscan-logo-dark.png'
+
     const config: ShowroomConfig = {
       id: showroom.id,
-      name: showroom.name,
+      // Show "CabinetScan" for Starter plan, actual showroom name for Pro+
+      name: hasCustomBranding ? showroom.name : 'CabinetScan',
       showroom_code: showroom.showroom_code,
       branding: branding
         ? {
-            // Only include logo/colors if plan has custom branding feature (Pro+)
-            logo_url: hasCustomBranding ? branding.logo_url : null,
-            logo_dark_url: hasCustomBranding ? branding.logo_dark_url : null,
+            // Use CabinetScan logo for Starter, custom logo for Pro+
+            logo_url: hasCustomBranding ? branding.logo_url : CABINETSCAN_LOGO,
+            logo_dark_url: hasCustomBranding ? branding.logo_dark_url : CABINETSCAN_LOGO_DARK,
             primary_color: hasCustomBranding ? branding.primary_color : '#2563EB',
             secondary_color: hasCustomBranding ? branding.secondary_color : '#1E40AF',
             accent_color: hasCustomBranding ? branding.accent_color : '#3B82F6',
@@ -285,8 +290,9 @@ serve(async (req) => {
             privacy_url: branding.privacy_url,
           }
         : {
-            logo_url: null,
-            logo_dark_url: null,
+            // Default CabinetScan branding when no branding record exists
+            logo_url: CABINETSCAN_LOGO,
+            logo_dark_url: CABINETSCAN_LOGO_DARK,
             primary_color: '#2563EB',
             secondary_color: '#1E40AF',
             accent_color: '#3B82F6',
