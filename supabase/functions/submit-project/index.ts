@@ -630,7 +630,8 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({
             error: 'Plan limit exceeded',
-            message: 'Your showroom has exceeded one or more plan limits. Please upgrade your plan to continue accepting submissions.',
+            message: 'This showroom is currently unable to accept new submissions.',
+            customer_message: 'We are temporarily unable to accept new submissions. Please contact the showroom directly for assistance.',
             exceeded_limits: exceededLimits,
             code: 'PLAN_LIMIT_EXCEEDED',
           }),
