@@ -2,7 +2,7 @@
  * Subscription feature gating utilities
  */
 
-export type SubscriptionPlan = 'trial' | 'basic' | 'pro' | 'enterprise'
+export type SubscriptionPlan = 'trial' | 'starter' | 'pro' | 'business' | 'enterprise'
 export type SubscriptionStatus = 'trial' | 'active' | 'past_due' | 'canceled' | 'suspended'
 
 export interface SubscriptionInfo {
@@ -17,8 +17,10 @@ export interface SubscriptionInfo {
 
 export interface PlanFeatures {
   projectLimit: number | null
+  productLimit: number | null
   storageGb: number | null
   teamMembers: number | null
+  retentionDays: number | null
   webhookAccess: boolean
   apiAccess: boolean
   autocadExport: boolean
@@ -26,28 +28,20 @@ export interface PlanFeatures {
   crmIntegration: boolean
   aiAgent: boolean
   customBranding: boolean
-  viewer3D: boolean
+  productSelection: boolean
+  emailToCustomer: boolean
+  photosVideo: boolean
 }
 
 // Plan feature definitions
 const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
   trial: {
-    projectLimit: 5,
-    storageGb: 1,
-    teamMembers: 1,
-    webhookAccess: true,  // Trial gets Pro features
-    apiAccess: true,
-    autocadExport: true,
-    prioritySupport: false,
-    crmIntegration: false,
-    aiAgent: false,
-    customBranding: true,
-    viewer3D: true,       // Trial gets Pro features
-  },
-  basic: {
+    // Trial gets selected plan features (this is a fallback for trial period)
     projectLimit: 20,
+    productLimit: null,
     storageGb: 5,
-    teamMembers: 3,
+    teamMembers: 1,
+    retentionDays: 30,
     webhookAccess: false,
     apiAccess: false,
     autocadExport: false,
@@ -55,12 +49,50 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     crmIntegration: false,
     aiAgent: false,
     customBranding: true,
-    viewer3D: false,      // Basic doesn't get 3D viewer
+    productSelection: false,
+    emailToCustomer: false,
+    photosVideo: true,
+  },
+  starter: {
+    projectLimit: 20,
+    productLimit: null, // No products for Starter
+    storageGb: 5,
+    teamMembers: 1,
+    retentionDays: 30,
+    webhookAccess: false,
+    apiAccess: false,
+    autocadExport: false,
+    prioritySupport: false,
+    crmIntegration: false,
+    aiAgent: false,
+    customBranding: true,
+    productSelection: false, // Scan-only, no product selection
+    emailToCustomer: false,
+    photosVideo: true,
   },
   pro: {
-    projectLimit: null, // unlimited
+    projectLimit: 100,
+    productLimit: 100,
     storageGb: 50,
+    teamMembers: 3,
+    retentionDays: 60,
+    webhookAccess: false,
+    apiAccess: false,
+    autocadExport: true,
+    prioritySupport: true,
+    crmIntegration: false,
+    aiAgent: false,
+    customBranding: true,
+    productSelection: true,
+    emailToCustomer: false,
+    photosVideo: true,
+  },
+  business: {
+    projectLimit: null, // Unlimited
+    productLimit: 300,
+    storageGb: 100,
     teamMembers: 10,
+    retentionDays: 90,
     webhookAccess: true,
     apiAccess: true,
     autocadExport: true,
@@ -68,12 +100,16 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     crmIntegration: false,
     aiAgent: true,
     customBranding: true,
-    viewer3D: true,
+    productSelection: true,
+    emailToCustomer: true,
+    photosVideo: true,
   },
   enterprise: {
     projectLimit: null,
-    storageGb: null, // unlimited
-    teamMembers: null, // unlimited
+    productLimit: null, // Unlimited
+    storageGb: null, // Unlimited
+    teamMembers: null, // Unlimited
+    retentionDays: null, // Never archived
     webhookAccess: true,
     apiAccess: true,
     autocadExport: true,
@@ -81,7 +117,9 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     crmIntegration: true,
     aiAgent: true,
     customBranding: true,
-    viewer3D: true,
+    productSelection: true,
+    emailToCustomer: true,
+    photosVideo: true,
   },
 }
 
@@ -184,16 +222,20 @@ export function getTrialDaysRemaining(trialEndsAt: Date | null): number {
  */
 export const featureNames: Record<keyof PlanFeatures, string> = {
   projectLimit: 'Projects per month',
+  productLimit: 'Products',
   storageGb: 'Storage',
   teamMembers: 'Team members',
+  retentionDays: 'Project retention',
   webhookAccess: 'Webhooks',
   apiAccess: 'API access',
   autocadExport: 'AutoCAD export',
   prioritySupport: 'Priority support',
   crmIntegration: 'CRM integration',
-  aiAgent: 'AI processing agent',
+  aiAgent: 'AI-generated quotes',
   customBranding: 'Custom branding',
-  viewer3D: '3D Model Viewer',
+  productSelection: 'Product selection',
+  emailToCustomer: 'Email to customer',
+  photosVideo: 'Photos & video',
 }
 
 /**
@@ -203,7 +245,7 @@ export function getRequiredPlanForFeature(
   feature: keyof PlanFeatures
 ): SubscriptionPlan | null {
   // Check paid plans only (skip trial)
-  const plansInOrder: SubscriptionPlan[] = ['basic', 'pro', 'enterprise']
+  const plansInOrder: SubscriptionPlan[] = ['starter', 'pro', 'business', 'enterprise']
 
   for (const plan of plansInOrder) {
     if (hasFeature(plan, feature)) {

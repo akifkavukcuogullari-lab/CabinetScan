@@ -5,7 +5,7 @@ import { stripe, isStripeConfigured, PRICE_IDS, DASHBOARD_URL } from '../_shared
 
 interface CheckoutRequest {
   showroom_id: string
-  plan_slug: 'basic' | 'pro'
+  plan_slug: 'starter' | 'pro' | 'business'
   billing_period: 'monthly' | 'yearly'
   success_url?: string
   cancel_url?: string

@@ -491,6 +491,11 @@ async function callWebhook(
 }
 
 serve(async (req) => {
+  const startTime = Date.now()
+  const logTiming = (step: string) => {
+    console.log(`[TIMING] ${step}: ${Date.now() - startTime}ms`)
+  }
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -507,7 +512,9 @@ serve(async (req) => {
   }
 
   try {
+    logTiming('Start')
     const submission: ProjectSubmission = await req.json()
+    logTiming('Parsed JSON')
 
     // Validate required fields
     if (!submission.showroom_id) {
@@ -551,12 +558,14 @@ serve(async (req) => {
     }
 
     // Verify showroom exists and is active
+    logTiming('Before showroom query')
     const { data: showroom, error: showroomError } = await supabaseAdmin
       .from('showrooms')
-      .select('id, name, showroom_code, webhook_url')
+      .select('id, name, showroom_code, webhook_url, notification_emails')
       .eq('id', submission.showroom_id)
       .eq('is_active', true)
       .single()
+    logTiming('After showroom query')
 
     if (showroomError || !showroom) {
       return new Response(
@@ -598,9 +607,11 @@ serve(async (req) => {
     }
 
     // Find or create customer
+    logTiming('Before customer lookup')
     let customerId: string
     try {
       customerId = await findOrCreateCustomer(submission.showroom_id, submission.customer)
+      logTiming('After customer lookup')
     } catch (err) {
       console.error('Error finding/creating customer:', err)
       return new Response(
@@ -613,6 +624,7 @@ serve(async (req) => {
     }
 
     // Create the project
+    logTiming('Before project creation')
     const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
       .insert({
@@ -640,6 +652,8 @@ serve(async (req) => {
       .select()
       .single()
 
+    logTiming('After project creation')
+
     if (projectError) {
       console.error('Error creating project:', projectError)
       return new Response(
@@ -652,6 +666,7 @@ serve(async (req) => {
     }
 
     // Create measurements if provided
+    logTiming('Before measurements')
     if (submission.measurements?.roomplan_data) {
       const measurementData: Record<string, unknown> = {
         project_id: project.id,
@@ -696,8 +711,10 @@ serve(async (req) => {
         // Don't fail the whole submission, just log
       }
     }
+    logTiming('After measurements')
 
     // Create product selections
+    logTiming('Before selections')
     let cabinetColorCoefficient = 1.0 // Default coefficient from Cabinet Model color variant
 
     if (submission.selections && submission.selections.length > 0) {
@@ -780,8 +797,10 @@ serve(async (req) => {
         }
       }
     }
+    logTiming('After selections')
 
     // Create addon selections
+    logTiming('Before addon selections')
     if (submission.addon_selections && submission.addon_selections.length > 0) {
       // Fetch addon details for snapshots (including use_color_coefficient)
       const addonIds = submission.addon_selections.map((s) => s.addon_id)
@@ -825,24 +844,27 @@ serve(async (req) => {
         }
       }
     }
+    logTiming('After addon selections')
 
-    // Build and save webhook payload (always save if showroom has webhook configured)
+    // Build and save webhook payload asynchronously (non-blocking)
     // This allows viewing the payload in the dashboard even if webhook delivery fails
+    logTiming('Before webhook payload async')
     if (showroom.webhook_url) {
-      // Build webhook payload
-      const webhookPayload = await buildWebhookPayload({
+      // Build webhook payload asynchronously - don't block response
+      buildWebhookPayload({
         project,
         referenceNumber,
         showroom,
         submission,
         customerId,
       })
-
-      // Save webhook payload to project (for Create Quote button to use later)
-      supabaseAdmin
-        .from('projects')
-        .update({ webhook_payload: webhookPayload })
-        .eq('id', project.id)
+        .then((webhookPayload) => {
+          // Save webhook payload to project (for Create Quote button to use later)
+          return supabaseAdmin
+            .from('projects')
+            .update({ webhook_payload: webhookPayload })
+            .eq('id', project.id)
+        })
         .then(({ error }) => {
           if (error) {
             console.error('Error saving webhook payload:', error)
@@ -850,10 +872,15 @@ serve(async (req) => {
             console.log(`[WEBHOOK] Saved webhook payload for project ${project.id}`)
           }
         })
+        .catch((err) => {
+          console.error('Error building/saving webhook payload:', err)
+        })
 
       // NOTE: Webhook is NOT called automatically on submission
       // It will only be triggered when "Create Quote" button is clicked in dashboard
     }
+
+    logTiming('After webhook payload started (async)')
 
     // Send email notifications (async, non-blocking)
     if (showroom.notification_emails) {
@@ -907,6 +934,7 @@ serve(async (req) => {
       }
     }
 
+    logTiming('Returning response')
     return new Response(
       JSON.stringify({
         success: true,

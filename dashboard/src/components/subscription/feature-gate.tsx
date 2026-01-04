@@ -142,7 +142,7 @@ function UpgradePromptCard({
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         feature={feature}
-        currentPlan={currentPlan as 'trial' | 'basic' | 'pro' | 'enterprise' | null}
+        currentPlan={currentPlan as 'trial' | 'starter' | 'pro' | 'business' | 'enterprise' | null}
       />
     </>
   )

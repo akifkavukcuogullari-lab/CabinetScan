@@ -32,18 +32,23 @@ interface UpgradeModalProps {
 const planInfo: Record<SubscriptionPlan, { name: string; price: string; description: string }> = {
   trial: {
     name: 'Free Trial',
-    price: 'Free for 7 days',
-    description: 'Full Pro features during trial',
+    price: 'Free for 14 days',
+    description: 'Try selected plan features',
   },
-  basic: {
-    name: 'Basic',
-    price: '$99/month',
-    description: 'Essential features for small showrooms',
+  starter: {
+    name: 'Starter',
+    price: '$49/month',
+    description: 'Scan-only plan for small showrooms',
   },
   pro: {
     name: 'Pro',
-    price: '$249/month',
-    description: 'Advanced features for growing businesses',
+    price: '$149/month',
+    description: 'For growing showrooms with product catalogs',
+  },
+  business: {
+    name: 'Business',
+    price: '$299/month',
+    description: 'For power users with automation needs',
   },
   enterprise: {
     name: 'Enterprise',

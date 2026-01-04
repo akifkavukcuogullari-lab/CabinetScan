@@ -31,6 +31,7 @@ import {
   Loader2,
   Sparkles,
   Zap,
+  Briefcase,
   Building2,
   AlertTriangle,
 } from 'lucide-react'
@@ -307,10 +308,12 @@ export default function BillingPage() {
 
   const getPlanIcon = (slug: string) => {
     switch (slug) {
-      case 'basic':
+      case 'starter':
         return <Zap className="h-5 w-5" />
       case 'pro':
         return <Sparkles className="h-5 w-5" />
+      case 'business':
+        return <Briefcase className="h-5 w-5" />
       case 'enterprise':
         return <Building2 className="h-5 w-5" />
       default:
@@ -379,7 +382,7 @@ export default function BillingPage() {
                     <p className="font-semibold text-lg">Free Trial</p>
                     <p className="text-sm text-gray-500">
                       {trialDays > 0
-                        ? `${trialDays} days remaining with full Pro features`
+                        ? `${trialDays} days remaining`
                         : 'Trial expired'}
                     </p>
                   </div>
@@ -460,28 +463,11 @@ export default function BillingPage() {
                 <Sparkles className="h-5 w-5 text-purple-500 mt-0.5" />
                 <div>
                   <p className="font-medium text-purple-900">
-                    7-Day Free Trial with Full Pro Features
+                    14-Day Free Trial
                   </p>
                   <p className="text-sm text-purple-700 mt-1">
-                    You have access to all Pro features during your trial, including:
+                    Explore all features during your trial period. Choose a plan below to continue after your trial ends.
                   </p>
-                  <ul className="text-sm text-purple-700 mt-2 space-y-1">
-                    <li className="flex items-center gap-2">
-                      <Check className="h-3 w-3" /> Unlimited projects
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-3 w-3" /> Up to 500 products
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-3 w-3" /> 100GB storage
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-3 w-3" /> API & Webhook access
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-3 w-3" /> HD scans & AutoCAD export
-                    </li>
-                  </ul>
                 </div>
               </div>
             </div>
@@ -513,7 +499,7 @@ export default function BillingPage() {
           <p className="text-sm text-gray-500 mt-1">All plans are billed monthly</p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
           {plans
             .filter((p) => p.slug !== 'trial')
             .map((plan) => {

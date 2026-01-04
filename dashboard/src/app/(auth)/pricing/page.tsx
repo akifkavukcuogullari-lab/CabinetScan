@@ -1,59 +1,85 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Check, Zap, Sparkles, Building2 } from "lucide-react";
+import { ArrowLeft, Check, Zap, Sparkles, Briefcase, Building2 } from "lucide-react";
 
 const plans = [
   {
-    name: "Basic",
-    slug: "basic",
-    price: 149,
-    description: "For small showrooms getting started",
+    name: "Starter",
+    slug: "starter",
+    price: 49,
+    yearlyPrice: 470,
+    description: "Scan-only plan for small showrooms",
     icon: Zap,
     iconColor: "from-blue-500 to-blue-600",
+    retention: "30 days",
     features: [
-      "Up to 40 projects/month",
-      "Up to 50 products",
-      "2 team members",
-      "10 GB storage",
+      "20 projects/month",
+      "3D room scanning",
+      "Floor plans",
+      "Photos & video",
+      "5 GB storage",
+      "1 team member",
+      "30-day project retention",
       "Email support",
     ],
   },
   {
     name: "Pro",
     slug: "pro",
-    price: 299,
-    description: "For growing showrooms with advanced needs",
+    price: 149,
+    yearlyPrice: 1430,
+    description: "For growing showrooms with product catalogs",
     icon: Sparkles,
     iconColor: "from-purple-500 to-purple-600",
     isFeatured: true,
+    retention: "60 days",
+    features: [
+      "100 projects/month",
+      "100 products",
+      "Product selection",
+      "AutoCAD export",
+      "50 GB storage",
+      "3 team members",
+      "60-day project retention",
+      "Priority support",
+    ],
+  },
+  {
+    name: "Business",
+    slug: "business",
+    price: 299,
+    yearlyPrice: 2870,
+    description: "For power users with automation needs",
+    icon: Briefcase,
+    iconColor: "from-orange-500 to-orange-600",
+    retention: "90 days",
     features: [
       "Unlimited projects",
-      "Up to 500 products",
-      "100 GB storage",
-      "Priority support",
-      "API & Webhook access",
-      "AutoCAD export",
-      "Up to 5 team members",
-      "AI generated quotes",
+      "300 products",
+      "API & Webhooks",
+      "AI-generated quotes",
       "Email to customer",
+      "100 GB storage",
+      "10 team members",
+      "90-day project retention",
     ],
   },
   {
     name: "Enterprise",
     slug: "enterprise",
     price: null,
-    description: "For large operations needing custom solutions",
+    description: "Custom solutions for large enterprises",
     icon: Building2,
     iconColor: "from-slate-700 to-slate-800",
+    retention: "Forever",
     features: [
-      "Everything in Pro",
+      "Everything in Business",
       "Unlimited products",
       "Unlimited storage",
       "Unlimited team members",
       "CRM integration",
       "AI-powered insights",
       "Dedicated account manager",
-      "Custom onboarding",
       "SLA guarantee",
     ],
   },
@@ -113,19 +139,19 @@ export default function PricingPage() {
           {/* Header */}
           <div className="text-center mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-50 text-green-700 text-sm font-medium mb-6">
-              1 Week Free Trial on All Plans
+              14-Day Free Trial on All Plans
             </div>
             <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
               Simple, Transparent Pricing
             </h1>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Choose the plan that fits your showroom. All plans include a 7-day free trial
-              with full access to Pro features.
+              Choose the plan that fits your showroom. All plans include a 14-day free trial
+              with full access to your selected plan&apos;s features.
             </p>
           </div>
 
           {/* Pricing Cards */}
-          <div className="grid md:grid-cols-3 gap-6 mb-16">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
             {plans.map((plan) => {
               const Icon = plan.icon;
               return (
@@ -216,15 +242,14 @@ export default function PricingPage() {
               <div className="p-6 rounded-xl bg-gray-50 border border-gray-100">
                 <h3 className="font-semibold text-gray-900 mb-2">What happens after the free trial?</h3>
                 <p className="text-gray-600 text-sm">
-                  After your 7-day trial ends, you&apos;ll be prompted to choose a plan. Your data and
+                  After your 14-day trial ends, you&apos;ll be prompted to choose a plan. Your data and
                   settings are preserved, and you can continue using CabinetScan by selecting a subscription.
                 </p>
               </div>
               <div className="p-6 rounded-xl bg-gray-50 border border-gray-100">
                 <h3 className="font-semibold text-gray-900 mb-2">Do you offer annual billing?</h3>
                 <p className="text-gray-600 text-sm">
-                  Currently, all plans are billed monthly for flexibility. Contact us if you&apos;re
-                  interested in annual billing options with additional savings.
+                  Yes! Save 20% with annual billing. Contact us or select the annual option when subscribing.
                 </p>
               </div>
               <div className="p-6 rounded-xl bg-gray-50 border border-gray-100">
@@ -244,7 +269,7 @@ export default function PricingPage() {
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-3xl font-bold text-white mb-4">Ready to Transform Your Showroom?</h2>
           <p className="text-lg text-gray-300 mb-8">
-            Start your free 7-day trial today. No credit card required.
+            Start your free 14-day trial today. No credit card required.
           </p>
           <Link
             href="/contact"
