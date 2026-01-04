@@ -910,7 +910,7 @@ export default function SettingsPage() {
             {!canUseWebhooks && (
               <Badge variant="secondary" className="ml-2 gap-1">
                 <Lock className="h-3 w-3" />
-                Pro
+                Business
               </Badge>
             )}
           </CardTitle>
@@ -1141,7 +1141,7 @@ export default function SettingsPage() {
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 mb-4">
                 <Sparkles className="h-6 w-6 text-blue-600" />
               </div>
-              <h3 className="text-lg font-medium mb-2">Upgrade to Pro</h3>
+              <h3 className="text-lg font-medium mb-2">Upgrade to Business</h3>
               <p className="text-gray-500 mb-4 max-w-md mx-auto">
                 {getUpgradeReason('webhookAccess')}
               </p>
@@ -1164,7 +1164,7 @@ export default function SettingsPage() {
             {!canUseWebhooks && (
               <Badge variant="secondary" className="ml-2 gap-1">
                 <Lock className="h-3 w-3" />
-                Pro
+                Business
               </Badge>
             )}
           </CardTitle>
@@ -1259,7 +1259,7 @@ export default function SettingsPage() {
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 mb-4">
                 <Sparkles className="h-6 w-6 text-blue-600" />
               </div>
-              <h3 className="text-lg font-medium mb-2">Upgrade to Pro</h3>
+              <h3 className="text-lg font-medium mb-2">Upgrade to Business</h3>
               <p className="text-gray-500 mb-4 max-w-md mx-auto">
                 {getUpgradeReason('webhookAccess')}
               </p>

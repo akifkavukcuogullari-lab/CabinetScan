@@ -100,7 +100,7 @@ export default function ContactPage() {
                   <h2 className="text-lg font-semibold text-gray-900 mb-1">Start Your Free Trial</h2>
                   <p className="text-gray-600">
                     Interested in trying CabinetScan? Send us an email and let us know you&apos;d like to start
-                    your 7-day free trial. We&apos;ll send you an invitation email soon to get you started.
+                    your 14-day free trial. We&apos;ll send you an invitation email soon to get you started.
                   </p>
                 </div>
               </div>

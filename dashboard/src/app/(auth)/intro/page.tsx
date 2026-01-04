@@ -54,7 +54,7 @@ export default function IntroPage() {
       <section className="pt-32 pb-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-50 text-green-700 text-sm font-medium mb-8">
-            1 Week Free Trial
+            14-Day Free Trial
           </div>
 
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight mb-6">
@@ -317,13 +317,13 @@ export default function IntroPage() {
             <Mail className="w-8 h-8 text-purple-600" />
           </div>
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-pink-100 via-purple-100 to-indigo-100 text-purple-700 text-sm font-semibold mb-6">
-            1 Week Free Trial
+            14-Day Free Trial
           </div>
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
             Interested in CabinetScan?
           </h2>
           <p className="text-lg text-gray-600 mb-8">
-            Try CabinetScan free for one week — no commitment required.
+            Try CabinetScan free for 14 days — no credit card required.
             Contact us to get started and transform your showroom experience.
           </p>
           <a
