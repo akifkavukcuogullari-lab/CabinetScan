@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, Package, Sparkles } from 'lucide-react'
+import { Plus, Package, Sparkles, Lock } from 'lucide-react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
@@ -21,7 +21,7 @@ export default async function ProductsPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Get the user's showroom
+  // Get the user's showroom with subscription plan
   const { data: showroomUser } = await supabase
     .from('showroom_users')
     .select('showroom_id')
@@ -29,6 +29,15 @@ export default async function ProductsPage({
     .single()
 
   if (!showroomUser) redirect('/login')
+
+  // Check subscription plan for product selection feature
+  const { data: showroom } = await supabase
+    .from('showrooms')
+    .select('subscription_plan, subscription_plans(has_product_selection)')
+    .eq('id', showroomUser.showroom_id)
+    .single()
+
+  const hasProductSelection = (showroom?.subscription_plans as any)?.has_product_selection ?? false
 
   // Get categories with products for this showroom
   const { data: showroomCategories } = await supabase
@@ -73,6 +82,44 @@ export default async function ProductsPage({
     acc[sc.category_id] = sc
     return acc
   }, {} as Record<string, any>)
+
+  // Show locked state for Starter plan (no product selection)
+  if (!hasProductSelection) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            Products
+            <Lock className="h-5 w-5 text-gray-400" />
+          </h1>
+          <p className="text-gray-500">Manage your showroom products by category</p>
+        </div>
+
+        <Card className="border-2 border-dashed border-gray-300">
+          <CardContent className="py-16 text-center">
+            <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-6">
+              <Lock className="h-10 w-10 text-gray-400" />
+            </div>
+            <h3 className="text-xl font-medium text-gray-900 mb-2">Product Catalog Not Available</h3>
+            <p className="text-gray-600 max-w-md mx-auto mb-2">
+              The Starter plan is a scan-only plan. Product selection and catalog management
+              are available on Pro plan and above.
+            </p>
+            <p className="text-sm text-gray-500 max-w-md mx-auto mb-6">
+              Upgrade to Pro to create a product catalog that customers can browse and select
+              from during their room scan.
+            </p>
+            <Button asChild size="lg">
+              <Link href="/showroom/billing">
+                <Sparkles className="h-4 w-4 mr-2" />
+                Upgrade to Pro
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

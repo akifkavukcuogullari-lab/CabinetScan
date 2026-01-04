@@ -1,18 +1,24 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Upload, Loader2, X } from 'lucide-react'
+import { Upload, Loader2, X, Lock, Sparkles } from 'lucide-react'
+import { useSubscriptionContext } from '@/contexts/subscription-context'
 
 export default function BrandingPage() {
   const supabase = createClient()
   const logoInputRef = useRef<HTMLInputElement>(null)
   const logoDarkInputRef = useRef<HTMLInputElement>(null)
+  const { canUseFeature, subscription } = useSubscriptionContext()
+
+  // Check if custom branding (logo upload) is available
+  const canUseBranding = canUseFeature('customBranding')
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -186,149 +192,177 @@ export default function BrandingPage() {
           <TabsContent value="logo">
             <Card>
               <CardHeader>
-                <CardTitle>Logo</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  Logo
+                  {!canUseBranding && <Lock className="h-4 w-4 text-gray-400" />}
+                </CardTitle>
                 <CardDescription>
                   Upload your showroom logo for the iOS app
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Logo dimension guidelines */}
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm font-medium text-blue-800 mb-2">📐 Recommended Logo Specifications</p>
-                  <div className="grid grid-cols-2 gap-4 mt-3">
-                    <div>
-                      <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Ideal Size</p>
-                      <p className="text-lg font-bold text-blue-800">1000 × 400 px</p>
+                {/* Upgrade prompt for Starter plan */}
+                {!canUseBranding && (
+                  <div className="p-6 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg text-center">
+                    <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center mx-auto mb-4">
+                      <Lock className="h-8 w-8 text-gray-400" />
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Aspect Ratio</p>
-                      <p className="text-lg font-bold text-blue-800">2:1 to 4:1</p>
-                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Custom Logo Not Available</h3>
+                    <p className="text-sm text-gray-600 mb-4 max-w-md mx-auto">
+                      White-labeling with custom logos is available on Pro plan and above.
+                      Upgrade to display your showroom&apos;s logo in the iOS app.
+                    </p>
+                    <Button asChild>
+                      <Link href="/showroom/billing">
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Upgrade to Pro
+                      </Link>
+                    </Button>
                   </div>
-                  <ul className="text-sm text-blue-700 space-y-1 mt-3">
-                    <li>• <strong>Width:</strong> 800 - 1200 pixels (horizontal/wide logos work best)</li>
-                    <li>• <strong>Height:</strong> 300 - 500 pixels</li>
-                    <li>• <strong>Format:</strong> PNG with transparent background (recommended)</li>
-                    <li>• <strong>File size:</strong> Under 300KB for fast loading</li>
-                  </ul>
-                  <p className="text-xs text-blue-600 mt-3 italic">
-                    💡 These dimensions ensure your logo displays crisp and clear on all iPhone models including 3x Retina displays.
-                  </p>
-                </div>
+                )}
 
-                {/* Hidden file inputs */}
-                <input
-                  type="file"
-                  ref={logoInputRef}
-                  className="hidden"
-                  accept="image/*"
-                  onChange={(e) => handleLogoUpload(e, false)}
-                />
-                <input
-                  type="file"
-                  ref={logoDarkInputRef}
-                  className="hidden"
-                  accept="image/*"
-                  onChange={(e) => handleLogoUpload(e, true)}
-                />
-
-                <div className="space-y-2">
-                  <Label htmlFor="logoUrl">Logo (Light Mode)</Label>
-                  {formData.logoUrl ? (
-                    <div className="relative inline-block">
-                      <div className="p-4 bg-white border rounded-lg">
-                        <img
-                          src={formData.logoUrl}
-                          alt="Logo preview"
-                          className="max-h-24 object-contain"
-                        />
+                {/* Logo upload section - only shown for Pro+ */}
+                {canUseBranding && (
+                  <>
+                    {/* Logo dimension guidelines */}
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm font-medium text-blue-800 mb-2">📐 Recommended Logo Specifications</p>
+                      <div className="grid grid-cols-2 gap-4 mt-3">
+                        <div>
+                          <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Ideal Size</p>
+                          <p className="text-lg font-bold text-blue-800">1000 × 400 px</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Aspect Ratio</p>
+                          <p className="text-lg font-bold text-blue-800">2:1 to 4:1</p>
+                        </div>
                       </div>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="icon"
-                        className="absolute -top-2 -right-2 h-6 w-6"
-                        onClick={() => setFormData((prev) => ({ ...prev, logoUrl: '' }))}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
+                      <ul className="text-sm text-blue-700 space-y-1 mt-3">
+                        <li>• <strong>Width:</strong> 800 - 1200 pixels (horizontal/wide logos work best)</li>
+                        <li>• <strong>Height:</strong> 300 - 500 pixels</li>
+                        <li>• <strong>Format:</strong> PNG with transparent background (recommended)</li>
+                        <li>• <strong>File size:</strong> Under 300KB for fast loading</li>
+                      </ul>
+                      <p className="text-xs text-blue-600 mt-3 italic">
+                        💡 These dimensions ensure your logo displays crisp and clear on all iPhone models including 3x Retina displays.
+                      </p>
                     </div>
-                  ) : (
-                    <div
-                      onClick={() => logoInputRef.current?.click()}
-                      className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
-                    >
-                      {uploadingLogo ? (
-                        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-                      ) : (
-                        <>
-                          <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                          <p className="text-sm text-gray-500">Click to upload logo</p>
-                          <p className="text-xs text-gray-400">PNG, JPG, SVG</p>
-                        </>
-                      )}
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-500">
-                    Or enter a URL:
-                  </p>
-                  <Input
-                    id="logoUrl"
-                    name="logoUrl"
-                    value={formData.logoUrl}
-                    onChange={handleChange}
-                    placeholder="https://..."
-                  />
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="logoDarkUrl">Logo (Dark Mode) - Optional</Label>
-                  {formData.logoDarkUrl ? (
-                    <div className="relative inline-block">
-                      <div className="p-4 bg-gray-900 border rounded-lg">
-                        <img
-                          src={formData.logoDarkUrl}
-                          alt="Logo preview (dark)"
-                          className="max-h-24 object-contain"
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="icon"
-                        className="absolute -top-2 -right-2 h-6 w-6"
-                        onClick={() => setFormData((prev) => ({ ...prev, logoDarkUrl: '' }))}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div
-                      onClick={() => logoDarkInputRef.current?.click()}
-                      className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
-                    >
-                      {uploadingLogoDark ? (
-                        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                    {/* Hidden file inputs */}
+                    <input
+                      type="file"
+                      ref={logoInputRef}
+                      className="hidden"
+                      accept="image/*"
+                      onChange={(e) => handleLogoUpload(e, false)}
+                    />
+                    <input
+                      type="file"
+                      ref={logoDarkInputRef}
+                      className="hidden"
+                      accept="image/*"
+                      onChange={(e) => handleLogoUpload(e, true)}
+                    />
+
+                    <div className="space-y-2">
+                      <Label htmlFor="logoUrl">Logo (Light Mode)</Label>
+                      {formData.logoUrl ? (
+                        <div className="relative inline-block">
+                          <div className="p-4 bg-white border rounded-lg">
+                            <img
+                              src={formData.logoUrl}
+                              alt="Logo preview"
+                              className="max-h-24 object-contain"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            className="absolute -top-2 -right-2 h-6 w-6"
+                            onClick={() => setFormData((prev) => ({ ...prev, logoUrl: '' }))}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
                       ) : (
-                        <>
-                          <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                          <p className="text-sm text-gray-500">Click to upload dark mode logo</p>
-                          <p className="text-xs text-gray-400">PNG, JPG, SVG</p>
-                        </>
+                        <div
+                          onClick={() => logoInputRef.current?.click()}
+                          className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                        >
+                          {uploadingLogo ? (
+                            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                          ) : (
+                            <>
+                              <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                              <p className="text-sm text-gray-500">Click to upload logo</p>
+                              <p className="text-xs text-gray-400">PNG, JPG, SVG</p>
+                            </>
+                          )}
+                        </div>
                       )}
+                      <p className="text-xs text-gray-500">
+                        Or enter a URL:
+                      </p>
+                      <Input
+                        id="logoUrl"
+                        name="logoUrl"
+                        value={formData.logoUrl}
+                        onChange={handleChange}
+                        placeholder="https://..."
+                      />
                     </div>
-                  )}
-                  <p className="text-xs text-gray-500">
-                    Or enter a URL:
-                  </p>
-                  <Input
-                    id="logoDarkUrl"
-                    name="logoDarkUrl"
-                    value={formData.logoDarkUrl}
-                    onChange={handleChange}
-                    placeholder="https://..."
-                  />
-                </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="logoDarkUrl">Logo (Dark Mode) - Optional</Label>
+                      {formData.logoDarkUrl ? (
+                        <div className="relative inline-block">
+                          <div className="p-4 bg-gray-900 border rounded-lg">
+                            <img
+                              src={formData.logoDarkUrl}
+                              alt="Logo preview (dark)"
+                              className="max-h-24 object-contain"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            className="absolute -top-2 -right-2 h-6 w-6"
+                            onClick={() => setFormData((prev) => ({ ...prev, logoDarkUrl: '' }))}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => logoDarkInputRef.current?.click()}
+                          className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                        >
+                          {uploadingLogoDark ? (
+                            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                          ) : (
+                            <>
+                              <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                              <p className="text-sm text-gray-500">Click to upload dark mode logo</p>
+                              <p className="text-xs text-gray-400">PNG, JPG, SVG</p>
+                            </>
+                          )}
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-500">
+                        Or enter a URL:
+                      </p>
+                      <Input
+                        id="logoDarkUrl"
+                        name="logoDarkUrl"
+                        value={formData.logoDarkUrl}
+                        onChange={handleChange}
+                        placeholder="https://..."
+                      />
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

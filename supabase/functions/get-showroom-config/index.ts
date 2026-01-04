@@ -114,7 +114,9 @@ serve(async (req) => {
           slug,
           has_video_capture,
           video_max_duration_seconds,
-          video_max_size_mb
+          video_max_size_mb,
+          has_custom_branding,
+          has_product_selection
         )
       `)
       .eq('showroom_code', showroomCode.toUpperCase())
@@ -258,14 +260,18 @@ serve(async (req) => {
 
     console.log(`[VIDEO CAPTURE] Final videoCapture:`, videoCapture)
 
+    // Check if custom branding (logo) is available for this plan
+    const hasCustomBranding = plan?.has_custom_branding ?? false
+
     const config: ShowroomConfig = {
       id: showroom.id,
       name: showroom.name,
       showroom_code: showroom.showroom_code,
       branding: branding
         ? {
-            logo_url: branding.logo_url,
-            logo_dark_url: branding.logo_dark_url,
+            // Only include logo if plan has custom branding feature (Pro+)
+            logo_url: hasCustomBranding ? branding.logo_url : null,
+            logo_dark_url: hasCustomBranding ? branding.logo_dark_url : null,
             primary_color: branding.primary_color,
             secondary_color: branding.secondary_color,
             accent_color: branding.accent_color,

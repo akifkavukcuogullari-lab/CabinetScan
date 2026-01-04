@@ -48,7 +48,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     prioritySupport: false,
     crmIntegration: false,
     aiAgent: false,
-    customBranding: true,
+    customBranding: false, // White-labeling is Pro+ only
     productSelection: false,
     emailToCustomer: false,
     photosVideo: true,
@@ -65,7 +65,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     prioritySupport: false,
     crmIntegration: false,
     aiAgent: false,
-    customBranding: true,
+    customBranding: false, // White-labeling is Pro+ only
     productSelection: false, // Scan-only, no product selection
     emailToCustomer: false,
     photosVideo: true,
