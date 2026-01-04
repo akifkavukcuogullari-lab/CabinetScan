@@ -7,6 +7,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -15,20 +23,21 @@ import {
 } from '@/components/ui/select'
 import {
   FolderKanban,
-  Rotate3d,
   Layers,
   Ruler,
-  User,
-  Calendar,
-  ChevronRight,
-  Box,
   Search,
   Filter,
   X,
   Loader2,
+  LayoutGrid,
+  List,
+  ArrowUpDown,
+  Lock,
+  TrendingUp,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useSubscriptionContext } from '@/contexts/subscription-context'
 
 const statusOptions = [
   { value: 'all', label: 'All Statuses' },
@@ -54,14 +63,47 @@ const statusColors: Record<string, string> = {
 export default function ProjectsPage() {
   const router = useRouter()
   const supabase = createClient()
+  const { usage, loading: subscriptionLoading } = useSubscriptionContext()
 
   const [loading, setLoading] = useState(true)
   const [projects, setProjects] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
 
+  // Check if ANY plan limit is exceeded (blocks new projects)
+  const exceededLimits = {
+    projects: usage.projects.exceeded && !usage.projects.unlimited,
+    products: usage.products.exceeded && !usage.products.unlimited,
+    storage: usage.storage.exceeded && !usage.storage.unlimited,
+    teamMembers: usage.teamMembers.exceeded && !usage.teamMembers.unlimited,
+  }
+  const hasAnyLimitExceeded = Object.values(exceededLimits).some(Boolean)
+
+  // Get the exceeded limit details for display
+  const getExceededLimitMessage = () => {
+    const messages: string[] = []
+    if (exceededLimits.projects) {
+      messages.push(`Projects: ${usage.projects.current}/${usage.projects.limit}`)
+    }
+    if (exceededLimits.products) {
+      messages.push(`Products: ${usage.products.current}/${usage.products.limit}`)
+    }
+    if (exceededLimits.storage) {
+      messages.push(`Storage: ${usage.storage.current}GB/${usage.storage.limit}GB`)
+    }
+    if (exceededLimits.teamMembers) {
+      messages.push(`Team Members: ${usage.teamMembers.current}/${usage.teamMembers.limit}`)
+    }
+    return messages
+  }
+
   // Filter state
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+
+  // View mode state
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
+  const [sortColumn, setSortColumn] = useState<'name' | 'email' | 'date' | 'status' | 'reference'>('date')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
 
   useEffect(() => {
     async function loadProjects() {
@@ -83,20 +125,10 @@ export default function ProjectsPage() {
         return
       }
 
-      // Get projects with their measurements
+      // Get projects
       const { data, error: fetchError } = await supabase
         .from('projects')
-        .select(`
-          *,
-          project_measurements (
-            id,
-            usdz_file_url,
-            preview_image_url,
-            measurements,
-            total_linear_ft,
-            total_sq_ft
-          )
-        `)
+        .select('*')
         .eq('showroom_id', showroomUser.showroom_id)
         .order('submitted_at', { ascending: false })
 
@@ -110,6 +142,32 @@ export default function ProjectsPage() {
 
     loadProjects()
   }, [supabase, router])
+
+  // Load view preference from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('projects-view-preference')
+    if (saved === 'grid' || saved === 'table') {
+      setViewMode(saved)
+    }
+  }, [])
+
+  // Handle view mode change with localStorage persistence
+  const handleViewChange = (mode: 'grid' | 'table') => {
+    setViewMode(mode)
+    localStorage.setItem('projects-view-preference', mode)
+  }
+
+  // Handle sort column change
+  const handleSort = (column: 'name' | 'email' | 'date' | 'status' | 'reference') => {
+    if (sortColumn === column) {
+      // Toggle direction if same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      // New column, default to descending (except for name/email which default to ascending)
+      setSortColumn(column)
+      setSortDirection(column === 'name' || column === 'email' ? 'asc' : 'desc')
+    }
+  }
 
   // Filter projects based on search and status
   const filteredProjects = useMemo(() => {
@@ -150,6 +208,41 @@ export default function ProjectsPage() {
     return counts
   }, [projects])
 
+  // Sort projects for table view
+  const sortedProjects = useMemo(() => {
+    if (viewMode !== 'table') return filteredProjects
+
+    const sorted = [...filteredProjects]
+    sorted.sort((a, b) => {
+      let compare = 0
+
+      switch (sortColumn) {
+        case 'name':
+          const nameA = `${a.customer_first_name || ''} ${a.customer_last_name || ''}`.toLowerCase()
+          const nameB = `${b.customer_first_name || ''} ${b.customer_last_name || ''}`.toLowerCase()
+          compare = nameA.localeCompare(nameB)
+          break
+        case 'email':
+          compare = (a.customer_email || '').localeCompare(b.customer_email || '')
+          break
+        case 'date':
+          const dateA = a.submitted_at ? new Date(a.submitted_at).getTime() : 0
+          const dateB = b.submitted_at ? new Date(b.submitted_at).getTime() : 0
+          compare = dateA - dateB
+          break
+        case 'status':
+          compare = (a.status || '').localeCompare(b.status || '')
+          break
+        case 'reference':
+          compare = (a.reference_number || '').localeCompare(b.reference_number || '')
+          break
+      }
+
+      return sortDirection === 'asc' ? compare : -compare
+    })
+    return sorted
+  }, [filteredProjects, viewMode, sortColumn, sortDirection])
+
   const clearFilters = () => {
     setSearchQuery('')
     setStatusFilter('all')
@@ -157,7 +250,7 @@ export default function ProjectsPage() {
 
   const hasActiveFilters = searchQuery.trim() || statusFilter !== 'all'
 
-  if (loading) {
+  if (loading || subscriptionLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
@@ -166,11 +259,43 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Projects</h1>
         <p className="text-gray-500">View and manage customer room scans and selections</p>
       </div>
+
+      {/* Warning Banner when limits exceeded - new submissions blocked */}
+      {hasAnyLimitExceeded && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <Lock className="h-6 w-6 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-medium text-amber-800">New Submissions Paused</h3>
+                <p className="text-sm text-amber-700 mt-1">
+                  Plan limits exceeded. New customer submissions from the iOS app are blocked until resolved.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {getExceededLimitMessage().map((msg, idx) => (
+                    <Badge key={idx} variant="outline" className="border-amber-400 text-amber-800 text-xs">
+                      {msg}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              <Button asChild size="sm" className="flex-shrink-0 bg-amber-600 hover:bg-amber-700">
+                <Link href="/showroom/billing">
+                  <TrendingUp className="h-4 w-4 mr-1" />
+                  Upgrade
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters Section */}
       <Card>
@@ -211,6 +336,28 @@ export default function ProjectsPage() {
               </Select>
             </div>
 
+            {/* View Mode Toggle */}
+            <div className="flex gap-1 border rounded-lg p-1">
+              <Button
+                variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => handleViewChange('grid')}
+                className="gap-2"
+              >
+                <LayoutGrid className="h-4 w-4" />
+                <span className="hidden sm:inline">Grid</span>
+              </Button>
+              <Button
+                variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => handleViewChange('table')}
+                className="gap-2"
+              >
+                <List className="h-4 w-4" />
+                <span className="hidden sm:inline">Table</span>
+              </Button>
+            </div>
+
             {/* Clear Filters */}
             {hasActiveFilters && (
               <Button
@@ -246,148 +393,143 @@ export default function ProjectsPage() {
           </CardContent>
         </Card>
       ) : filteredProjects.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredProjects.map((project: any) => {
-            // Extract measurement data for preview
-            const measurement = project.project_measurements?.[0]
-            const hasUsdzFile = measurement?.usdz_file_url
-            const hasFloorPlanImage = measurement?.preview_image_url
-            const hasScanData = hasUsdzFile || hasFloorPlanImage
-
-            return (
-              <Link
-                key={project.id}
-                href={`/showroom/projects/${project.id}`}
-                className="group"
-              >
-                <Card className="h-full overflow-hidden hover:shadow-lg transition-all duration-200 hover:border-blue-400">
-                  {/* Visual Preview Section */}
-                  <div className="relative h-40 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
-                    {hasUsdzFile ? (
-                      // 3D model preview - use floor plan image as preview
-                      <div className="relative w-full h-full">
-                        {hasFloorPlanImage ? (
-                          <img
-                            src={measurement.preview_image_url}
-                            alt={`${project.project_name} scan preview`}
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center h-full bg-blue-50">
-                            <Rotate3d className="h-12 w-12 text-blue-300" />
+        viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+            {filteredProjects.map((project: any) => {
+              return (
+                <Link
+                  key={project.id}
+                  href={`/showroom/projects/${project.id}`}
+                  className="group"
+                >
+                  <Card className="h-full hover:shadow-md transition-all duration-200 hover:border-blue-400">
+                    <CardContent className="p-4">
+                      {/* Header: Customer Name + Status */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold truncate group-hover:text-blue-600 transition-colors">
+                            {project.customer_first_name} {project.customer_last_name}
+                          </h3>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <code className="font-mono">{project.reference_number}</code>
+                            <span>|</span>
+                            <span>
+                              {project.submitted_at
+                                ? new Date(project.submitted_at).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric'
+                                  })
+                                : '-'}
+                            </span>
                           </div>
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                        {/* 3D badge */}
-                        <div className="absolute top-3 right-3 bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1">
-                          <Rotate3d className="h-3 w-3" />
-                          3D Scan
                         </div>
+                        <Badge className={`${statusColors[project.status]} shrink-0 text-xs`}>
+                          {project.status.replace('_', ' ')}
+                        </Badge>
                       </div>
-                    ) : hasFloorPlanImage ? (
-                      // 2D floor plan image
-                      <div className="relative w-full h-full">
-                        <img
-                          src={measurement.preview_image_url}
-                          alt={`${project.project_name} floor plan`}
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                        {/* 2D badge */}
-                        <div className="absolute top-3 right-3 bg-gray-700 text-white text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1">
-                          <Layers className="h-3 w-3" />
-                          Floor Plan
-                        </div>
-                      </div>
-                    ) : (
-                      // No scan data placeholder
-                      <div className="flex flex-col items-center justify-center h-full">
-                        <Box className="h-12 w-12 text-gray-300 mb-2" />
-                        <span className="text-sm text-gray-400">No scan data</span>
-                      </div>
-                    )}
 
-                    {/* Measurements overlay */}
-                    {hasScanData && (measurement?.total_linear_ft || measurement?.total_sq_ft) && (
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 pt-8">
-                        <div className="flex items-center gap-4 text-white text-sm">
-                          {measurement.total_sq_ft && (
-                            <span className="flex items-center gap-1.5">
-                              <Ruler className="h-3.5 w-3.5" />
-                              {measurement.total_sq_ft.toFixed(0)} sq ft
-                            </span>
-                          )}
-                          {measurement.total_linear_ft && (
-                            <span className="flex items-center gap-1.5">
-                              <Ruler className="h-3.5 w-3.5" />
-                              {measurement.total_linear_ft.toFixed(0)} linear ft
-                            </span>
-                          )}
-                        </div>
+                      {/* Email Row */}
+                      <div className="text-sm text-gray-600 truncate">
+                        {project.customer_email}
                       </div>
-                    )}
-                  </div>
-
-                  {/* Project Info Section */}
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-lg truncate group-hover:text-blue-600 transition-colors">
-                          {project.project_name}
-                        </h3>
-                        <code className="text-xs px-1.5 py-0.5 bg-gray-100 rounded text-gray-600 font-mono">
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            })}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleSort('reference')}
+                      >
+                        <div className="flex items-center gap-2">
+                          Reference
+                          <ArrowUpDown className="h-4 w-4" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleSort('name')}
+                      >
+                        <div className="flex items-center gap-2">
+                          Customer Name
+                          <ArrowUpDown className="h-4 w-4" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleSort('email')}
+                      >
+                        <div className="flex items-center gap-2">
+                          Email
+                          <ArrowUpDown className="h-4 w-4" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleSort('date')}
+                      >
+                        <div className="flex items-center gap-2">
+                          Date Submitted
+                          <ArrowUpDown className="h-4 w-4" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleSort('status')}
+                      >
+                        <div className="flex items-center gap-2">
+                          Status
+                          <ArrowUpDown className="h-4 w-4" />
+                        </div>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedProjects.map((project: any) => (
+                      <TableRow
+                        key={project.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => router.push(`/showroom/projects/${project.id}`)}
+                      >
+                        <TableCell className="font-mono text-sm">
                           {project.reference_number}
-                        </code>
-                      </div>
-                      <Badge className={`${statusColors[project.status]} shrink-0 ml-2`}>
-                        {project.status.replace('_', ' ')}
-                      </Badge>
-                    </div>
-
-                    <div className="space-y-2 text-sm text-gray-600">
-                      {/* Customer */}
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-gray-400" />
-                        <span className="truncate">
+                        </TableCell>
+                        <TableCell className="font-medium">
                           {project.customer_first_name} {project.customer_last_name}
-                        </span>
-                      </div>
-
-                      {/* Date */}
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-400" />
-                        <span>
+                        </TableCell>
+                        <TableCell className="text-gray-600">
+                          {project.customer_email}
+                        </TableCell>
+                        <TableCell className="text-gray-600">
                           {project.submitted_at
                             ? new Date(project.submitted_at).toLocaleDateString('en-US', {
+                                year: 'numeric',
                                 month: 'short',
                                 day: 'numeric',
-                                year: 'numeric'
                               })
-                            : 'Not submitted'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* View button */}
-                    <div className="mt-4 pt-3 border-t flex items-center justify-between">
-                      <span className="text-sm text-gray-500">
-                        {project.customer_email}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 -mr-2"
-                      >
-                        View
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            )
-          })}
-        </div>
+                            : '-'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={statusColors[project.status]}>
+                            {project.status.replace('_', ' ')}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )
       ) : projects.length > 0 ? (
         // Has projects but none match filters
         <Card>
@@ -414,13 +556,9 @@ export default function ProjectsPage() {
             <h3 className="text-xl font-medium mb-2">No projects yet</h3>
             <p className="text-gray-500 max-w-md mx-auto mb-6">
               Projects will appear here when customers submit room scans from the iOS app.
-              Each project includes the 3D scan, measurements, and product selections.
+              Each project includes floor plans, measurements, and product selections.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-gray-500">
-              <div className="flex items-center gap-2">
-                <Rotate3d className="h-5 w-5 text-blue-500" />
-                <span>3D Room Scans</span>
-              </div>
               <div className="flex items-center gap-2">
                 <Layers className="h-5 w-5 text-gray-500" />
                 <span>Floor Plans</span>

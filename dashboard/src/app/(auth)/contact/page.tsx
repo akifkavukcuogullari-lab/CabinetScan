@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Mail, MessageCircle, Clock, ArrowLeft } from "lucide-react";
+import { Mail, MessageCircle, Clock, ArrowLeft, Sparkles } from "lucide-react";
 
 export default function ContactPage() {
   return (
@@ -85,6 +85,22 @@ export default function ContactPage() {
                   <p className="text-gray-600">
                     We typically respond within 24 hours during business days. For urgent matters,
                     please include &quot;URGENT&quot; in your email subject line.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Free Trial Card */}
+            <div className="p-6 rounded-2xl bg-gradient-to-br from-gray-50 to-white border border-gray-100">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-lg font-semibold text-gray-900 mb-1">Start Your Free Trial</h2>
+                  <p className="text-gray-600">
+                    Interested in trying CabinetScan? Send us an email and let us know you&apos;d like to start
+                    your 14-day free trial. We&apos;ll send you an invitation email soon to get you started.
                   </p>
                 </div>
               </div>

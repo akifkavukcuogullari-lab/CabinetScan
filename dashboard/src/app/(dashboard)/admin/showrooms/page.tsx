@@ -28,7 +28,7 @@ interface ShowroomWithStats {
 export default async function ShowroomsPage() {
   const supabase = await createClient()
 
-  // Fetch showrooms with related counts
+  // Fetch showrooms
   const { data: showrooms, error } = await supabase
     .from('showrooms')
     .select('*')

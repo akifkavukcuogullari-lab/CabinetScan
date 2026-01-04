@@ -5,10 +5,10 @@
       "has": [
         {
           "type": "host",
-          "value": "cabinet-scan.vercel.app"
+          "value": "cabinetscan.nextlyn.ai"
         }
       ],
-      "destination": "https://cabinet.nextlyn.ai/:path*",
+      "destination": "https://cabinetscan.nextlyn.ai/:path*",
       "permanent": true
     },
     {
@@ -19,7 +19,7 @@
           "value": "cabinet-scan-akifkavukcuogullari-labs-projects.vercel.app"
         }
       ],
-      "destination": "https://cabinet.nextlyn.ai/:path*",
+      "destination": "https://cabinetscan.nextlyn.ai/:path*",
       "permanent": true
     }
   ]

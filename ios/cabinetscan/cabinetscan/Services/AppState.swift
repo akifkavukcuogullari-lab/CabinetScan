@@ -16,6 +16,8 @@ class AppState: ObservableObject {
     @Published var measurementData: MeasurementData?
     @Published var selections: [String: Product] = [:] // categoryId -> selected product
     @Published var variantSelections: [String: ProductVariant] = [:] // productId -> selected variant (for products with colors)
+    // Addon selections: addonId -> (isSelected, quantity, notes)
+    @Published var addonSelections: [String: (isSelected: Bool, quantity: Int, notes: String)] = [:]
     @Published var specialRequests: String = "" // Additional notes/special requests from customer
     @Published var isLoading = false
     @Published var error: Error?
@@ -27,6 +29,7 @@ class AppState: ObservableObject {
         case customerInfo
         case scanning
         case selection
+        case addons
         case review
         case submission
         case success(referenceNumber: String)
@@ -55,6 +58,15 @@ class AppState: ObservableObject {
     func setCustomerInfo(_ info: CustomerInfo, endClient: EndClientInfo? = nil) {
         customerInfo = info
         endClientInfo = endClient
+
+        // Clear any previous scan data when starting a new scan
+        // This ensures clean state when user goes back and re-enters info
+        measurementData = nil
+        selections = [:]
+        variantSelections = [:]
+        addonSelections = [:]
+        specialRequests = ""
+
         currentScreen = .scanning
     }
 
@@ -89,7 +101,38 @@ class AppState: ObservableObject {
         return variantSelections[product.id]
     }
 
+    func selectAddon(addonId: String, isSelected: Bool, quantity: Int = 1, notes: String = "") {
+        addonSelections[addonId] = (isSelected: isSelected, quantity: quantity, notes: notes)
+    }
+
+    func updateAddonQuantity(addonId: String, quantity: Int) {
+        if var selection = addonSelections[addonId] {
+            selection.quantity = quantity
+            addonSelections[addonId] = selection
+        }
+    }
+
+    func updateAddonNotes(addonId: String, notes: String) {
+        if var selection = addonSelections[addonId] {
+            selection.notes = notes
+            addonSelections[addonId] = selection
+        }
+    }
+
+    func isAddonSelected(_ addonId: String) -> Bool {
+        return addonSelections[addonId]?.isSelected ?? false
+    }
+
+    func getAddonSelection(_ addonId: String) -> (isSelected: Bool, quantity: Int, notes: String)? {
+        return addonSelections[addonId]
+    }
+
     func proceedToReview() {
+        // Addons are now integrated into the selection flow
+        currentScreen = .review
+    }
+
+    func proceedFromAddons() {
         currentScreen = .review
     }
 
@@ -98,6 +141,17 @@ class AppState: ObservableObject {
               let customer = customerInfo,
               let measurements = measurementData else {
             error = APIError.invalidRequest
+            return
+        }
+
+        // Note: Scan quality validation is now done in ScanningView before reaching this point
+        // This is a fallback check for edge cases
+        let wallCount = measurements.wallCount ?? 0
+        let hasFloorPlan = measurements.previewImageUrl != nil
+        let hasScanFile = measurements.usdzFileUrl != nil
+
+        if wallCount == 0 && !hasFloorPlan && !hasScanFile {
+            error = APIError.submissionFailed(message: "The scan data is incomplete. Please go back and rescan the room.")
             return
         }
 
@@ -117,6 +171,16 @@ class AppState: ObservableObject {
                 )
             }
 
+            // Build addon selections (only include addons that were answered)
+            let projectAddonSelections = addonSelections.map { addonId, selection in
+                AddonSelection(
+                    addonId: addonId,
+                    isSelected: selection.isSelected,
+                    quantity: selection.isSelected ? selection.quantity : 0,
+                    customerNotes: selection.notes.isEmpty ? nil : selection.notes
+                )
+            }
+
             let submission = ProjectSubmission(
                 showroomId: config.id,
                 customer: customer,
@@ -127,6 +191,7 @@ class AppState: ObservableObject {
                 ),
                 measurements: measurements,
                 selections: projectSelections,
+                addonSelections: projectAddonSelections,
                 deviceInfo: DeviceInfo(
                     model: deviceModel,
                     iosVersion: UIDevice.current.systemVersion,
@@ -160,6 +225,7 @@ class AppState: ObservableObject {
         measurementData = nil
         selections = [:]
         variantSelections = [:]
+        addonSelections = [:]
         specialRequests = ""
         error = nil
     }

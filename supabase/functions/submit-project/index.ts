@@ -1,6 +1,9 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { supabaseAdmin } from '../_shared/supabase.ts'
+import { sendEmail, generateProjectNotificationEmailHtml } from '../_shared/email.ts'
+
+const DASHBOARD_URL = Deno.env.get('DASHBOARD_URL') || 'https://cabinetscan.nextlyn.ai'
 
 interface ProjectSubmission {
   showroom_id: string
@@ -52,6 +55,12 @@ interface ProjectSubmission {
     category_id: string
     product_id: string
     variant_id?: string  // Optional: for products with color variants
+    quantity?: number
+    customer_notes?: string
+  }>
+  addon_selections?: Array<{
+    addon_id: string
+    is_selected: boolean
     quantity?: number
     customer_notes?: string
   }>
@@ -196,6 +205,7 @@ async function buildWebhookPayload(
   // Build comprehensive webhook payload
   return {
     event: 'project.submitted',
+    generate_quote: false, // Only generate quote when Create Quote button is clicked
     timestamp: new Date().toISOString(),
     project: {
       id: project.id,
@@ -252,6 +262,32 @@ async function buildWebhookPayload(
             depth: formatDimension(cab.depth_ft),
           })),
 
+          wall_oven_cabinets: (Array.isArray(measurements.measurements?.cabinets?.wall_oven) ? measurements.measurements.cabinets.wall_oven : []).map((cab: any, index: number) => ({
+            id: `wall_oven_cabinet_${index + 1}`,
+            width: formatDimension(cab.width_ft),
+            total_height: formatDimension(cab.total_height_ft || cab.height_ft),
+            depth: formatDimension(cab.depth_ft),
+            upper_section_height: formatDimension(cab.upper_section_height_ft),
+            lower_section_height: formatDimension(cab.lower_section_height_ft),
+          })),
+
+          pantry_cabinets: (Array.isArray(measurements.measurements?.cabinets?.pantry) ? measurements.measurements.cabinets.pantry : []).map((cab: any, index: number) => ({
+            id: `pantry_cabinet_${index + 1}`,
+            width: formatDimension(cab.width_ft),
+            total_height: formatDimension(cab.total_height_ft || cab.height_ft),
+            depth: formatDimension(cab.depth_ft),
+            upper_section_height: formatDimension(cab.upper_section_height_ft),
+            lower_section_height: formatDimension(cab.lower_section_height_ft),
+          })),
+
+          upper_small_cabinets: (Array.isArray(measurements.measurements?.cabinets?.upper_small) ? measurements.measurements.cabinets.upper_small : []).map((cab: any, index: number) => ({
+            id: `upper_small_cabinet_${index + 1}`,
+            width: formatDimension(cab.width_ft),
+            height: formatDimension(cab.height_ft),
+            depth: formatDimension(cab.depth_ft),
+            above: cab.above || null,
+          })),
+
           appliances: (Array.isArray(measurements.measurements?.appliances) ? measurements.measurements.appliances : []).map((app: any, index: number) => ({
             id: `appliance_${index + 1}`,
             type: app.type || 'appliance',
@@ -298,6 +334,9 @@ async function buildWebhookPayload(
             wall_count: measurements.wall_count || 0,
             lower_cabinet_count: measurements.measurements?.summary?.lower_cabinet_count || 0,
             upper_cabinet_count: measurements.measurements?.summary?.upper_cabinet_count || 0,
+            wall_oven_cabinet_count: measurements.measurements?.summary?.wall_oven_cabinet_count || 0,
+            pantry_cabinet_count: measurements.measurements?.summary?.pantry_cabinet_count || 0,
+            upper_small_cabinet_count: measurements.measurements?.summary?.upper_small_cabinet_count || 0,
             appliance_count: measurements.measurements?.summary?.appliance_count || 0,
             sink_count: measurements.measurements?.summary?.sink_count || 0,
             window_count: measurements.window_count || 0,
@@ -346,12 +385,17 @@ async function buildWebhookPayload(
       if (Array.isArray(selections)) {
         selections.forEach((s: any) => {
           const categorySlug = s.categories?.slug || 'unknown'
+          const basePrice = s.product_price_snapshot
+          const coefficient = s.coefficient_applied || null
+          const effectivePrice = coefficient && basePrice ? basePrice * coefficient : basePrice
 
           selectionsObj[categorySlug] = {
             category_name: s.categories?.name || 'Unknown',
             product: s.product_name_snapshot,
             variant: s.variant_name_snapshot || null,
-            price: s.product_price_snapshot,
+            price: basePrice,
+            effective_price: effectivePrice,
+            coefficient_applied: coefficient,
             pricing_unit: s.pricing_unit_snapshot,
             quantity: s.quantity,
             notes: s.customer_notes,
@@ -361,60 +405,43 @@ async function buildWebhookPayload(
 
       return selectionsObj
     })(),
+    addon_selections: await (async () => {
+      // Fetch addon selections for this project
+      const { data: addonSelections } = await supabaseAdmin
+        .from('project_addon_selections')
+        .select('*')
+        .eq('project_id', project.id)
+
+      if (!addonSelections || addonSelections.length === 0) {
+        return []
+      }
+
+      return addonSelections.map((a: any) => {
+        const basePrice = a.addon_price_snapshot
+        const coefficient = a.coefficient_applied || null
+        const effectivePrice = coefficient && basePrice ? basePrice * coefficient : basePrice
+
+        return {
+          addon_id: a.addon_id,
+          question: a.addon_question_snapshot,
+          description: a.addon_description_snapshot,
+          is_selected: a.is_selected,
+          quantity: a.quantity,
+          unit: a.addon_unit_snapshot,
+          price_per_unit: basePrice,
+          effective_price_per_unit: effectivePrice,
+          coefficient_applied: coefficient,
+          image_url: a.addon_image_url_snapshot,
+          customer_notes: a.customer_notes || null,
+        }
+      })
+    })(),
     showroom: {
       id: showroom.id,
       name: showroom.name,
       code: showroom.showroom_code,
     },
     device_info: submission.device_info || null,
-  }
-}
-
-// Trigger USDZ to GLB conversion (async, non-blocking)
-async function triggerGlbConversion(
-  measurementId: string,
-  usdzUrl: string,
-  showroomCode: string
-): Promise<void> {
-  const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
-  const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')
-
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.log('[GLB CONVERSION] Missing environment variables, skipping conversion')
-    return
-  }
-
-  const conversionUrl = `${SUPABASE_URL}/functions/v1/convert-usdz-to-glb`
-
-  console.log(`[GLB CONVERSION] Triggering conversion for measurement ${measurementId}`)
-
-  try {
-    const response = await fetch(conversionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        measurement_id: measurementId,
-        usdz_url: usdzUrl,
-        showroom_code: showroomCode,
-      }),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`[GLB CONVERSION] Conversion request failed: ${response.status} - ${errorText}`)
-    } else {
-      const result = await response.json()
-      if (result.success) {
-        console.log(`[GLB CONVERSION] Conversion successful: ${result.glb_url}`)
-      } else {
-        console.log(`[GLB CONVERSION] Conversion not available: ${result.error}`)
-      }
-    }
-  } catch (err) {
-    console.error('[GLB CONVERSION] Error calling conversion function:', err)
   }
 }
 
@@ -464,6 +491,11 @@ async function callWebhook(
 }
 
 serve(async (req) => {
+  const startTime = Date.now()
+  const logTiming = (step: string) => {
+    console.log(`[TIMING] ${step}: ${Date.now() - startTime}ms`)
+  }
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -480,7 +512,9 @@ serve(async (req) => {
   }
 
   try {
+    logTiming('Start')
     const submission: ProjectSubmission = await req.json()
+    logTiming('Parsed JSON')
 
     // Validate required fields
     if (!submission.showroom_id) {
@@ -524,12 +558,14 @@ serve(async (req) => {
     }
 
     // Verify showroom exists and is active
+    logTiming('Before showroom query')
     const { data: showroom, error: showroomError } = await supabaseAdmin
       .from('showrooms')
-      .select('id, name, showroom_code, webhook_url')
+      .select('id, name, showroom_code, webhook_url, notification_emails')
       .eq('id', submission.showroom_id)
       .eq('is_active', true)
       .single()
+    logTiming('After showroom query')
 
     if (showroomError || !showroom) {
       return new Response(
@@ -540,6 +576,113 @@ serve(async (req) => {
         }
       )
     }
+
+    // Check subscription plan limits
+    logTiming('Before plan limit check')
+    const { data: showroomWithPlan } = await supabaseAdmin
+      .from('showrooms')
+      .select(`
+        subscription_status,
+        trial_ends_at,
+        project_count_this_period,
+        product_count,
+        storage_used_bytes,
+        team_member_count,
+        subscription_plans (
+          project_limit,
+          product_limit,
+          storage_limit_gb,
+          team_member_limit
+        )
+      `)
+      .eq('id', submission.showroom_id)
+      .single()
+
+    // Check if subscription is active (block canceled/suspended)
+    const inactiveStatuses = ['canceled', 'suspended']
+    if (showroomWithPlan && inactiveStatuses.includes(showroomWithPlan.subscription_status)) {
+      console.log(`[SUBSCRIPTION] Submission blocked - status: ${showroomWithPlan.subscription_status}`)
+      return new Response(
+        JSON.stringify({
+          error: 'Subscription inactive',
+          message: 'This showroom subscription is no longer active.',
+          customer_message: 'This showroom is currently unavailable. Please contact the showroom directly for assistance.',
+          code: 'SUBSCRIPTION_INACTIVE',
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
+    }
+
+    // Check if trial has expired
+    const isTrialExpired = showroomWithPlan?.subscription_status === 'trial' &&
+      showroomWithPlan?.trial_ends_at &&
+      new Date(showroomWithPlan.trial_ends_at) < new Date()
+
+    if (isTrialExpired) {
+      console.log(`[SUBSCRIPTION] Submission blocked - trial expired`)
+      return new Response(
+        JSON.stringify({
+          error: 'Trial expired',
+          message: 'This showroom trial has expired.',
+          customer_message: 'This showroom is currently unavailable. Please contact the showroom directly for assistance.',
+          code: 'TRIAL_EXPIRED',
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
+    }
+
+    if (showroomWithPlan?.subscription_plans) {
+      const plan = showroomWithPlan.subscription_plans as any
+      const exceededLimits: string[] = []
+
+      // Check project limit
+      if (plan.project_limit !== null && showroomWithPlan.project_count_this_period >= plan.project_limit) {
+        exceededLimits.push(`Projects: ${showroomWithPlan.project_count_this_period}/${plan.project_limit}`)
+      }
+
+      // Check product limit
+      if (plan.product_limit !== null && showroomWithPlan.product_count >= plan.product_limit) {
+        exceededLimits.push(`Products: ${showroomWithPlan.product_count}/${plan.product_limit}`)
+      }
+
+      // Check storage limit (convert bytes to GB)
+      if (plan.storage_limit_gb !== null) {
+        const storageUsedGb = (showroomWithPlan.storage_used_bytes || 0) / (1024 * 1024 * 1024)
+        if (storageUsedGb >= plan.storage_limit_gb) {
+          exceededLimits.push(`Storage: ${storageUsedGb.toFixed(1)}GB/${plan.storage_limit_gb}GB`)
+        }
+      }
+
+      // Check team member limit
+      if (plan.team_member_limit !== null && showroomWithPlan.team_member_count > plan.team_member_limit) {
+        exceededLimits.push(`Team Members: ${showroomWithPlan.team_member_count}/${plan.team_member_limit}`)
+      }
+
+      // Reject if any limit is exceeded
+      if (exceededLimits.length > 0) {
+        console.log(`[LIMIT] Submission blocked - limits exceeded: ${exceededLimits.join(', ')}`)
+        return new Response(
+          JSON.stringify({
+            error: 'Plan limit exceeded',
+            message: 'This showroom is currently unable to accept new submissions.',
+            customer_message: 'We are temporarily unable to accept new submissions. Please contact the showroom directly for assistance.',
+            exceeded_limits: exceededLimits,
+            code: 'PLAN_LIMIT_EXCEEDED',
+          }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        )
+      }
+    }
+    logTiming('After plan limit check')
 
     // Generate unique reference number
     let referenceNumber = generateReferenceNumber()
@@ -571,9 +714,11 @@ serve(async (req) => {
     }
 
     // Find or create customer
+    logTiming('Before customer lookup')
     let customerId: string
     try {
       customerId = await findOrCreateCustomer(submission.showroom_id, submission.customer)
+      logTiming('After customer lookup')
     } catch (err) {
       console.error('Error finding/creating customer:', err)
       return new Response(
@@ -586,6 +731,7 @@ serve(async (req) => {
     }
 
     // Create the project
+    logTiming('Before project creation')
     const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
       .insert({
@@ -613,6 +759,8 @@ serve(async (req) => {
       .select()
       .single()
 
+    logTiming('After project creation')
+
     if (projectError) {
       console.error('Error creating project:', projectError)
       return new Response(
@@ -625,7 +773,7 @@ serve(async (req) => {
     }
 
     // Create measurements if provided
-    let measurementId: string | null = null
+    logTiming('Before measurements')
     if (submission.measurements?.roomplan_data) {
       const measurementData: Record<string, unknown> = {
         project_id: project.id,
@@ -661,43 +809,32 @@ serve(async (req) => {
         console.log('⚠️ [submit-project] No visualization photos in submission')
       }
 
-      const { data: measurementResult, error: measurementError } = await supabaseAdmin
+      const { error: measurementError } = await supabaseAdmin
         .from('project_measurements')
         .insert(measurementData)
-        .select('id')
-        .single()
 
       if (measurementError) {
         console.error('Error creating measurements:', measurementError)
         // Don't fail the whole submission, just log
-      } else if (measurementResult) {
-        measurementId = measurementResult.id
-      }
-
-      // Trigger USDZ to GLB conversion if USDZ file exists (async, don't block)
-      if (measurementId && submission.measurements.usdz_file_url) {
-        triggerGlbConversion(
-          measurementId,
-          submission.measurements.usdz_file_url,
-          showroom.showroom_code
-        ).catch((err) => {
-          console.error('[GLB CONVERSION] Failed to trigger conversion:', err)
-        })
       }
     }
+    logTiming('After measurements')
 
     // Create product selections
+    logTiming('Before selections')
+    let cabinetColorCoefficient = 1.0 // Default coefficient from Cabinet Model color variant
+
     if (submission.selections && submission.selections.length > 0) {
-      // Fetch product details for snapshots
+      // Fetch product details for snapshots (including use_color_coefficient)
       const productIds = submission.selections.map((s) => s.product_id)
       const { data: products } = await supabaseAdmin
         .from('products')
-        .select('id, name, price, has_variants, category_id, categories(pricing_unit)')
+        .select('id, name, price, has_variants, use_color_coefficient, category_id, categories(pricing_unit, slug)')
         .in('id', productIds)
 
       const productMap = new Map(products?.map((p: any) => [p.id, p]) || [])
 
-      // Fetch variant details for selections that include variants
+      // Fetch variant details for selections that include variants (including price_coefficient)
       const variantIds = submission.selections
         .filter((s) => s.variant_id)
         .map((s) => s.variant_id as string)
@@ -706,10 +843,24 @@ serve(async (req) => {
       if (variantIds.length > 0) {
         const { data: variants } = await supabaseAdmin
           .from('product_variants')
-          .select('id, name, price, product_id')
+          .select('id, name, price, price_coefficient, product_id')
           .in('id', variantIds)
 
         variantMap = new Map(variants?.map((v: any) => [v.id, v]) || [])
+      }
+
+      // Find Cabinet Model selection and get its variant's coefficient
+      const cabinetSelection = submission.selections.find((s) => {
+        const product = productMap.get(s.product_id) as any
+        return product?.categories?.slug === 'cabinet-model'
+      })
+
+      if (cabinetSelection?.variant_id) {
+        const cabinetVariant = variantMap.get(cabinetSelection.variant_id)
+        if (cabinetVariant?.price_coefficient) {
+          cabinetColorCoefficient = cabinetVariant.price_coefficient
+          console.log(`[COEFFICIENT] Using Cabinet Model color coefficient: ${cabinetColorCoefficient}`)
+        }
       }
 
       const selectionsToInsert = submission.selections
@@ -724,6 +875,9 @@ serve(async (req) => {
             ? `${product.name} - ${variant.name}`
             : product.name
 
+          // Apply coefficient if product has use_color_coefficient enabled
+          const coefficientApplied = product.use_color_coefficient ? cabinetColorCoefficient : null
+
           return {
             project_id: project.id,
             category_id: s.category_id,
@@ -734,6 +888,7 @@ serve(async (req) => {
             variant_name_snapshot: variant?.name || null,
             product_price_snapshot: effectivePrice,
             pricing_unit_snapshot: product.categories?.pricing_unit || 'none',
+            coefficient_applied: coefficientApplied,
             customer_notes: s.customer_notes,
           }
         })
@@ -749,24 +904,74 @@ serve(async (req) => {
         }
       }
     }
+    logTiming('After selections')
 
-    // Build and save webhook payload (always save if showroom has webhook configured)
+    // Create addon selections
+    logTiming('Before addon selections')
+    if (submission.addon_selections && submission.addon_selections.length > 0) {
+      // Fetch addon details for snapshots (including use_color_coefficient)
+      const addonIds = submission.addon_selections.map((s) => s.addon_id)
+      const { data: addons } = await supabaseAdmin
+        .from('showroom_addons')
+        .select('id, question, description, unit, price_per_unit, image_url, use_color_coefficient')
+        .in('id', addonIds)
+
+      const addonMap = new Map(addons?.map((a: any) => [a.id, a]) || [])
+
+      const addonSelectionsToInsert = submission.addon_selections
+        .filter((s) => addonMap.has(s.addon_id))
+        .map((s) => {
+          const addon = addonMap.get(s.addon_id) as any
+          // Apply coefficient if addon has use_color_coefficient enabled
+          const coefficientApplied = addon.use_color_coefficient ? cabinetColorCoefficient : null
+
+          return {
+            project_id: project.id,
+            addon_id: s.addon_id,
+            is_selected: s.is_selected,
+            quantity: s.is_selected ? (s.quantity || 1) : 0,
+            customer_notes: s.customer_notes || null,
+            addon_question_snapshot: addon.question,
+            addon_description_snapshot: addon.description,
+            addon_unit_snapshot: addon.unit,
+            addon_price_snapshot: addon.price_per_unit,
+            addon_image_url_snapshot: addon.image_url,
+            coefficient_applied: coefficientApplied,
+          }
+        })
+
+      if (addonSelectionsToInsert.length > 0) {
+        const { error: addonSelectionsError } = await supabaseAdmin
+          .from('project_addon_selections')
+          .insert(addonSelectionsToInsert)
+
+        if (addonSelectionsError) {
+          console.error('Error creating addon selections:', addonSelectionsError)
+          // Don't fail the whole submission, just log
+        }
+      }
+    }
+    logTiming('After addon selections')
+
+    // Build and save webhook payload asynchronously (non-blocking)
     // This allows viewing the payload in the dashboard even if webhook delivery fails
+    logTiming('Before webhook payload async')
     if (showroom.webhook_url) {
-      // Build webhook payload
-      const webhookPayload = await buildWebhookPayload({
+      // Build webhook payload asynchronously - don't block response
+      buildWebhookPayload({
         project,
         referenceNumber,
         showroom,
         submission,
         customerId,
       })
-
-      // Save webhook payload to project (async, don't block)
-      supabaseAdmin
-        .from('projects')
-        .update({ webhook_payload: webhookPayload })
-        .eq('id', project.id)
+        .then((webhookPayload) => {
+          // Save webhook payload to project (for Create Quote button to use later)
+          return supabaseAdmin
+            .from('projects')
+            .update({ webhook_payload: webhookPayload })
+            .eq('id', project.id)
+        })
         .then(({ error }) => {
           if (error) {
             console.error('Error saving webhook payload:', error)
@@ -774,13 +979,69 @@ serve(async (req) => {
             console.log(`[WEBHOOK] Saved webhook payload for project ${project.id}`)
           }
         })
+        .catch((err) => {
+          console.error('Error building/saving webhook payload:', err)
+        })
 
-      // Call webhook (async, don't block response)
-      callWebhook(showroom.webhook_url, webhookPayload, project.id).catch((err) => {
-        console.error('Webhook call failed:', err)
-      })
+      // NOTE: Webhook is NOT called automatically on submission
+      // It will only be triggered when "Create Quote" button is clicked in dashboard
     }
 
+    logTiming('After webhook payload started (async)')
+
+    // Send email notifications (async, non-blocking)
+    if (showroom.notification_emails) {
+      const emails = showroom.notification_emails.split(',').map((e: string) => e.trim()).filter((e: string) => e)
+
+      if (emails.length > 0) {
+        console.log(`[EMAIL] Sending notifications to ${emails.length} recipient(s)`)
+
+        // Get branding for email styling
+        supabaseAdmin
+          .from('showroom_branding')
+          .select('logo_url, primary_color')
+          .eq('showroom_id', submission.showroom_id)
+          .single()
+          .then(({ data: branding }) => {
+            const projectUrl = `${DASHBOARD_URL}/showroom/projects/${project.id}`
+
+            const html = generateProjectNotificationEmailHtml({
+              showroomName: showroom.name,
+              customerName: `${submission.customer.first_name} ${submission.customer.last_name}`,
+              customerEmail: submission.customer.email,
+              customerPhone: submission.customer.phone,
+              submittedDate: project.submitted_at,
+              referenceNumber,
+              projectViewUrl: projectUrl,
+              logoUrl: branding?.logo_url || null,
+              primaryColor: branding?.primary_color || undefined,
+            })
+
+            // Send async (don't block response)
+            Promise.all(
+              emails.map((email: string) =>
+                sendEmail({
+                  to: email,
+                  subject: `New Project - ${showroom.name} [${referenceNumber}]`,
+                  html,
+                })
+              )
+            )
+              .then((results) => {
+                const successCount = results.filter((r: any) => r.success).length
+                console.log(`[EMAIL] Notifications sent: ${successCount}/${emails.length} successful`)
+              })
+              .catch((err: any) => {
+                console.error('[EMAIL] Error sending notifications:', err)
+              })
+          })
+          .catch((err: any) => {
+            console.error('[EMAIL] Error fetching branding for notifications:', err)
+          })
+      }
+    }
+
+    logTiming('Returning response')
     return new Response(
       JSON.stringify({
         success: true,

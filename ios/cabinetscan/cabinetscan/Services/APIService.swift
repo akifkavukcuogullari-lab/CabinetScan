@@ -89,7 +89,15 @@ actor APIService {
         request.httpMethod = "POST"
         request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try encoder.encode(submission)
+        request.timeoutInterval = 60 // 60 second timeout for submission
+
+        // Encode the submission - catch encoding errors for better debugging
+        do {
+            request.httpBody = try encoder.encode(submission)
+        } catch {
+            Config.logError("❌ Failed to encode submission: \(error.localizedDescription)")
+            throw APIError.submissionFailed(message: "Failed to prepare submission data. Please try scanning again.")
+        }
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -97,13 +105,37 @@ actor APIService {
             throw APIError.invalidResponse
         }
 
-        let submissionResponse = try decoder.decode(SubmissionResponse.self, from: data)
+        // Handle error status codes first
+        if httpResponse.statusCode != 201 {
+            // Try to parse error response
+            if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data) {
+                // Use customer-friendly message if available (for plan limit errors)
+                if let customerMessage = errorResponse.customerMessage {
+                    throw APIError.submissionFailed(message: customerMessage)
+                }
+                // Otherwise use the message or error field
+                let errorMessage = errorResponse.message ?? errorResponse.error ?? "Server error (code: \(httpResponse.statusCode))"
+                throw APIError.submissionFailed(message: errorMessage)
+            }
 
-        guard httpResponse.statusCode == 201 else {
-            throw APIError.submissionFailed(message: submissionResponse.error ?? "Unknown error")
+            // Log raw response for debugging
+            if let errorString = String(data: data, encoding: .utf8) {
+                Config.logError("❌ Raw error response: \(errorString)")
+            }
+            throw APIError.submissionFailed(message: "Server error (code: \(httpResponse.statusCode)). Please try again.")
         }
 
-        return submissionResponse
+        // Try to decode success response
+        do {
+            let submissionResponse = try decoder.decode(SubmissionResponse.self, from: data)
+            return submissionResponse
+        } catch let decodingError as DecodingError {
+            Config.logError("❌ Failed to decode response: \(decodingError)")
+            if let errorString = String(data: data, encoding: .utf8) {
+                Config.logError("❌ Raw response: \(errorString)")
+            }
+            throw APIError.submissionFailed(message: "Server returned an unexpected response. Please try again.")
+        }
     }
 
     // MARK: - Upload File to Storage

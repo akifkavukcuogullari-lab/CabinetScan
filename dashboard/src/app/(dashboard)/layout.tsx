@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/shared/sidebar'
-import { SubscriptionProviderWrapper } from './subscription-provider-wrapper'
+import { SubscriptionProviderWrapper, SubscriptionWarningBanner } from './subscription-provider-wrapper'
 
 export default async function DashboardLayout({
   children,
@@ -90,11 +90,22 @@ export default async function DashboardLayout({
 
     subscriptionData = showroom
 
-    // Block access for suspended or canceled subscriptions
+    // Check if trial has expired
+    const isTrialExpired = showroom?.subscription_status === 'trial' &&
+      showroom?.trial_ends_at &&
+      new Date(showroom.trial_ends_at) < new Date()
+
+    // Block access for suspended subscriptions (admin action - no self-service)
     if (showroom?.subscription_status === 'suspended') {
       redirect('/account-suspended')
     }
 
+    // For trial expired - redirect to trial-expired page
+    if (isTrialExpired) {
+      redirect('/trial-expired')
+    }
+
+    // For canceled - redirect to account-canceled page
     if (showroom?.subscription_status === 'canceled') {
       redirect('/account-canceled')
     }
@@ -121,6 +132,7 @@ export default async function DashboardLayout({
       <div className="min-h-screen bg-gray-50">
         <Sidebar userInfo={userInfo} />
         <main className="lg:pl-64">
+          <SubscriptionWarningBanner />
           <div className="p-6">{children}</div>
         </main>
       </div>

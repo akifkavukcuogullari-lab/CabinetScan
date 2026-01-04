@@ -7,10 +7,22 @@ interface ProductVariant {
   name: string
   color_code: string | null
   price: number | null
+  price_coefficient: number
   image_url: string | null
   thumbnail_url: string | null
   display_order: number
   is_default: boolean
+}
+
+interface Addon {
+  id: string
+  question: string
+  description: string | null
+  unit: string
+  price_per_unit: number | null
+  image_url: string | null
+  display_order: number
+  use_color_coefficient: boolean
 }
 
 interface Product {
@@ -24,6 +36,7 @@ interface Product {
   is_featured: boolean
   specifications: Record<string, unknown>
   has_variants: boolean
+  use_color_coefficient: boolean
   variants: ProductVariant[]
 }
 
@@ -54,8 +67,10 @@ interface ShowroomConfig {
     icon_name: string | null
     display_order: number
     is_required: boolean
+    show_price_to_customer: boolean
     products: Product[]
   }>
+  addons: Addon[]
   subscription: {
     status: string
     plan: string | null
@@ -95,11 +110,14 @@ serve(async (req) => {
         name,
         showroom_code,
         subscription_status,
+        trial_ends_at,
         subscription_plans (
           slug,
           has_video_capture,
           video_max_duration_seconds,
-          video_max_size_mb
+          video_max_size_mb,
+          has_custom_branding,
+          has_product_selection
         )
       `)
       .eq('showroom_code', showroomCode.toUpperCase())
@@ -132,6 +150,7 @@ serve(async (req) => {
         display_order,
         custom_name,
         is_required,
+        show_price_to_customer,
         categories (
           name,
           slug,
@@ -150,6 +169,14 @@ serve(async (req) => {
       .select('*')
       .eq('showroom_id', showroom.id)
       .eq('is_active', true)
+      .order('display_order')
+
+    // Fetch enabled addons for this showroom
+    const { data: addons } = await supabaseAdmin
+      .from('showroom_addons')
+      .select('id, question, description, unit, price_per_unit, image_url, display_order, use_color_coefficient')
+      .eq('showroom_id', showroom.id)
+      .eq('is_enabled', true)
       .order('display_order')
 
     // Fetch variants for products that have them
@@ -172,6 +199,7 @@ serve(async (req) => {
         name: v.name,
         color_code: v.color_code,
         price: v.price,
+        price_coefficient: v.price_coefficient || 1.0,
         image_url: v.image_url,
         thumbnail_url: v.thumbnail_url,
         display_order: v.display_order,
@@ -194,6 +222,7 @@ serve(async (req) => {
           is_featured: p.is_featured,
           specifications: p.specifications,
           has_variants: p.has_variants || false,
+          use_color_coefficient: p.use_color_coefficient || false,
           variants: variantsByProduct[p.id] || [],
         }))
 
@@ -207,13 +236,22 @@ serve(async (req) => {
         icon_name: sc.categories.icon_name,
         display_order: sc.display_order,
         is_required: sc.is_required,
+        show_price_to_customer: sc.show_price_to_customer ?? true,
         products: categoryProducts,
       }
     })
 
     // Build video capture settings based on subscription
     const plan = showroom.subscription_plans as any
-    const isSubscriptionActive = ['trial', 'active'].includes(showroom.subscription_status)
+
+    // Check if trial has expired
+    const isTrialExpired = showroom.subscription_status === 'trial' &&
+      showroom.trial_ends_at &&
+      new Date(showroom.trial_ends_at) < new Date()
+
+    // Subscription is active if status is 'active' OR ('trial' and not expired)
+    const isSubscriptionActive = showroom.subscription_status === 'active' ||
+      (showroom.subscription_status === 'trial' && !isTrialExpired)
 
     console.log(`[VIDEO CAPTURE] Showroom: ${showroom.name}`)
     console.log(`[VIDEO CAPTURE] Subscription status: ${showroom.subscription_status}`)
@@ -231,27 +269,39 @@ serve(async (req) => {
 
     console.log(`[VIDEO CAPTURE] Final videoCapture:`, videoCapture)
 
+    // Check if custom branding (logo) is available for this plan
+    const hasCustomBranding = plan?.has_custom_branding ?? false
+    // Check if product selection is available for this plan (Starter = scan-only)
+    const hasProductSelection = plan?.has_product_selection ?? false
+
+    // Default CabinetScan branding for Starter plan
+    const CABINETSCAN_LOGO = 'https://wnyrnpeabhxdqvcpofmb.supabase.co/storage/v1/object/public/logos/cabinetscan-logo.png'
+    const CABINETSCAN_LOGO_DARK = 'https://wnyrnpeabhxdqvcpofmb.supabase.co/storage/v1/object/public/logos/cabinetscan-logo-dark.png'
+
     const config: ShowroomConfig = {
       id: showroom.id,
-      name: showroom.name,
+      // Show "CabinetScan" for Starter plan, actual showroom name for Pro+
+      name: hasCustomBranding ? showroom.name : 'CabinetScan',
       showroom_code: showroom.showroom_code,
       branding: branding
         ? {
-            logo_url: branding.logo_url,
-            logo_dark_url: branding.logo_dark_url,
-            primary_color: branding.primary_color,
-            secondary_color: branding.secondary_color,
-            accent_color: branding.accent_color,
-            background_color: branding.background_color,
-            text_color: branding.text_color,
+            // Use CabinetScan logo for Starter, custom logo for Pro+
+            logo_url: hasCustomBranding ? branding.logo_url : CABINETSCAN_LOGO,
+            logo_dark_url: hasCustomBranding ? branding.logo_dark_url : CABINETSCAN_LOGO_DARK,
+            primary_color: hasCustomBranding ? branding.primary_color : '#2563EB',
+            secondary_color: hasCustomBranding ? branding.secondary_color : '#1E40AF',
+            accent_color: hasCustomBranding ? branding.accent_color : '#3B82F6',
+            background_color: hasCustomBranding ? branding.background_color : '#FFFFFF',
+            text_color: hasCustomBranding ? branding.text_color : '#1F2937',
             welcome_message: branding.welcome_message,
             thank_you_message: branding.thank_you_message,
             terms_url: branding.terms_url,
             privacy_url: branding.privacy_url,
           }
         : {
-            logo_url: null,
-            logo_dark_url: null,
+            // Default CabinetScan branding when no branding record exists
+            logo_url: CABINETSCAN_LOGO,
+            logo_dark_url: CABINETSCAN_LOGO_DARK,
             primary_color: '#2563EB',
             secondary_color: '#1E40AF',
             accent_color: '#3B82F6',
@@ -262,7 +312,19 @@ serve(async (req) => {
             terms_url: null,
             privacy_url: null,
           },
-      categories: categoriesWithProducts,
+      // Only include categories/products if plan has product selection (Pro+)
+      categories: hasProductSelection ? categoriesWithProducts : [],
+      // Only include addons if plan has product selection (Pro+)
+      addons: hasProductSelection ? (addons || []).map((a: any) => ({
+        id: a.id,
+        question: a.question,
+        description: a.description,
+        unit: a.unit,
+        price_per_unit: a.price_per_unit,
+        image_url: a.image_url,
+        display_order: a.display_order,
+        use_color_coefficient: a.use_color_coefficient || false,
+      })) : [],
       subscription: {
         status: showroom.subscription_status,
         plan: plan?.slug || null,

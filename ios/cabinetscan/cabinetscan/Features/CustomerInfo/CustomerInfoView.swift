@@ -72,20 +72,15 @@ struct CustomerInfoView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Large showroom logo at top - full width
+                // Large showroom logo at top
                 if let config = appState.showroomConfig {
                     Section {
-                        VStack(spacing: 12) {
-                            GeometryReader { geometry in
-                                ShowroomLogo(
-                                    logoUrl: config.branding.logoUrl,
-                                    logoDarkUrl: config.branding.logoDarkUrl,
-                                    maxHeight: 120,
-                                    maxWidth: geometry.size.width
-                                )
-                                .frame(maxWidth: .infinity)
-                            }
-                            .frame(height: 120)
+                        VStack(spacing: 16) {
+                            ShowroomLogoLarge(
+                                logoUrl: config.branding.logoUrl,
+                                logoDarkUrl: config.branding.logoDarkUrl
+                            )
+                            .frame(maxWidth: .infinity, alignment: .center)
 
                             Text(config.name)
                                 .font(.title2)
@@ -93,8 +88,9 @@ struct CustomerInfoView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
                         .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 24, leading: 0, bottom: 16, trailing: 0))
+                        .listRowInsets(EdgeInsets(top: 16, leading: 0, bottom: 8, trailing: 0))
                     }
                 }
 

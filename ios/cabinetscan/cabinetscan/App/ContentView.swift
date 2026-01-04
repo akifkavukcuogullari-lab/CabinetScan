@@ -16,6 +16,8 @@ struct ContentView: View {
                     ScanningView()
                 case .selection:
                     SelectionView()
+                case .addons:
+                    AddonsView()
                 case .review:
                     ReviewView()
                 case .submission:
@@ -90,6 +92,7 @@ extension AppState.Screen: Equatable {
              (.customerInfo, .customerInfo),
              (.scanning, .scanning),
              (.selection, .selection),
+             (.addons, .addons),
              (.review, .review),
              (.submission, .submission):
             return true

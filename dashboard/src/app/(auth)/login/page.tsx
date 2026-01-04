@@ -137,12 +137,33 @@ export default function LoginPage() {
         // Check showroom subscription status
         const { data: showroom, error: showroomStatusError } = await supabase
           .from('showrooms')
-          .select('subscription_status, name')
+          .select('subscription_status, trial_ends_at, name')
           .eq('id', showroomUser.showroom_id)
           .single()
 
         if (showroomStatusError) {
           logError(showroomStatusError, { context: 'checkShowroomStatus', email })
+        }
+
+        // Check if trial has expired
+        const isTrialExpired = showroom?.subscription_status === 'trial' &&
+          showroom?.trial_ends_at &&
+          new Date(showroom.trial_ends_at) < new Date()
+
+        if (isTrialExpired) {
+          const trialExpiredError: FormattedError = {
+            title: 'Trial Expired',
+            message: 'Your free trial has ended.',
+            suggestion: 'Please subscribe to a plan to continue using CabinetScan.',
+            isRetryable: false,
+          }
+          setError(trialExpiredError)
+          toast.error(trialExpiredError.title, {
+            description: trialExpiredError.message,
+          })
+          await supabase.auth.signOut()
+          setLoading(false)
+          return
         }
 
         // Block access for suspended or canceled subscriptions

@@ -21,12 +21,14 @@ struct ProjectSubmission: Codable {
     let project: ProjectInfo
     let measurements: MeasurementData
     let selections: [ProductSelection]
+    let addonSelections: [AddonSelection]
     let deviceInfo: DeviceInfo?
 
     enum CodingKeys: String, CodingKey {
         case customer, project, measurements, selections
         case showroomId = "showroom_id"
         case endClient = "end_client"
+        case addonSelections = "addon_selections"
         case deviceInfo = "device_info"
     }
 }
@@ -138,6 +140,21 @@ struct ProductSelection: Codable {
     }
 }
 
+// MARK: - Addon Selection
+struct AddonSelection: Codable {
+    let addonId: String
+    let isSelected: Bool
+    let quantity: Int
+    let customerNotes: String?
+
+    enum CodingKeys: String, CodingKey {
+        case quantity
+        case addonId = "addon_id"
+        case isSelected = "is_selected"
+        case customerNotes = "customer_notes"
+    }
+}
+
 // MARK: - Device Info
 struct DeviceInfo: Codable {
     let model: String?
@@ -164,5 +181,18 @@ struct SubmissionResponse: Codable {
         case projectId = "project_id"
         case referenceNumber = "reference_number"
         case showroomName = "showroom_name"
+    }
+}
+
+// MARK: - API Error Response
+struct APIErrorResponse: Codable {
+    let error: String?
+    let message: String?
+    let customerMessage: String?
+    let code: String?
+
+    enum CodingKeys: String, CodingKey {
+        case error, message, code
+        case customerMessage = "customer_message"
     }
 }

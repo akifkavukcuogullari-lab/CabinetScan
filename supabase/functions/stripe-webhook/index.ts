@@ -37,11 +37,13 @@ serve(async (req) => {
       return new Response('Invalid signature', { status: 400 })
     }
 
-    console.log(`Processing Stripe event: ${event.type}`)
+    console.log(`[WEBHOOK] Processing Stripe event: ${event.type}`)
+    console.log(`[WEBHOOK] Event ID: ${event.id}`)
 
     // Handle different event types
     switch (event.type) {
       case 'checkout.session.completed':
+        console.log(`[WEBHOOK] Checkout session data:`, JSON.stringify(event.data.object))
         await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session)
         break
 
@@ -86,10 +88,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return
   }
 
-  console.log(`Checkout completed for showroom: ${showroomId}, plan: ${planSlug}`)
+  console.log(`[CHECKOUT] Starting update for showroom: ${showroomId}`)
+  console.log(`[CHECKOUT] Plan: ${planSlug}, planId: ${planId}`)
+  console.log(`[CHECKOUT] Subscription ID: ${session.subscription}`)
 
-  // Update showroom with subscription info
-  await supabaseAdmin
+  // Update showroom with subscription info and return the updated row
+  const { data: updatedShowroom, error: updateError } = await supabaseAdmin
     .from('showrooms')
     .update({
       subscription_status: 'active',
@@ -99,9 +103,23 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       trial_ends_at: null,
     })
     .eq('id', showroomId)
+    .select('id, subscription_plan, subscription_plan_id, subscription_status')
+    .single()
+
+  if (updateError) {
+    console.error(`[CHECKOUT] Failed to update showroom ${showroomId}:`, updateError)
+    throw new Error(`Failed to update showroom: ${updateError.message}`)
+  }
+
+  if (!updatedShowroom) {
+    console.error(`[CHECKOUT] No showroom found with id: ${showroomId}`)
+    throw new Error(`Showroom not found: ${showroomId}`)
+  }
+
+  console.log(`[CHECKOUT] Successfully updated showroom:`, JSON.stringify(updatedShowroom))
 
   // Record subscription history
-  await supabaseAdmin.from('subscription_history').insert({
+  const { error: historyError } = await supabaseAdmin.from('subscription_history').insert({
     showroom_id: showroomId,
     event_type: 'created',
     to_plan_id: planId || null,
@@ -111,6 +129,11 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     },
     stripe_event_id: session.id,
   })
+
+  if (historyError) {
+    console.error(`Failed to record subscription history for ${showroomId}:`, historyError)
+    // Don't throw here - history is secondary to the main update
+  }
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
@@ -133,7 +156,10 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
   const targetShowroomId = showroomId || (await getShowroomByCustomer(subscription.customer as string))
 
-  if (!targetShowroomId) return
+  if (!targetShowroomId) {
+    console.error('No showroom found for subscription update:', subscription.id)
+    return
+  }
 
   // Map Stripe status to our status
   const statusMap: Record<string, string> = {
@@ -149,7 +175,9 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
   const newStatus = statusMap[subscription.status] || 'active'
 
-  await supabaseAdmin
+  console.log(`Subscription updated for showroom ${targetShowroomId}: status=${newStatus}, subscription=${subscription.id}`)
+
+  const { error: updateError } = await supabaseAdmin
     .from('showrooms')
     .update({
       subscription_status: newStatus,
@@ -163,22 +191,29 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     })
     .eq('id', targetShowroomId)
 
-  // Reset project count at start of new period
-  if (subscription.status === 'active') {
-    await supabaseAdmin
-      .from('showrooms')
-      .update({ project_count_this_period: 0 })
-      .eq('id', targetShowroomId)
+  if (updateError) {
+    console.error(`Failed to update subscription for showroom ${targetShowroomId}:`, updateError)
+    throw new Error(`Failed to update subscription: ${updateError.message}`)
   }
+
+  console.log(`Successfully updated subscription status for showroom ${targetShowroomId}`)
+
+  // Note: Project count is now reset monthly via pg_cron job (1st of each month)
+  // See migration 055_monthly_project_count_reset.sql
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   const showroomId = subscription.metadata?.showroom_id ||
     (await getShowroomByCustomer(subscription.customer as string))
 
-  if (!showroomId) return
+  if (!showroomId) {
+    console.error('No showroom found for subscription deletion:', subscription.id)
+    return
+  }
 
-  await supabaseAdmin
+  console.log(`Subscription deleted for showroom ${showroomId}: ${subscription.id}`)
+
+  const { error: updateError } = await supabaseAdmin
     .from('showrooms')
     .update({
       subscription_status: 'canceled',
@@ -187,8 +222,15 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     })
     .eq('id', showroomId)
 
+  if (updateError) {
+    console.error(`Failed to update showroom ${showroomId} on subscription deletion:`, updateError)
+    throw new Error(`Failed to update subscription deletion: ${updateError.message}`)
+  }
+
+  console.log(`Successfully marked showroom ${showroomId} as canceled`)
+
   // Record subscription history
-  await supabaseAdmin.from('subscription_history').insert({
+  const { error: historyError } = await supabaseAdmin.from('subscription_history').insert({
     showroom_id: showroomId,
     event_type: 'canceled',
     details: {
@@ -197,16 +239,25 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     },
     stripe_event_id: subscription.id,
   })
+
+  if (historyError) {
+    console.error(`Failed to record cancellation history for ${showroomId}:`, historyError)
+  }
 }
 
 async function handleInvoicePaid(invoice: Stripe.Invoice) {
   const customerId = invoice.customer as string
   const showroomId = await getShowroomByCustomer(customerId)
 
-  if (!showroomId) return
+  if (!showroomId) {
+    console.error('No showroom found for invoice:', invoice.id)
+    return
+  }
+
+  console.log(`Invoice paid for showroom ${showroomId}: ${invoice.id}`)
 
   // Create invoice record
-  await supabaseAdmin.from('invoices').insert({
+  const { error: insertError } = await supabaseAdmin.from('invoices').insert({
     showroom_id: showroomId,
     stripe_invoice_id: invoice.id,
     stripe_payment_intent_id: invoice.payment_intent as string,
@@ -225,22 +276,41 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
     hosted_invoice_url: invoice.hosted_invoice_url,
     line_items: invoice.lines?.data || [],
   })
+
+  if (insertError) {
+    console.error(`Failed to record invoice for showroom ${showroomId}:`, insertError)
+    // Don't throw - invoice record is secondary
+  } else {
+    console.log(`Successfully recorded invoice ${invoice.id} for showroom ${showroomId}`)
+  }
 }
 
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
   const customerId = invoice.customer as string
   const showroomId = await getShowroomByCustomer(customerId)
 
-  if (!showroomId) return
+  if (!showroomId) {
+    console.error('No showroom found for failed invoice:', invoice.id)
+    return
+  }
+
+  console.log(`Invoice payment failed for showroom ${showroomId}: ${invoice.id}, attempt: ${invoice.attempt_count}`)
 
   // Update showroom status
-  await supabaseAdmin
+  const { error: updateError } = await supabaseAdmin
     .from('showrooms')
     .update({ subscription_status: 'past_due' })
     .eq('id', showroomId)
 
+  if (updateError) {
+    console.error(`Failed to update showroom ${showroomId} to past_due:`, updateError)
+    throw new Error(`Failed to update payment failed status: ${updateError.message}`)
+  }
+
+  console.log(`Successfully marked showroom ${showroomId} as past_due`)
+
   // Record subscription history
-  await supabaseAdmin.from('subscription_history').insert({
+  const { error: historyError } = await supabaseAdmin.from('subscription_history').insert({
     showroom_id: showroomId,
     event_type: 'payment_failed',
     details: {
@@ -250,6 +320,10 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     },
     stripe_event_id: invoice.id,
   })
+
+  if (historyError) {
+    console.error(`Failed to record payment failure history for ${showroomId}:`, historyError)
+  }
 }
 
 async function getShowroomByCustomer(customerId: string): Promise<string | null> {

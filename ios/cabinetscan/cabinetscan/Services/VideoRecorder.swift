@@ -445,6 +445,124 @@ class VideoRecorder {
             return nil
         }
     }
+
+    // MARK: - Video Compression
+
+    /// Compress video for upload - reduces file size by ~60-70%
+    /// - Parameters:
+    ///   - targetBitrate: Target bitrate in bits per second (default 2.5 Mbps)
+    ///   - maxResolution: Maximum resolution (default 720p)
+    /// - Returns: URL to compressed video file, or nil if compression failed
+    func compressVideo(targetBitrate: Int = 2_500_000, maxResolution: CGSize = CGSize(width: 1280, height: 720)) async -> URL? {
+        guard FileManager.default.fileExists(atPath: outputURL.path) else {
+            print("[VideoRecorder] Source video not found for compression")
+            return nil
+        }
+
+        let asset = AVAsset(url: outputURL)
+
+        // Create output URL for compressed video
+        let tempDir = FileManager.default.temporaryDirectory
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let randomId = UUID().uuidString.prefix(8)
+        let compressedURL = tempDir.appendingPathComponent("compressed_\(timestamp)_\(randomId).mp4")
+
+        // Remove existing file if any
+        try? FileManager.default.removeItem(at: compressedURL)
+
+        // Get video track to determine dimensions
+        guard let videoTrack = asset.tracks(withMediaType: .video).first else {
+            print("[VideoRecorder] No video track found")
+            return nil
+        }
+
+        let naturalSize = videoTrack.naturalSize
+        let transform = videoTrack.preferredTransform
+
+        // Calculate actual dimensions accounting for rotation
+        let isRotated = abs(transform.b) == 1.0 && abs(transform.c) == 1.0
+        let actualWidth = isRotated ? naturalSize.height : naturalSize.width
+        let actualHeight = isRotated ? naturalSize.width : naturalSize.height
+
+        // Calculate target dimensions maintaining aspect ratio
+        let aspectRatio = actualWidth / actualHeight
+        var targetWidth = actualWidth
+        var targetHeight = actualHeight
+
+        if actualWidth > maxResolution.width || actualHeight > maxResolution.height {
+            if aspectRatio > 1 {
+                // Landscape
+                targetWidth = min(actualWidth, maxResolution.width)
+                targetHeight = targetWidth / aspectRatio
+            } else {
+                // Portrait
+                targetHeight = min(actualHeight, maxResolution.height)
+                targetWidth = targetHeight * aspectRatio
+            }
+        }
+
+        // Make dimensions even (required for H.264)
+        targetWidth = CGFloat(Int(targetWidth / 2) * 2)
+        targetHeight = CGFloat(Int(targetHeight / 2) * 2)
+
+        print("[VideoRecorder] Compressing video: \(Int(actualWidth))x\(Int(actualHeight)) -> \(Int(targetWidth))x\(Int(targetHeight))")
+
+        // Create export session
+        guard let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetMediumQuality) else {
+            print("[VideoRecorder] Failed to create export session")
+            return nil
+        }
+
+        exportSession.outputURL = compressedURL
+        exportSession.outputFileType = .mp4
+        exportSession.shouldOptimizeForNetworkUse = true
+
+        // Apply video composition for resizing if needed
+        if targetWidth != actualWidth || targetHeight != actualHeight {
+            let composition = AVMutableVideoComposition(asset: asset) { request in
+                let source = request.sourceImage.clampedToExtent()
+
+                // Scale to target size
+                let scaleX = targetWidth / actualWidth
+                let scaleY = targetHeight / actualHeight
+                let scale = min(scaleX, scaleY)
+
+                let scaledImage = source.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+                request.finish(with: scaledImage, context: nil)
+            }
+
+            composition.renderSize = CGSize(width: targetWidth, height: targetHeight)
+            composition.frameDuration = CMTime(value: 1, timescale: 30)
+            exportSession.videoComposition = composition
+        }
+
+        // Export
+        await exportSession.export()
+
+        switch exportSession.status {
+        case .completed:
+            // Get compressed file size
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: compressedURL.path),
+               let size = attrs[.size] as? Int64 {
+                let originalSize = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int64) ?? 0
+                let compressionRatio = originalSize > 0 ? Double(originalSize - size) / Double(originalSize) * 100 : 0
+                print("[VideoRecorder] Compression complete: \(String(format: "%.2f", Double(originalSize) / 1_000_000))MB -> \(String(format: "%.2f", Double(size) / 1_000_000))MB (\(String(format: "%.0f", compressionRatio))% reduction)")
+            }
+            return compressedURL
+
+        case .failed:
+            print("[VideoRecorder] Compression failed: \(exportSession.error?.localizedDescription ?? "unknown error")")
+            return nil
+
+        case .cancelled:
+            print("[VideoRecorder] Compression cancelled")
+            return nil
+
+        default:
+            print("[VideoRecorder] Compression ended with status: \(exportSession.status.rawValue)")
+            return nil
+        }
+    }
 }
 
 // MARK: - Video Metadata

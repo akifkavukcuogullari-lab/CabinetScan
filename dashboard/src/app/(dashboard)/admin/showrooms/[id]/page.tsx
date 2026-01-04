@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban, Mail } from 'lucide-react'
+import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban, Mail, HardDrive, TrendingUp } from 'lucide-react'
 import { InvitationList } from '@/components/invitations/invitation-list'
 import { SubscriptionManager } from '@/components/admin/subscription-manager'
 
@@ -50,6 +50,18 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
     .select('*', { count: 'exact', head: true })
     .eq('showroom_id', id)
     .eq('status', 'pending')
+
+  // Get usage metrics
+  const { data: usageMetrics } = await supabase
+    .from('showroom_usage_summary')
+    .select('total_projects, projects_last_month, total_storage_bytes, storage_last_month_bytes')
+    .eq('id', id)
+    .single()
+
+  const formatStorageGB = (bytes: number) => {
+    const gb = bytes / (1024 * 1024 * 1024)
+    return gb.toFixed(2)
+  }
 
   const statusColors: Record<string, string> = {
     trial: 'bg-yellow-100 text-yellow-800',
@@ -176,7 +188,70 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
           <TabsTrigger value="subscription">Subscription</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="details" className="mt-4">
+        <TabsContent value="details" className="mt-4 space-y-4">
+          {/* Usage Metrics Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Monthly Usage Metrics
+              </CardTitle>
+              <CardDescription>
+                Project submissions and storage consumption tracking
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Projects Usage */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <FolderKanban className="h-4 w-4" />
+                    Project Submissions
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                      <p className="text-xs text-blue-600 font-medium mb-1">Total Projects</p>
+                      <p className="text-3xl font-bold text-blue-900">
+                        {usageMetrics?.total_projects || 0}
+                      </p>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
+                      <p className="text-xs text-purple-600 font-medium mb-1">Last Month</p>
+                      <p className="text-3xl font-bold text-purple-900">
+                        {usageMetrics?.projects_last_month || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Storage Usage */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <HardDrive className="h-4 w-4" />
+                    Storage Consumption
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-green-50 rounded-lg p-4 border border-green-100">
+                      <p className="text-xs text-green-600 font-medium mb-1">Total Storage</p>
+                      <p className="text-3xl font-bold text-green-900">
+                        {formatStorageGB(usageMetrics?.total_storage_bytes || 0)}
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">GB</p>
+                    </div>
+                    <div className="bg-orange-50 rounded-lg p-4 border border-orange-100">
+                      <p className="text-xs text-orange-600 font-medium mb-1">Last Month</p>
+                      <p className="text-3xl font-bold text-orange-900">
+                        {formatStorageGB(usageMetrics?.storage_last_month_bytes || 0)}
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">GB</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Business Information Card */}
           <Card>
             <CardHeader>
               <CardTitle>Business Information</CardTitle>

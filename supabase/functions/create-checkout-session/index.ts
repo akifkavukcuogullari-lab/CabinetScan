@@ -5,7 +5,7 @@ import { stripe, isStripeConfigured, PRICE_IDS, DASHBOARD_URL } from '../_shared
 
 interface CheckoutRequest {
   showroom_id: string
-  plan_slug: 'basic' | 'pro'
+  plan_slug: 'starter' | 'pro' | 'business'
   billing_period: 'monthly' | 'yearly'
   success_url?: string
   cancel_url?: string
@@ -204,7 +204,11 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error creating checkout session:', error)
     return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
+      JSON.stringify({
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

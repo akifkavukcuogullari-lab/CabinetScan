@@ -106,6 +106,26 @@ SUPABASE_URL=
 SUPABASE_ANON_KEY=
 ```
 
+## Git Workflow
+
+**IMPORTANT: Never push directly to `main` branch!**
+
+- `develop` - Development/QA branch (push all changes here)
+- `main` - Production branch (deploy via PR merge only)
+
+```bash
+# Always push to develop
+git push origin develop
+
+# A pre-push hook is installed to block direct pushes to main
+```
+
+### Environments
+| Branch | Dashboard | Supabase |
+|--------|-----------|----------|
+| develop | qa.cabinetscan.nextlyn.ai | wnyrnpeabhxdqvcpofmb |
+| main | cabinetscan.nextlyn.ai | lhldqenpllbfxjkburzr |
+
 ## Specialized Agents
 
 Use these agents for specific tasks:

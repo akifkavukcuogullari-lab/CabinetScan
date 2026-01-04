@@ -55,6 +55,14 @@ interface Countertop {
   area_sqft?: number
 }
 
+interface Sink {
+  id: string
+  position: { x: number; z: number; y: number }
+  width_ft: number
+  depth_ft: number
+  type?: string
+}
+
 interface FloorPlanMeasurements {
   room: {
     min_x: number
@@ -69,8 +77,12 @@ interface FloorPlanMeasurements {
   cabinets: {
     upper: Cabinet[]
     lower: Cabinet[]
+    wall_oven?: Cabinet[]
+    pantry?: Cabinet[]
+    upper_small?: Cabinet[]
   }
   appliances: Appliance[]
+  sinks?: Sink[]
   countertops?: Countertop[]
 }
 
@@ -121,7 +133,7 @@ export class DXFGenerator {
     this.dxf.push('2')
     this.dxf.push('LAYER')
     this.dxf.push('70')
-    this.dxf.push('8') // Number of layers
+    this.dxf.push('13') // Number of layers
 
     // Walls Layer
     this.addLayer('WALLS', 7, 'Continuous')
@@ -133,10 +145,18 @@ export class DXFGenerator {
     this.addLayer('CABINETS_LOWER', 8, 'Continuous')
     // Cabinets Upper Layer
     this.addLayer('CABINETS_UPPER', 9, 'DASHED')
+    // Wall Oven Cabinets Layer
+    this.addLayer('CABINETS_WALL_OVEN', 30, 'Continuous')
+    // Pantry Cabinets Layer
+    this.addLayer('CABINETS_PANTRY', 92, 'Continuous')
+    // Upper Small Cabinets Layer
+    this.addLayer('CABINETS_UPPER_SMALL', 200, 'DASHED')
     // Countertops Layer
     this.addLayer('COUNTERTOPS', 3, 'Continuous')
     // Appliances Layer
     this.addLayer('APPLIANCES', 1, 'Continuous')
+    // Sinks Layer
+    this.addLayer('SINKS', 5, 'Continuous')
     // Dimensions Layer
     this.addLayer('DIMENSIONS', 6, 'Continuous')
 
@@ -301,6 +321,54 @@ export class DXFGenerator {
       this.addText(cabinet.position.x, cabinet.position.z, cabinet.id, 0.25, 'DIMENSIONS')
     })
 
+    // Add Wall Oven Cabinets
+    if (measurements.cabinets.wall_oven) {
+      measurements.cabinets.wall_oven.forEach((cabinet) => {
+        const halfWidth = cabinet.width_ft / 2
+        const halfDepth = cabinet.depth_ft / 2
+        const points = [
+          { x: cabinet.position.x - halfWidth, y: cabinet.position.z - halfDepth },
+          { x: cabinet.position.x + halfWidth, y: cabinet.position.z - halfDepth },
+          { x: cabinet.position.x + halfWidth, y: cabinet.position.z + halfDepth },
+          { x: cabinet.position.x - halfWidth, y: cabinet.position.z + halfDepth },
+        ]
+        this.addPolyline(points, 'CABINETS_WALL_OVEN')
+        this.addText(cabinet.position.x, cabinet.position.z, 'WALL OVEN', 0.25, 'DIMENSIONS')
+      })
+    }
+
+    // Add Pantry Cabinets
+    if (measurements.cabinets.pantry) {
+      measurements.cabinets.pantry.forEach((cabinet) => {
+        const halfWidth = cabinet.width_ft / 2
+        const halfDepth = cabinet.depth_ft / 2
+        const points = [
+          { x: cabinet.position.x - halfWidth, y: cabinet.position.z - halfDepth },
+          { x: cabinet.position.x + halfWidth, y: cabinet.position.z - halfDepth },
+          { x: cabinet.position.x + halfWidth, y: cabinet.position.z + halfDepth },
+          { x: cabinet.position.x - halfWidth, y: cabinet.position.z + halfDepth },
+        ]
+        this.addPolyline(points, 'CABINETS_PANTRY')
+        this.addText(cabinet.position.x, cabinet.position.z, 'PANTRY', 0.25, 'DIMENSIONS')
+      })
+    }
+
+    // Add Upper Small Cabinets
+    if (measurements.cabinets.upper_small) {
+      measurements.cabinets.upper_small.forEach((cabinet) => {
+        const halfWidth = cabinet.width_ft / 2
+        const halfDepth = cabinet.depth_ft / 2
+        const points = [
+          { x: cabinet.position.x - halfWidth, y: cabinet.position.z - halfDepth },
+          { x: cabinet.position.x + halfWidth, y: cabinet.position.z - halfDepth },
+          { x: cabinet.position.x + halfWidth, y: cabinet.position.z + halfDepth },
+          { x: cabinet.position.x - halfWidth, y: cabinet.position.z + halfDepth },
+        ]
+        this.addPolyline(points, 'CABINETS_UPPER_SMALL')
+        this.addText(cabinet.position.x, cabinet.position.z, cabinet.id, 0.2, 'DIMENSIONS')
+      })
+    }
+
     // Add Appliances
     measurements.appliances.forEach((appliance) => {
       const halfWidth = appliance.width_ft / 2
@@ -316,6 +384,24 @@ export class DXFGenerator {
       // Add label
       this.addText(appliance.position.x, appliance.position.z, appliance.type || 'Appliance', 0.25, 'DIMENSIONS')
     })
+
+    // Add Sinks
+    if (measurements.sinks) {
+      measurements.sinks.forEach((sink) => {
+        const halfWidth = sink.width_ft / 2
+        const halfDepth = sink.depth_ft / 2
+        const points = [
+          { x: sink.position.x - halfWidth, y: sink.position.z - halfDepth },
+          { x: sink.position.x + halfWidth, y: sink.position.z - halfDepth },
+          { x: sink.position.x + halfWidth, y: sink.position.z + halfDepth },
+          { x: sink.position.x - halfWidth, y: sink.position.z + halfDepth },
+        ]
+        this.addPolyline(points, 'SINKS')
+
+        // Add label
+        this.addText(sink.position.x, sink.position.z, 'SINK', 0.25, 'DIMENSIONS')
+      })
+    }
 
     // Add Countertops
     if (measurements.countertops) {

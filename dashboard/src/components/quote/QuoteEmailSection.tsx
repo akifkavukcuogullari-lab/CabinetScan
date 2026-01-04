@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { QuoteEmailPreview } from './QuoteEmailPreview'
 import { createClient } from '@/lib/supabase/client'
+import { hasFeature, SubscriptionPlan } from '@/lib/subscription'
 
 interface QuoteSummary {
   cabinets?: string
@@ -29,12 +30,20 @@ interface QuoteEmail {
 
 interface QuoteEmailSectionProps {
   quoteEmail: QuoteEmail
+  currentPlan?: SubscriptionPlan | null
 }
 
-export function QuoteEmailSection({ quoteEmail: initialQuoteEmail }: QuoteEmailSectionProps) {
+export function QuoteEmailSection({ quoteEmail: initialQuoteEmail, currentPlan = null }: QuoteEmailSectionProps) {
   const router = useRouter()
   const [quoteEmail, setQuoteEmail] = useState(initialQuoteEmail)
   const supabase = createClient()
+
+  const hasAiAgent = hasFeature(currentPlan, 'aiAgent')
+
+  // Don't render anything if AI Agent feature is not available
+  if (!hasAiAgent) {
+    return null
+  }
 
   const handleSend = async (data: {
     quote_email_id: string

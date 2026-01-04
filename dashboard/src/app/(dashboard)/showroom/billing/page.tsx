@@ -31,6 +31,7 @@ import {
   Loader2,
   Sparkles,
   Zap,
+  Briefcase,
   Building2,
   AlertTriangle,
 } from 'lucide-react'
@@ -93,9 +94,11 @@ export default function BillingPage() {
   const [showroom, setShowroom] = useState<Showroom | null>(null)
   const [plans, setPlans] = useState<SubscriptionPlan[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  // Always use monthly billing
+  const billingPeriod = 'monthly'
 
   // Check for success/cancel query params
   useEffect(() => {
@@ -305,10 +308,12 @@ export default function BillingPage() {
 
   const getPlanIcon = (slug: string) => {
     switch (slug) {
-      case 'basic':
+      case 'starter':
         return <Zap className="h-5 w-5" />
       case 'pro':
         return <Sparkles className="h-5 w-5" />
+      case 'business':
+        return <Briefcase className="h-5 w-5" />
       case 'enterprise':
         return <Building2 className="h-5 w-5" />
       default:
@@ -377,7 +382,7 @@ export default function BillingPage() {
                     <p className="font-semibold text-lg">Free Trial</p>
                     <p className="text-sm text-gray-500">
                       {trialDays > 0
-                        ? `${trialDays} days remaining with full Pro features`
+                        ? `${trialDays} days remaining`
                         : 'Trial expired'}
                     </p>
                   </div>
@@ -458,28 +463,11 @@ export default function BillingPage() {
                 <Sparkles className="h-5 w-5 text-purple-500 mt-0.5" />
                 <div>
                   <p className="font-medium text-purple-900">
-                    7-Day Free Trial with Full Pro Features
+                    14-Day Free Trial
                   </p>
                   <p className="text-sm text-purple-700 mt-1">
-                    You have access to all Pro features during your trial, including:
+                    Explore all features during your trial period. Choose a plan below to continue after your trial ends.
                   </p>
-                  <ul className="text-sm text-purple-700 mt-2 space-y-1">
-                    <li className="flex items-center gap-2">
-                      <Check className="h-3 w-3" /> Unlimited projects
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-3 w-3" /> Up to 500 products
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-3 w-3" /> 100GB storage
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-3 w-3" /> API & Webhook access
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-3 w-3" /> HD scans & AutoCAD export
-                    </li>
-                  </ul>
                 </div>
               </div>
             </div>
@@ -506,46 +494,22 @@ export default function BillingPage() {
 
       {/* Pricing Plans */}
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4">
           <h2 className="text-xl font-semibold">Available Plans</h2>
-          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setBillingPeriod('monthly')}
-              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                billingPeriod === 'monthly'
-                  ? 'bg-white shadow text-gray-900'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setBillingPeriod('yearly')}
-              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                billingPeriod === 'yearly'
-                  ? 'bg-white shadow text-gray-900'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Yearly (Save 17%)
-            </button>
-          </div>
+          <p className="text-sm text-gray-500 mt-1">All plans are billed monthly</p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
           {plans
             .filter((p) => p.slug !== 'trial')
             .map((plan) => {
               const isCurrentPlan = showroom?.subscription_plan === plan.slug
-              const price =
-                billingPeriod === 'yearly' && plan.price_yearly
-                  ? plan.price_yearly / 12
-                  : plan.price_monthly
+              const price = plan.price_monthly
 
               return (
                 <Card
                   key={plan.id}
-                  className={`relative ${plan.is_featured ? 'border-blue-500 border-2' : ''}`}
+                  className={`relative flex flex-col ${plan.is_featured ? 'border-blue-500 border-2' : ''}`}
                 >
                   {plan.is_featured && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -559,22 +523,15 @@ export default function BillingPage() {
                     </div>
                     <CardDescription>{plan.description}</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-4 flex-grow">
                     <div>
                       {plan.slug === 'enterprise' ? (
                         <p className="text-3xl font-bold">Custom</p>
                       ) : (
-                        <>
-                          <p className="text-3xl font-bold">
-                            ${price.toFixed(0)}
-                            <span className="text-base font-normal text-gray-500">/mo</span>
-                          </p>
-                          {billingPeriod === 'yearly' && (
-                            <p className="text-sm text-gray-500">
-                              Billed ${plan.price_yearly?.toFixed(0)}/year
-                            </p>
-                          )}
-                        </>
+                        <p className="text-3xl font-bold">
+                          ${price.toFixed(0)}
+                          <span className="text-base font-normal text-gray-500">/month</span>
+                        </p>
                       )}
                     </div>
 
@@ -589,9 +546,9 @@ export default function BillingPage() {
                       ))}
                     </ul>
                   </CardContent>
-                  <CardFooter>
+                  <CardFooter className="mt-auto">
                     {plan.slug === 'enterprise' ? (
-                      <Button className="w-full" variant="outline" asChild>
+                      <Button className="w-full bg-gray-900 hover:bg-gray-800" asChild>
                         <a href="mailto:sales@nextlyn.ai">Contact Sales</a>
                       </Button>
                     ) : isCurrentPlan ? (

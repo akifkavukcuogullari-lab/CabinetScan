@@ -7,11 +7,55 @@ struct ShowroomConfig: Codable, Identifiable {
     let showroomCode: String
     let branding: Branding
     let categories: [Category]
+    let addons: [Addon]
     let subscription: SubscriptionInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, branding, categories, subscription
+        case id, name, branding, categories, addons, subscription
         case showroomCode = "showroom_code"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        showroomCode = try container.decode(String.self, forKey: .showroomCode)
+        branding = try container.decode(Branding.self, forKey: .branding)
+        categories = try container.decode([Category].self, forKey: .categories)
+        addons = try container.decodeIfPresent([Addon].self, forKey: .addons) ?? []
+        subscription = try container.decodeIfPresent(SubscriptionInfo.self, forKey: .subscription)
+    }
+}
+
+// MARK: - Addon
+struct Addon: Codable, Identifiable {
+    let id: String
+    let question: String
+    let description: String?
+    let unit: String
+    let pricePerUnit: Double?
+    let imageUrl: String?
+    let displayOrder: Int
+    let useColorCoefficient: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, question, description, unit
+        case pricePerUnit = "price_per_unit"
+        case imageUrl = "image_url"
+        case displayOrder = "display_order"
+        case useColorCoefficient = "use_color_coefficient"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        question = try container.decode(String.self, forKey: .question)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        unit = try container.decode(String.self, forKey: .unit)
+        pricePerUnit = try container.decodeIfPresent(Double.self, forKey: .pricePerUnit)
+        imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        displayOrder = try container.decode(Int.self, forKey: .displayOrder)
+        useColorCoefficient = try container.decodeIfPresent(Bool.self, forKey: .useColorCoefficient) ?? false
     }
 }
 
@@ -80,6 +124,7 @@ struct Category: Codable, Identifiable {
     let iconName: String?
     let displayOrder: Int
     let isRequired: Bool
+    let showPriceToCustomer: Bool
     let products: [Product]
 
     enum CodingKeys: String, CodingKey {
@@ -89,6 +134,22 @@ struct Category: Codable, Identifiable {
         case iconName = "icon_name"
         case displayOrder = "display_order"
         case isRequired = "is_required"
+        case showPriceToCustomer = "show_price_to_customer"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        categoryId = try container.decode(String.self, forKey: .categoryId)
+        name = try container.decode(String.self, forKey: .name)
+        slug = try container.decode(String.self, forKey: .slug)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        pricingUnit = try container.decode(PricingUnit.self, forKey: .pricingUnit)
+        iconName = try container.decodeIfPresent(String.self, forKey: .iconName)
+        displayOrder = try container.decode(Int.self, forKey: .displayOrder)
+        isRequired = try container.decode(Bool.self, forKey: .isRequired)
+        showPriceToCustomer = try container.decodeIfPresent(Bool.self, forKey: .showPriceToCustomer) ?? true
+        products = try container.decode([Product].self, forKey: .products)
     }
 }
 
@@ -104,6 +165,7 @@ struct Product: Codable, Identifiable {
     let isFeatured: Bool
     let specifications: [String: AnyCodable]?
     let hasVariants: Bool
+    let useColorCoefficient: Bool
     let variants: [ProductVariant]
 
     enum CodingKeys: String, CodingKey {
@@ -113,6 +175,7 @@ struct Product: Codable, Identifiable {
         case displayOrder = "display_order"
         case isFeatured = "is_featured"
         case hasVariants = "has_variants"
+        case useColorCoefficient = "use_color_coefficient"
     }
 
     init(from decoder: Decoder) throws {
@@ -127,6 +190,7 @@ struct Product: Codable, Identifiable {
         isFeatured = try container.decode(Bool.self, forKey: .isFeatured)
         specifications = try container.decodeIfPresent([String: AnyCodable].self, forKey: .specifications)
         hasVariants = try container.decodeIfPresent(Bool.self, forKey: .hasVariants) ?? false
+        useColorCoefficient = try container.decodeIfPresent(Bool.self, forKey: .useColorCoefficient) ?? false
         variants = try container.decodeIfPresent([ProductVariant].self, forKey: .variants) ?? []
     }
 }
@@ -137,6 +201,7 @@ struct ProductVariant: Codable, Identifiable {
     let name: String
     let colorCode: String?
     let price: Double?
+    let priceCoefficient: Double
     let imageUrl: String?
     let thumbnailUrl: String?
     let displayOrder: Int
@@ -145,10 +210,24 @@ struct ProductVariant: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, name, price
         case colorCode = "color_code"
+        case priceCoefficient = "price_coefficient"
         case imageUrl = "image_url"
         case thumbnailUrl = "thumbnail_url"
         case displayOrder = "display_order"
         case isDefault = "is_default"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        colorCode = try container.decodeIfPresent(String.self, forKey: .colorCode)
+        price = try container.decodeIfPresent(Double.self, forKey: .price)
+        priceCoefficient = try container.decodeIfPresent(Double.self, forKey: .priceCoefficient) ?? 1.0
+        imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        thumbnailUrl = try container.decodeIfPresent(String.self, forKey: .thumbnailUrl)
+        displayOrder = try container.decode(Int.self, forKey: .displayOrder)
+        isDefault = try container.decode(Bool.self, forKey: .isDefault)
     }
 }
 
@@ -209,8 +288,20 @@ struct AnyCodable: Codable {
             try container.encode(bool)
         case let int as Int:
             try container.encode(int)
+        case let float as Float:
+            // Handle non-finite Float values (NaN, Infinity) - JSON doesn't support these
+            if float.isFinite {
+                try container.encode(Double(float))
+            } else {
+                try container.encode(0.0)
+            }
         case let double as Double:
-            try container.encode(double)
+            // Handle non-finite Double values (NaN, Infinity) - JSON doesn't support these
+            if double.isFinite {
+                try container.encode(double)
+            } else {
+                try container.encode(0.0)
+            }
         case let string as String:
             try container.encode(string)
         case let array as [Any]:

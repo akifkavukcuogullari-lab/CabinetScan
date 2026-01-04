@@ -45,10 +45,15 @@ export async function verifyWebhookSignature(
 
 // Price IDs - to be updated when Stripe is configured
 export const PRICE_IDS = {
-  basic_monthly: Deno.env.get('STRIPE_PRICE_BASIC_MONTHLY') || '',
-  basic_yearly: Deno.env.get('STRIPE_PRICE_BASIC_YEARLY') || '',
+  // Starter: $49/mo, $470/yr
+  starter_monthly: Deno.env.get('STRIPE_PRICE_STARTER_MONTHLY') || '',
+  starter_yearly: Deno.env.get('STRIPE_PRICE_STARTER_YEARLY') || '',
+  // Pro: $149/mo, $1430/yr
   pro_monthly: Deno.env.get('STRIPE_PRICE_PRO_MONTHLY') || '',
   pro_yearly: Deno.env.get('STRIPE_PRICE_PRO_YEARLY') || '',
+  // Business: $299/mo, $2870/yr
+  business_monthly: Deno.env.get('STRIPE_PRICE_BUSINESS_MONTHLY') || '',
+  business_yearly: Deno.env.get('STRIPE_PRICE_BUSINESS_YEARLY') || '',
 }
 
 // Dashboard URLs

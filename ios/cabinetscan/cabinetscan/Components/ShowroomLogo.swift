@@ -19,11 +19,16 @@ struct ShowroomLogo: View {
     var body: some View {
         Group {
             if let urlString = effectiveLogoUrl, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
+                AsyncImage(url: url, transaction: Transaction(animation: .easeIn(duration: 0.2))) { phase in
                     switch phase {
                     case .empty:
-                        ProgressView()
-                            .frame(height: maxHeight)
+                        // Reserve space while loading
+                        Color.clear
+                            .frame(width: maxWidth, height: maxHeight)
+                            .overlay(
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            )
                     case .success(let image):
                         image
                             .resizable()
@@ -35,10 +40,12 @@ struct ShowroomLogo: View {
                         fallbackLogo
                     }
                 }
+                .frame(maxWidth: maxWidth, maxHeight: maxHeight)
             } else {
                 fallbackLogo
             }
         }
+        .frame(height: maxHeight)
     }
 
     private var fallbackLogo: some View {
@@ -66,16 +73,23 @@ struct ShowroomLogoLarge: View {
     var body: some View {
         Group {
             if let urlString = effectiveLogoUrl, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
+                AsyncImage(url: url, transaction: Transaction(animation: .easeIn(duration: 0.2))) { phase in
                     switch phase {
                     case .empty:
-                        ProgressView()
-                            .frame(width: 200, height: 100)
+                        // Reserve space while loading
+                        Color.clear
+                            .frame(height: 140)
+                            .frame(maxWidth: .infinity)
+                            .overlay(
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            )
                     case .success(let image):
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: 280, maxHeight: 120)
+                            .frame(maxHeight: 140)
+                            .frame(maxWidth: .infinity)
                     case .failure:
                         fallbackLogo
                     @unknown default:
@@ -86,12 +100,15 @@ struct ShowroomLogoLarge: View {
                 fallbackLogo
             }
         }
+        .frame(height: 140)
+        .frame(maxWidth: .infinity)
     }
 
     private var fallbackLogo: some View {
         Image(systemName: "cube.transparent")
             .font(.system(size: 80))
             .foregroundStyle(.blue)
+            .frame(height: 140)
     }
 }
 

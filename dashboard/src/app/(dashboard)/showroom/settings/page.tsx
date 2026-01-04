@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
-import { Webhook, CheckCircle, AlertCircle, Loader2, Lock, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
+import { Webhook, CheckCircle, AlertCircle, Loader2, Lock, Sparkles, ChevronDown, ChevronUp, Edit2, RefreshCw, Save, X, Mail, Send } from 'lucide-react'
 import Link from 'next/link'
 
 interface Category {
@@ -55,6 +55,25 @@ export default function SettingsPage() {
   const [showWebhookExample, setShowWebhookExample] = useState(false)
   const [showQuoteWebhookExample, setShowQuoteWebhookExample] = useState(false)
 
+  // Showroom info editing state
+  const [isEditingInfo, setIsEditingInfo] = useState(false)
+  const [showroomName, setShowroomName] = useState('')
+  const [showroomCode, setShowroomCode] = useState('')
+  const [showroomEmail, setShowroomEmail] = useState('')
+  const [showroomPhone, setShowroomPhone] = useState('')
+  const [infoSaving, setInfoSaving] = useState(false)
+  const [infoError, setInfoError] = useState<string | null>(null)
+  const [infoSuccess, setInfoSuccess] = useState(false)
+
+  // Email notification state
+  const [notificationEmails, setNotificationEmails] = useState('')
+  const [notificationSaving, setNotificationSaving] = useState(false)
+  const [notificationError, setNotificationError] = useState<string | null>(null)
+  const [notificationSuccess, setNotificationSuccess] = useState(false)
+  const [sendingTestEmail, setSendingTestEmail] = useState(false)
+  const [testEmailError, setTestEmailError] = useState<string | null>(null)
+  const [testEmailSuccess, setTestEmailSuccess] = useState(false)
+
   useEffect(() => {
     async function loadData() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -81,6 +100,12 @@ export default function SettingsPage() {
         setShowroom(showroomData)
         setWebhookUrl(showroomData.webhook_url || '')
         setQuoteWebhookUrl(showroomData.quote_webhook_url || '')
+        setNotificationEmails(showroomData.notification_emails || '')
+        // Initialize edit form
+        setShowroomName(showroomData.name || '')
+        setShowroomCode(showroomData.showroom_code || '')
+        setShowroomEmail(showroomData.email || '')
+        setShowroomPhone(showroomData.phone || '')
       }
 
       // Load all categories
@@ -227,6 +252,258 @@ export default function SettingsPage() {
     }
   }
 
+  const generateShowroomCode = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Exclude confusing chars (0, O, 1, I)
+    let code = ''
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    setShowroomCode(code)
+    setInfoError(null)
+  }
+
+  const validateShowroomCode = (code: string): boolean => {
+    // Must be 6 characters, uppercase letters and numbers only
+    const pattern = /^[A-Z0-9]{6}$/
+    return pattern.test(code)
+  }
+
+  const checkCodeUnique = async (code: string): Promise<boolean> => {
+    if (!showroomId) return false
+
+    const { data } = await supabase
+      .from('showrooms')
+      .select('id')
+      .eq('showroom_code', code)
+      .neq('id', showroomId)
+      .single()
+
+    return !data // Code is unique if no data returned
+  }
+
+  const formatPhoneNumber = (phone: string): string => {
+    // Remove all non-numeric characters
+    const cleaned = phone.replace(/[^0-9]/g, '')
+
+    // If starts with 1, keep it
+    if (cleaned.startsWith('1')) {
+      return '+' + cleaned
+    }
+
+    // Otherwise, add +1 prefix
+    return cleaned ? '+1' + cleaned : ''
+  }
+
+  const validateEmail = (email: string): boolean => {
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailPattern.test(email)
+  }
+
+  const saveShowroomInfo = async () => {
+    if (!showroomId) return
+
+    // Validate required fields
+    if (!showroomName.trim()) {
+      setInfoError('Showroom name is required')
+      return
+    }
+
+    if (!showroomCode.trim()) {
+      setInfoError('Showroom code is required')
+      return
+    }
+
+    if (!showroomEmail.trim()) {
+      setInfoError('Email is required')
+      return
+    }
+
+    if (!validateEmail(showroomEmail.trim())) {
+      setInfoError('Please enter a valid email address')
+      return
+    }
+
+    if (!showroomPhone.trim()) {
+      setInfoError('Phone number is required')
+      return
+    }
+
+    // Validate code format
+    const upperCode = showroomCode.toUpperCase()
+    if (!validateShowroomCode(upperCode)) {
+      setInfoError('Showroom code must be 6 characters (letters and numbers only)')
+      return
+    }
+
+    // Check if code changed and if it's unique
+    if (upperCode !== showroom?.showroom_code) {
+      const isUnique = await checkCodeUnique(upperCode)
+      if (!isUnique) {
+        setInfoError('This showroom code is already in use. Please choose another.')
+        return
+      }
+    }
+
+    // Format phone number
+    const formattedPhone = formatPhoneNumber(showroomPhone)
+    if (!formattedPhone || formattedPhone.length < 12) { // +1 + 10 digits minimum
+      setInfoError('Please enter a valid phone number (minimum 10 digits)')
+      return
+    }
+
+    setInfoSaving(true)
+    setInfoError(null)
+    setInfoSuccess(false)
+
+    const { error } = await supabase
+      .from('showrooms')
+      .update({
+        name: showroomName.trim(),
+        showroom_code: upperCode,
+        email: showroomEmail.trim(),
+        phone: formattedPhone,
+      })
+      .eq('id', showroomId)
+
+    setInfoSaving(false)
+
+    if (error) {
+      setInfoError('Failed to save showroom information')
+    } else {
+      // Update local state
+      setShowroom({
+        ...showroom,
+        name: showroomName.trim(),
+        showroom_code: upperCode,
+        email: showroomEmail.trim(),
+        phone: formattedPhone,
+      })
+      setShowroomCode(upperCode) // Update to uppercase
+      setShowroomPhone(formattedPhone) // Update with formatted phone
+      setInfoSuccess(true)
+      setIsEditingInfo(false)
+      setTimeout(() => setInfoSuccess(false), 3000)
+    }
+  }
+
+  const cancelEditInfo = () => {
+    setShowroomName(showroom?.name || '')
+    setShowroomCode(showroom?.showroom_code || '')
+    setShowroomEmail(showroom?.email || '')
+    setShowroomPhone(showroom?.phone || '')
+    setInfoError(null)
+    setIsEditingInfo(false)
+  }
+
+  const validateNotificationEmails = (emails: string): { valid: boolean; error?: string } => {
+    if (!emails.trim()) {
+      return { valid: true } // Empty is valid
+    }
+
+    const list = emails.split(',').map(e => e.trim()).filter(e => e)
+
+    if (list.length > 5) {
+      return { valid: false, error: 'Maximum 5 email addresses allowed' }
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    for (const email of list) {
+      if (!emailPattern.test(email)) {
+        return { valid: false, error: `Invalid email address: ${email}` }
+      }
+    }
+
+    return { valid: true }
+  }
+
+  const saveNotificationEmails = async () => {
+    if (!showroomId) return
+
+    // Validate emails
+    const validation = validateNotificationEmails(notificationEmails)
+    if (!validation.valid) {
+      setNotificationError(validation.error || 'Invalid email addresses')
+      return
+    }
+
+    // Clean up and deduplicate emails
+    const cleanedEmails = notificationEmails
+      .split(',')
+      .map(e => e.trim())
+      .filter((e, index, arr) => e && arr.indexOf(e) === index) // Remove duplicates
+      .join(', ')
+
+    setNotificationSaving(true)
+    setNotificationError(null)
+    setNotificationSuccess(false)
+
+    const { error } = await supabase
+      .from('showrooms')
+      .update({ notification_emails: cleanedEmails || null })
+      .eq('id', showroomId)
+
+    setNotificationSaving(false)
+
+    if (error) {
+      setNotificationError('Failed to save notification emails')
+    } else {
+      setNotificationEmails(cleanedEmails)
+      setShowroom({ ...showroom, notification_emails: cleanedEmails })
+      setNotificationSuccess(true)
+      setTimeout(() => setNotificationSuccess(false), 3000)
+    }
+  }
+
+  const sendTestNotification = async () => {
+    if (!showroomId) return
+
+    // Check if emails are configured
+    const emails = notificationEmails.trim()
+    if (!emails) {
+      setTestEmailError('Please configure and save notification emails first')
+      return
+    }
+
+    setSendingTestEmail(true)
+    setTestEmailError(null)
+    setTestEmailSuccess(false)
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setTestEmailError('Not authenticated')
+        setSendingTestEmail(false)
+        return
+      }
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-test-notification`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ showroom_id: showroomId }),
+        }
+      )
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        setTestEmailError(result.error || result.message || 'Failed to send test notification')
+      } else {
+        setTestEmailSuccess(true)
+        setTimeout(() => setTestEmailSuccess(false), 5000)
+      }
+    } catch (error) {
+      setTestEmailError('Failed to send test notification')
+      console.error('Test notification error:', error)
+    }
+
+    setSendingTestEmail(false)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -245,46 +522,206 @@ export default function SettingsPage() {
       {/* Showroom Info */}
       <Card>
         <CardHeader>
-          <CardTitle>Showroom Information</CardTitle>
-          <CardDescription>Your showroom details</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Showroom Information</CardTitle>
+              <CardDescription>Your showroom details</CardDescription>
+            </div>
+            {!isEditingInfo && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // Ensure fields are populated with current data
+                  setShowroomName(showroom?.name || '')
+                  setShowroomCode(showroom?.showroom_code || '')
+                  setShowroomEmail(showroom?.email || '')
+                  setShowroomPhone(showroom?.phone || '')
+                  setInfoError(null)
+                  setIsEditingInfo(true)
+                }}
+              >
+                <Edit2 className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="text-gray-500">Showroom Name</Label>
-              <p className="font-medium">{showroom?.name}</p>
-            </div>
-            <div>
-              <Label className="text-gray-500">Showroom Code</Label>
-              <p className="font-mono text-lg font-bold">{showroom?.showroom_code}</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="text-gray-500">Email</Label>
-              <p>{showroom?.email}</p>
-            </div>
-            <div>
-              <Label className="text-gray-500">Phone</Label>
-              <p>{showroom?.phone || '-'}</p>
-            </div>
-          </div>
-          <div>
-            <Label className="text-gray-500">Subscription Status</Label>
-            <div className="mt-1">
-              <Badge
-                className={
-                  showroom?.subscription_status === 'active'
-                    ? 'bg-green-100 text-green-800'
-                    : showroom?.subscription_status === 'trial'
-                    ? 'bg-yellow-100 text-yellow-800'
-                    : 'bg-gray-100 text-gray-800'
-                }
-              >
-                {showroom?.subscription_status}
-              </Badge>
-            </div>
-          </div>
+          {isEditingInfo ? (
+            <>
+              {/* Edit Mode */}
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="showroom-name">Showroom Name</Label>
+                  <Input
+                    id="showroom-name"
+                    value={showroomName}
+                    onChange={(e) => {
+                      setShowroomName(e.target.value)
+                      setInfoError(null)
+                    }}
+                    placeholder="Enter showroom name"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="showroom-code">Showroom Code</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="showroom-code"
+                      value={showroomCode}
+                      onChange={(e) => {
+                        setShowroomCode(e.target.value.toUpperCase())
+                        setInfoError(null)
+                      }}
+                      placeholder="6 characters (letters/numbers)"
+                      maxLength={6}
+                      className="font-mono text-lg"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={generateShowroomCode}
+                      title="Generate new code"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    This code is used in the iOS app. Changing it will require customers to use the new code.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="showroom-email">Email</Label>
+                    <Input
+                      id="showroom-email"
+                      type="email"
+                      value={showroomEmail}
+                      onChange={(e) => {
+                        setShowroomEmail(e.target.value)
+                        setInfoError(null)
+                      }}
+                      placeholder="showroom@example.com"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="showroom-phone">Phone</Label>
+                    <div className="flex">
+                      <div className="flex items-center px-3 bg-gray-100 border border-r-0 border-gray-300 rounded-l-md text-gray-600 font-medium">
+                        +1
+                      </div>
+                      <Input
+                        id="showroom-phone"
+                        type="tel"
+                        value={showroomPhone.replace(/^\+1/, '')}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9]/g, '')
+                          setShowroomPhone('+1' + value)
+                          setInfoError(null)
+                        }}
+                        placeholder="5551234567"
+                        className="rounded-l-none"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Enter 10-digit phone number
+                    </p>
+                  </div>
+                </div>
+
+                {infoError && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    {infoError}
+                  </div>
+                )}
+
+                {infoSuccess && (
+                  <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+                    <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                    Showroom information updated successfully
+                  </div>
+                )}
+
+                <div className="flex gap-2 justify-end pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={cancelEditInfo}
+                    disabled={infoSaving}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={saveShowroomInfo}
+                    disabled={infoSaving}
+                  >
+                    {infoSaving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Display Mode */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-gray-500">Showroom Name</Label>
+                  <p className="font-medium">{showroom?.name}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-500">Showroom Code</Label>
+                  <p className="font-mono text-lg font-bold">{showroom?.showroom_code}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-gray-500">Email</Label>
+                  <p>{showroom?.email}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-500">Phone</Label>
+                  <p>{showroom?.phone || '-'}</p>
+                </div>
+              </div>
+              <div>
+                <Label className="text-gray-500">Subscription Status</Label>
+                <div className="mt-1">
+                  <Badge
+                    className={
+                      showroom?.subscription_status === 'active'
+                        ? 'bg-green-100 text-green-800'
+                        : showroom?.subscription_status === 'trial'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }
+                  >
+                    {showroom?.subscription_status}
+                  </Badge>
+                </div>
+              </div>
+
+              {infoSuccess && (
+                <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+                  <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                  Showroom information updated successfully
+                </div>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -350,6 +787,120 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Email Notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            Email Notifications
+          </CardTitle>
+          <CardDescription>
+            Configure email addresses to receive notifications when new projects are submitted.
+            You can add up to 5 email addresses (comma-separated).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="notification-emails">Notification Email Addresses</Label>
+            <Input
+              id="notification-emails"
+              type="text"
+              placeholder="email1@example.com, email2@example.com"
+              value={notificationEmails}
+              onChange={(e) => {
+                setNotificationEmails(e.target.value)
+                setNotificationError(null)
+              }}
+              className="flex-1"
+            />
+            <p className="text-xs text-gray-500">
+              Separate multiple email addresses with commas. Maximum 5 addresses.
+            </p>
+          </div>
+
+          {notificationError && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              {notificationError}
+            </div>
+          )}
+
+          {notificationSuccess && (
+            <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
+              Notification emails saved successfully
+            </div>
+          )}
+
+          {testEmailError && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              {testEmailError}
+            </div>
+          )}
+
+          {testEmailSuccess && (
+            <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
+              Test notification sent successfully! Check your inbox.
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              onClick={saveNotificationEmails}
+              disabled={notificationSaving}
+              className="flex-1"
+            >
+              {notificationSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Emails
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={sendTestNotification}
+              disabled={sendingTestEmail || !notificationEmails.trim()}
+              className="flex-1"
+            >
+              {sendingTestEmail ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Send Test Notification
+                </>
+              )}
+            </Button>
+          </div>
+
+          <Separator />
+
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h4 className="text-sm font-medium text-blue-900 mb-2">What&apos;s included in notifications?</h4>
+            <ul className="text-sm text-blue-800 space-y-1">
+              <li>• Customer name and contact information</li>
+              <li>• Project reference number</li>
+              <li>• Submission date and time</li>
+              <li>• Direct link to view project details in dashboard</li>
+            </ul>
+            <p className="text-xs text-blue-700 mt-3">
+              Notifications are sent immediately when a customer submits a new project from the iOS app.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Project Submission Webhook */}
       <Card className={!canUseWebhooks ? 'border-gray-200 bg-gray-50/50' : ''}>
         <CardHeader>
@@ -359,7 +910,7 @@ export default function SettingsPage() {
             {!canUseWebhooks && (
               <Badge variant="secondary" className="ml-2 gap-1">
                 <Lock className="h-3 w-3" />
-                Pro
+                Business
               </Badge>
             )}
           </CardTitle>
@@ -590,7 +1141,7 @@ export default function SettingsPage() {
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 mb-4">
                 <Sparkles className="h-6 w-6 text-blue-600" />
               </div>
-              <h3 className="text-lg font-medium mb-2">Upgrade to Pro</h3>
+              <h3 className="text-lg font-medium mb-2">Upgrade to Business</h3>
               <p className="text-gray-500 mb-4 max-w-md mx-auto">
                 {getUpgradeReason('webhookAccess')}
               </p>
@@ -613,7 +1164,7 @@ export default function SettingsPage() {
             {!canUseWebhooks && (
               <Badge variant="secondary" className="ml-2 gap-1">
                 <Lock className="h-3 w-3" />
-                Pro
+                Business
               </Badge>
             )}
           </CardTitle>
@@ -708,7 +1259,7 @@ export default function SettingsPage() {
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 mb-4">
                 <Sparkles className="h-6 w-6 text-blue-600" />
               </div>
-              <h3 className="text-lg font-medium mb-2">Upgrade to Pro</h3>
+              <h3 className="text-lg font-medium mb-2">Upgrade to Business</h3>
               <p className="text-gray-500 mb-4 max-w-md mx-auto">
                 {getUpgradeReason('webhookAccess')}
               </p>
