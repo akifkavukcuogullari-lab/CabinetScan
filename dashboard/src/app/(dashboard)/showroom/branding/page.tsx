@@ -370,110 +370,137 @@ export default function BrandingPage() {
           <TabsContent value="colors">
             <Card>
               <CardHeader>
-                <CardTitle>Brand Colors</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  Brand Colors
+                  {!canUseBranding && <Lock className="h-4 w-4 text-gray-400" />}
+                </CardTitle>
                 <CardDescription>
                   Customize the app appearance with your brand colors
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="primaryColor">Primary Color</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        type="color"
-                        id="primaryColor"
-                        name="primaryColor"
-                        value={formData.primaryColor}
-                        onChange={handleChange}
-                        className="w-12 h-10 p-1"
-                      />
-                      <Input
-                        value={formData.primaryColor}
-                        onChange={handleChange}
-                        name="primaryColor"
-                        className="flex-1"
-                      />
+                {/* Upgrade prompt for Starter plan */}
+                {!canUseBranding && (
+                  <div className="p-6 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg text-center">
+                    <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center mx-auto mb-4">
+                      <Lock className="h-8 w-8 text-gray-400" />
                     </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Custom Colors Not Available</h3>
+                    <p className="text-sm text-gray-600 mb-4 max-w-md mx-auto">
+                      Brand color customization is available on Pro plan and above.
+                      Upgrade to personalize the iOS app with your brand colors.
+                    </p>
+                    <Button asChild>
+                      <Link href="/showroom/billing">
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Upgrade to Pro
+                      </Link>
+                    </Button>
                   </div>
+                )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="secondaryColor">Secondary Color</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        type="color"
-                        id="secondaryColor"
-                        name="secondaryColor"
-                        value={formData.secondaryColor}
-                        onChange={handleChange}
-                        className="w-12 h-10 p-1"
-                      />
-                      <Input
-                        value={formData.secondaryColor}
-                        onChange={handleChange}
-                        name="secondaryColor"
-                        className="flex-1"
-                      />
+                {canUseBranding && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="primaryColor">Primary Color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            id="primaryColor"
+                            name="primaryColor"
+                            value={formData.primaryColor}
+                            onChange={handleChange}
+                            className="w-12 h-10 p-1"
+                          />
+                          <Input
+                            value={formData.primaryColor}
+                            onChange={handleChange}
+                            name="primaryColor"
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="secondaryColor">Secondary Color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            id="secondaryColor"
+                            name="secondaryColor"
+                            value={formData.secondaryColor}
+                            onChange={handleChange}
+                            className="w-12 h-10 p-1"
+                          />
+                          <Input
+                            value={formData.secondaryColor}
+                            onChange={handleChange}
+                            name="secondaryColor"
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="accentColor">Accent Color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            id="accentColor"
+                            name="accentColor"
+                            value={formData.accentColor}
+                            onChange={handleChange}
+                            className="w-12 h-10 p-1"
+                          />
+                          <Input
+                            value={formData.accentColor}
+                            onChange={handleChange}
+                            name="accentColor"
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="textColor">Text Color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            id="textColor"
+                            name="textColor"
+                            value={formData.textColor}
+                            onChange={handleChange}
+                            className="w-12 h-10 p-1"
+                          />
+                          <Input
+                            value={formData.textColor}
+                            onChange={handleChange}
+                            name="textColor"
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="accentColor">Accent Color</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        type="color"
-                        id="accentColor"
-                        name="accentColor"
-                        value={formData.accentColor}
-                        onChange={handleChange}
-                        className="w-12 h-10 p-1"
-                      />
-                      <Input
-                        value={formData.accentColor}
-                        onChange={handleChange}
-                        name="accentColor"
-                        className="flex-1"
-                      />
+                    {/* Preview */}
+                    <div className="mt-6 p-6 rounded-lg border" style={{ backgroundColor: formData.backgroundColor }}>
+                      <h3 className="text-lg font-bold" style={{ color: formData.primaryColor }}>
+                        Preview
+                      </h3>
+                      <p style={{ color: formData.textColor }}>
+                        This is how your brand colors will appear in the app.
+                      </p>
+                      <button
+                        type="button"
+                        className="mt-2 px-4 py-2 rounded-md text-white"
+                        style={{ backgroundColor: formData.accentColor }}
+                      >
+                        Sample Button
+                      </button>
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="textColor">Text Color</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        type="color"
-                        id="textColor"
-                        name="textColor"
-                        value={formData.textColor}
-                        onChange={handleChange}
-                        className="w-12 h-10 p-1"
-                      />
-                      <Input
-                        value={formData.textColor}
-                        onChange={handleChange}
-                        name="textColor"
-                        className="flex-1"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Preview */}
-                <div className="mt-6 p-6 rounded-lg border" style={{ backgroundColor: formData.backgroundColor }}>
-                  <h3 className="text-lg font-bold" style={{ color: formData.primaryColor }}>
-                    Preview
-                  </h3>
-                  <p style={{ color: formData.textColor }}>
-                    This is how your brand colors will appear in the app.
-                  </p>
-                  <button
-                    type="button"
-                    className="mt-2 px-4 py-2 rounded-md text-white"
-                    style={{ backgroundColor: formData.accentColor }}
-                  >
-                    Sample Button
-                  </button>
-                </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
