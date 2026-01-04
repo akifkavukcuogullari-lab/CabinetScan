@@ -262,6 +262,8 @@ serve(async (req) => {
 
     // Check if custom branding (logo) is available for this plan
     const hasCustomBranding = plan?.has_custom_branding ?? false
+    // Check if product selection is available for this plan (Starter = scan-only)
+    const hasProductSelection = plan?.has_product_selection ?? false
 
     const config: ShowroomConfig = {
       id: showroom.id,
@@ -269,14 +271,14 @@ serve(async (req) => {
       showroom_code: showroom.showroom_code,
       branding: branding
         ? {
-            // Only include logo if plan has custom branding feature (Pro+)
+            // Only include logo/colors if plan has custom branding feature (Pro+)
             logo_url: hasCustomBranding ? branding.logo_url : null,
             logo_dark_url: hasCustomBranding ? branding.logo_dark_url : null,
-            primary_color: branding.primary_color,
-            secondary_color: branding.secondary_color,
-            accent_color: branding.accent_color,
-            background_color: branding.background_color,
-            text_color: branding.text_color,
+            primary_color: hasCustomBranding ? branding.primary_color : '#2563EB',
+            secondary_color: hasCustomBranding ? branding.secondary_color : '#1E40AF',
+            accent_color: hasCustomBranding ? branding.accent_color : '#3B82F6',
+            background_color: hasCustomBranding ? branding.background_color : '#FFFFFF',
+            text_color: hasCustomBranding ? branding.text_color : '#1F2937',
             welcome_message: branding.welcome_message,
             thank_you_message: branding.thank_you_message,
             terms_url: branding.terms_url,
@@ -295,8 +297,10 @@ serve(async (req) => {
             terms_url: null,
             privacy_url: null,
           },
-      categories: categoriesWithProducts,
-      addons: (addons || []).map((a: any) => ({
+      // Only include categories/products if plan has product selection (Pro+)
+      categories: hasProductSelection ? categoriesWithProducts : [],
+      // Only include addons if plan has product selection (Pro+)
+      addons: hasProductSelection ? (addons || []).map((a: any) => ({
         id: a.id,
         question: a.question,
         description: a.description,
@@ -305,7 +309,7 @@ serve(async (req) => {
         image_url: a.image_url,
         display_order: a.display_order,
         use_color_coefficient: a.use_color_coefficient || false,
-      })),
+      })) : [],
       subscription: {
         status: showroom.subscription_status,
         plan: plan?.slug || null,
