@@ -125,9 +125,14 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
 
 /**
  * Get features for a specific plan
+ * Trial users get Pro-level features dynamically
  */
 export function getPlanFeatures(plan: SubscriptionPlan | null): PlanFeatures {
-  return planFeatures[plan || 'trial']
+  // Trial users get Pro features to experience full value
+  if (plan === 'trial' || plan === null) {
+    return planFeatures['pro']
+  }
+  return planFeatures[plan]
 }
 
 /**

@@ -439,21 +439,33 @@ export default function BillingPage() {
               </div>
             </div>
           ) : showroom?.subscription_status === 'trial' && trialDays > 0 ? (
-            /* Trial users without a paid plan still get Pro limits */
-            <div className="grid grid-cols-3 gap-4 pt-4 border-t">
-              <div>
-                <p className="text-sm text-gray-500">Projects</p>
-                <p className="text-lg font-semibold">Unlimited</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Storage</p>
-                <p className="text-lg font-semibold">100 GB</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Team Members</p>
-                <p className="text-lg font-semibold">Up to 10</p>
-              </div>
-            </div>
+            /* Trial users get Pro-level limits dynamically */
+            (() => {
+              const proPlan = plans.find((p) => p.slug === 'pro')
+              return proPlan ? (
+                <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+                  <div>
+                    <p className="text-sm text-gray-500">Projects Used</p>
+                    <p className="text-lg font-semibold">
+                      {showroom?.project_count_this_period || 0}
+                      {proPlan.project_limit && ` / ${proPlan.project_limit}`}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Storage</p>
+                    <p className="text-lg font-semibold">
+                      {proPlan.storage_limit_gb ? `${proPlan.storage_limit_gb} GB` : 'Unlimited'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Team Members</p>
+                    <p className="text-lg font-semibold">
+                      {proPlan.team_member_limit || 'Unlimited'}
+                    </p>
+                  </div>
+                </div>
+              ) : null
+            })()
           ) : null}
 
           {/* Trial Features Highlight */}
@@ -463,10 +475,10 @@ export default function BillingPage() {
                 <Sparkles className="h-5 w-5 text-purple-500 mt-0.5" />
                 <div>
                   <p className="font-medium text-purple-900">
-                    14-Day Free Trial
+                    14-Day Free Trial with Pro Features
                   </p>
                   <p className="text-sm text-purple-700 mt-1">
-                    Explore all features during your trial period. Choose a plan below to continue after your trial ends.
+                    You have full access to Pro plan features during your trial. Choose a plan below to continue after your trial ends.
                   </p>
                 </div>
               </div>
