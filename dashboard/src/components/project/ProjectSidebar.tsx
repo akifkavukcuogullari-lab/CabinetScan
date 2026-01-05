@@ -21,7 +21,8 @@ import {
   RotateCcw,
   Clock,
   AlertTriangle,
-  Info
+  Info,
+  Trash2
 } from 'lucide-react'
 import {
   HoverCard,
@@ -79,6 +80,8 @@ interface ProjectSidebarProps {
   onDismissQuoteError?: () => void
   onRequestRestore?: () => void
   isRequestingRestore?: boolean
+  onDeleteProject?: () => void
+  isDeleting?: boolean
   className?: string
 }
 
@@ -104,6 +107,8 @@ export function ProjectSidebar({
   onDismissQuoteError,
   onRequestRestore,
   isRequestingRestore = false,
+  onDeleteProject,
+  isDeleting = false,
   className = ''
 }: ProjectSidebarProps) {
   const currentStatus = statusOptions.find(s => s.value === project.status) || statusOptions[0]
@@ -513,6 +518,26 @@ export function ProjectSidebar({
               </span>
             </Button>
           </LockedFeature>
+
+          {/* Delete Project */}
+          <Button
+            className="w-full justify-start gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+            variant="outline"
+            onClick={onDeleteProject}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <>
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                Deleting...
+              </>
+            ) : (
+              <>
+                <Trash2 className="h-4 w-4" />
+                Delete Project
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
 

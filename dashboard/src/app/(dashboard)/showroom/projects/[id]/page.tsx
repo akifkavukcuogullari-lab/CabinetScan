@@ -181,6 +181,95 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     revalidatePath(`/showroom/projects/${id}`)
   }
 
+  const deleteProject = async () => {
+    'use server'
+
+    const supabase = await createClient()
+
+    // Get project with file URLs to delete from storage
+    const { data: projectData } = await supabase
+      .from('projects')
+      .select('scan_file_url, preview_image_url, video_url')
+      .eq('id', id)
+      .single()
+
+    // Get measurements with file URLs
+    const { data: measurementsData } = await supabase
+      .from('project_measurements')
+      .select('usdz_file_url, video_url, preview_image_url, visualization_photo_urls')
+      .eq('project_id', id)
+
+    // Collect all storage paths to delete
+    const storagePaths: string[] = []
+
+    // Helper to extract path from URL
+    const extractPath = (url: string | null | undefined, bucket: string) => {
+      if (!url) return null
+      const match = url.match(new RegExp(`/storage/v1/object/public/${bucket}/(.+)`))
+      return match ? match[1] : null
+    }
+
+    // Project files
+    if (projectData?.scan_file_url) {
+      const path = extractPath(projectData.scan_file_url, 'scans')
+      if (path) storagePaths.push(`scans/${path}`)
+    }
+    if (projectData?.preview_image_url) {
+      const path = extractPath(projectData.preview_image_url, 'scans')
+      if (path) storagePaths.push(`scans/${path}`)
+    }
+    if (projectData?.video_url) {
+      const path = extractPath(projectData.video_url, 'scans')
+      if (path) storagePaths.push(`scans/${path}`)
+    }
+
+    // Measurement files
+    if (measurementsData) {
+      for (const m of measurementsData) {
+        if (m.usdz_file_url) {
+          const path = extractPath(m.usdz_file_url, 'scans')
+          if (path) storagePaths.push(`scans/${path}`)
+        }
+        if (m.video_url) {
+          const path = extractPath(m.video_url, 'scans')
+          if (path) storagePaths.push(`scans/${path}`)
+        }
+        if (m.preview_image_url) {
+          const path = extractPath(m.preview_image_url, 'scans')
+          if (path) storagePaths.push(`scans/${path}`)
+        }
+        if (m.visualization_photo_urls && Array.isArray(m.visualization_photo_urls)) {
+          for (const photoUrl of m.visualization_photo_urls) {
+            const path = extractPath(photoUrl, 'scans')
+            if (path) storagePaths.push(`scans/${path}`)
+          }
+        }
+      }
+    }
+
+    // Delete files from storage (scans bucket)
+    if (storagePaths.length > 0) {
+      const pathsOnly = storagePaths.map(p => p.replace('scans/', ''))
+      await supabase.storage.from('scans').remove(pathsOnly)
+    }
+
+    // Delete related database records (cascade should handle most, but be explicit)
+    await supabase.from('quote_emails').delete().eq('project_id', id)
+    await supabase.from('project_addon_selections').delete().eq('project_id', id)
+    await supabase.from('project_selections').delete().eq('project_id', id)
+    await supabase.from('project_measurements').delete().eq('project_id', id)
+
+    // Finally delete the project
+    const { error } = await supabase.from('projects').delete().eq('id', id)
+
+    if (error) {
+      console.error('Error deleting project:', error)
+      throw new Error('Failed to delete project')
+    }
+
+    // Redirect will happen on client side
+  }
+
   // Extract scan data
   const measurement = measurements && measurements.length > 0 ? measurements[0] : null
   const hasFloorPlanData = measurement?.measurements?.walls?.length > 0 || measurement?.measurements?.room
@@ -320,6 +409,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
               await updateStatus(formData)
             }}
             onCreateQuote={createQuote}
+            onDeleteProject={deleteProject}
           />
         </div>
       </div>

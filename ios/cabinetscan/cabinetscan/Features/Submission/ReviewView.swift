@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReviewView: View {
     @EnvironmentObject var appState: AppState
+    @State private var hasAgreedToTerms = false
 
     private var categories: [Category] {
         appState.showroomConfig?.categories ?? []
@@ -18,6 +19,10 @@ struct ReviewView: View {
             return (addon: addon, quantity: selection.quantity, notes: selection.notes)
         }
     }
+
+    // Application-level legal URLs (CabinetScan platform)
+    private let termsUrl = URL(string: "https://cabinetscan.nextlyn.ai/terms")!
+    private let privacyUrl = URL(string: "https://cabinetscan.nextlyn.ai/privacy")!
 
     var body: some View {
         NavigationStack {
@@ -188,6 +193,35 @@ struct ReviewView: View {
                     Text("Add any specific requirements, design preferences, or additional details you'd like the showroom to know.")
                 }
 
+                // Legal consent section (required for all submissions)
+                Section {
+                    Toggle(isOn: $hasAgreedToTerms) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("I agree to the")
+                                .font(.subheadline)
+                            HStack(spacing: 4) {
+                                Link("Terms of Service", destination: termsUrl)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.blue)
+                                Text("and")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                Link("Privacy Policy", destination: privacyUrl)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                    }
+                    .toggleStyle(CheckboxToggleStyle())
+                    .onChange(of: hasAgreedToTerms) { _, newValue in
+                        if newValue {
+                            appState.recordConsent()
+                        }
+                    }
+                } footer: {
+                    Text("Your room scan, photos, and contact information will be shared with the showroom to provide you with a quote.")
+                }
+
                 // Submit section
                 Section {
                     Button {
@@ -202,9 +236,7 @@ struct ReviewView: View {
                             Spacer()
                         }
                     }
-                    .disabled(appState.isLoading)
-                } footer: {
-                    Text("By submitting, you agree to share your room measurements and product selections with the showroom.")
+                    .disabled(appState.isLoading || !hasAgreedToTerms)
                 }
             }
             .navigationTitle("Review")
@@ -270,6 +302,24 @@ struct SelectionThumbnail: View {
             Image(systemName: "cube.fill")
                 .font(.title3)
                 .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+// MARK: - Checkbox Toggle Style
+struct CheckboxToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
+                .font(.title2)
+                .foregroundStyle(configuration.isOn ? .blue : .secondary)
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        configuration.isOn.toggle()
+                    }
+                }
+
+            configuration.label
         }
     }
 }

@@ -23,13 +23,27 @@ struct ProjectSubmission: Codable {
     let selections: [ProductSelection]
     let addonSelections: [AddonSelection]
     let deviceInfo: DeviceInfo?
+    let consent: ConsentInfo?
 
     enum CodingKeys: String, CodingKey {
-        case customer, project, measurements, selections
+        case customer, project, measurements, selections, consent
         case showroomId = "showroom_id"
         case endClient = "end_client"
         case addonSelections = "addon_selections"
         case deviceInfo = "device_info"
+    }
+}
+
+// MARK: - Consent Info
+struct ConsentInfo: Codable {
+    let agreedAt: String  // ISO 8601 timestamp
+    let termsUrl: String?
+    let privacyUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case agreedAt = "agreed_at"
+        case termsUrl = "terms_url"
+        case privacyUrl = "privacy_url"
     }
 }
 

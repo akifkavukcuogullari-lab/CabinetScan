@@ -19,6 +19,7 @@ class AppState: ObservableObject {
     // Addon selections: addonId -> (isSelected, quantity, notes)
     @Published var addonSelections: [String: (isSelected: Bool, quantity: Int, notes: String)] = [:]
     @Published var specialRequests: String = "" // Additional notes/special requests from customer
+    @Published var consentTimestamp: Date? = nil // When user agreed to terms/privacy
     @Published var isLoading = false
     @Published var error: Error?
 
@@ -136,6 +137,10 @@ class AppState: ObservableObject {
         currentScreen = .review
     }
 
+    func recordConsent() {
+        consentTimestamp = Date()
+    }
+
     func submitProject() async {
         guard let config = showroomConfig,
               let customer = customerInfo,
@@ -181,6 +186,18 @@ class AppState: ObservableObject {
                 )
             }
 
+            // Build consent info if user agreed to terms (application-level URLs)
+            var consentInfo: ConsentInfo? = nil
+            if let timestamp = consentTimestamp {
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                consentInfo = ConsentInfo(
+                    agreedAt: formatter.string(from: timestamp),
+                    termsUrl: "https://cabinetscan.nextlyn.ai/terms",
+                    privacyUrl: "https://cabinetscan.nextlyn.ai/privacy"
+                )
+            }
+
             let submission = ProjectSubmission(
                 showroomId: config.id,
                 customer: customer,
@@ -196,7 +213,8 @@ class AppState: ObservableObject {
                     model: deviceModel,
                     iosVersion: UIDevice.current.systemVersion,
                     appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-                )
+                ),
+                consent: consentInfo
             )
 
             print("🚀 [AppState] Submitting project with \(measurements.visualizationPhotoUrls?.count ?? 0) visualization photos")
@@ -227,6 +245,7 @@ class AppState: ObservableObject {
         variantSelections = [:]
         addonSelections = [:]
         specialRequests = ""
+        consentTimestamp = nil
         error = nil
     }
 
