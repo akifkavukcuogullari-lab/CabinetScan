@@ -108,14 +108,24 @@ SUPABASE_ANON_KEY=
 
 ## Git Workflow
 
-**IMPORTANT: Never push directly to `main` branch!**
+**CRITICAL: Never push directly to `main` branch!**
 
 - `develop` - Development/QA branch (push all changes here)
 - `main` - Production branch (deploy via PR merge only)
 
+### Rules for Claude Code
+1. **NEVER** push to main directly
+2. **NEVER** use `--no-verify` flag to bypass git hooks
+3. **ALWAYS** push changes to `develop` branch first
+4. **ALWAYS** create a PR to merge `develop` → `main` for production deployment
+
 ```bash
 # Always push to develop
 git push origin develop
+
+# To deploy to production, create a PR:
+# Go to: https://github.com/akifkavukcuogullari-lab/CabinetScan/compare/main...develop
+# Or use: gh pr create --base main --head develop
 
 # A pre-push hook is installed to block direct pushes to main
 ```
