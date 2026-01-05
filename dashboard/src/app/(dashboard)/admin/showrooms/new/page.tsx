@@ -398,7 +398,7 @@ export default function NewShowroomPage() {
     if (!createdShowroomId || !formData.ownerEmail) return
 
     setLoading(true)
-    toast.loading('Retrying invitation...', {
+    const loadingToast = toast.loading('Retrying invitation...', {
       description: `Sending to ${formData.ownerEmail}`,
     })
 
@@ -409,6 +409,7 @@ export default function NewShowroomPage() {
     )
     setInvitationResult(result)
     setLoading(false)
+    toast.dismiss(loadingToast)
 
     if (result.sent) {
       toast.success('Invitation Sent', {
