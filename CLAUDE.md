@@ -116,8 +116,9 @@ SUPABASE_ANON_KEY=
 ### Rules for Claude Code
 1. **NEVER** push to main directly
 2. **NEVER** use `--no-verify` flag to bypass git hooks
-3. **ALWAYS** push changes to `develop` branch first
-4. **ALWAYS** create a PR to merge `develop` → `main` for production deployment
+3. **NEVER** push automatically - always ask user before pushing
+4. **ALWAYS** push changes to `develop` branch first (after user approval)
+5. **ALWAYS** create a PR to merge `develop` → `main` for production deployment
 
 ```bash
 # Always push to develop
