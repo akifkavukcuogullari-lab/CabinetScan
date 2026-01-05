@@ -175,7 +175,7 @@ export function SubscriptionManager({ showroom }: SubscriptionManagerProps) {
 
   // Form state
   const [status, setStatus] = useState<StatusKey>(showroom.subscription_status as StatusKey)
-  const [plan, setPlan] = useState<PlanKey>((showroom.subscription_plan as PlanKey) || 'starter')
+  const [plan, setPlan] = useState<PlanKey>((showroom.subscription_plan as PlanKey) || 'pro')
   const [trialEndsAt, setTrialEndsAt] = useState(
     showroom.trial_ends_at
       ? new Date(showroom.trial_ends_at).toISOString().split('T')[0]
@@ -192,7 +192,7 @@ export function SubscriptionManager({ showroom }: SubscriptionManagerProps) {
   }>({ open: false, action: null, title: '', description: '' })
 
   // Detect changes
-  const originalPlan = (showroom.subscription_plan as PlanKey) || 'starter'
+  const originalPlan = (showroom.subscription_plan as PlanKey) || 'pro'
   const originalTrialDate = showroom.trial_ends_at
     ? new Date(showroom.trial_ends_at).toISOString().split('T')[0]
     : ''
