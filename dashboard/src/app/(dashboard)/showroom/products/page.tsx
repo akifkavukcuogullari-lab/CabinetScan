@@ -39,7 +39,7 @@ export default async function ProductsPage({
 
   // Trial users get Pro features (including product selection)
   const isTrial = showroom?.subscription_status === 'trial'
-  const hasProductSelection = isTrial || (showroom?.subscription_plans as any)?.has_product_selection ?? false
+  const hasProductSelection = isTrial || ((showroom?.subscription_plans as any)?.has_product_selection ?? false)
 
   // Get categories with products for this showroom
   const { data: showroomCategories } = await supabase
