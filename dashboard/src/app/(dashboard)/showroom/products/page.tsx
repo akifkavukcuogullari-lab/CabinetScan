@@ -33,11 +33,13 @@ export default async function ProductsPage({
   // Check subscription plan for product selection feature
   const { data: showroom } = await supabase
     .from('showrooms')
-    .select('subscription_plan, subscription_plans(has_product_selection)')
+    .select('subscription_plan, subscription_status, subscription_plans(has_product_selection)')
     .eq('id', showroomUser.showroom_id)
     .single()
 
-  const hasProductSelection = (showroom?.subscription_plans as any)?.has_product_selection ?? false
+  // Trial users get Pro features (including product selection)
+  const isTrial = showroom?.subscription_status === 'trial'
+  const hasProductSelection = isTrial || (showroom?.subscription_plans as any)?.has_product_selection ?? false
 
   // Get categories with products for this showroom
   const { data: showroomCategories } = await supabase
