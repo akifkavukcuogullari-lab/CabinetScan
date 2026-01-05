@@ -36,20 +36,20 @@ export interface PlanFeatures {
 // Plan feature definitions
 const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
   trial: {
-    // Trial gets selected plan features (this is a fallback for trial period)
-    projectLimit: 20,
-    productLimit: null,
-    storageGb: 5,
-    teamMembers: 1,
-    retentionDays: 30,
+    // Trial gets Pro-level features to showcase full value
+    projectLimit: 100,
+    productLimit: 100,
+    storageGb: 50,
+    teamMembers: 3,
+    retentionDays: 60,
     webhookAccess: false,
     apiAccess: false,
-    autocadExport: false,
-    prioritySupport: false,
+    autocadExport: true,
+    prioritySupport: true,
     crmIntegration: false,
     aiAgent: false,
-    customBranding: false, // White-labeling is Pro+ only
-    productSelection: false,
+    customBranding: true,
+    productSelection: true,
     emailToCustomer: false,
     photosVideo: true,
   },
