@@ -35,6 +35,7 @@ import {
   Ban,
   Zap,
   Crown,
+  Briefcase,
   Building2,
   CalendarPlus,
   Power,
@@ -100,35 +101,53 @@ type StatusKey = keyof typeof statusConfig
 
 // Plan configuration with features - NO trial plan
 const planConfig = {
-  basic: {
-    label: 'Basic',
-    price: '$99/mo',
+  starter: {
+    label: 'Starter',
+    price: '$49/mo',
     icon: Zap,
     color: 'border-blue-200 hover:border-blue-400',
     selectedColor: 'border-blue-500 bg-blue-50 ring-2 ring-blue-200',
     features: [
-      'Up to 25 projects/month',
-      'Up to 100 products',
+      '20 projects/month',
+      '3D room scanning',
+      'Floor plans & measurements',
+      '5 GB storage',
       'Email support',
-      'Basic analytics',
     ],
-    limits: { projects: 25, products: 100 },
+    limits: { projects: 20, products: 0 },
   },
   pro: {
     label: 'Pro',
-    price: '$249/mo',
+    price: '$149/mo',
     icon: Crown,
     color: 'border-purple-200 hover:border-purple-400',
     selectedColor: 'border-purple-500 bg-purple-50 ring-2 ring-purple-200',
     popular: true,
     features: [
-      'Unlimited projects',
-      'Up to 500 products',
-      'Priority support',
-      'Advanced analytics',
+      '100 projects/month',
+      '100 products',
+      'Product selection in app',
+      'AutoCAD/DXF export',
       'Custom branding',
+      'Priority support',
     ],
-    limits: { projects: -1, products: 500 },
+    limits: { projects: 100, products: 100 },
+  },
+  business: {
+    label: 'Business',
+    price: '$299/mo',
+    icon: Briefcase,
+    color: 'border-orange-200 hover:border-orange-400',
+    selectedColor: 'border-orange-500 bg-orange-50 ring-2 ring-orange-200',
+    features: [
+      'Unlimited projects',
+      '300 products',
+      'API & Webhook access',
+      'AI-generated quotes',
+      'Email quotes to customers',
+      '100 GB storage',
+    ],
+    limits: { projects: -1, products: 300 },
   },
   enterprise: {
     label: 'Enterprise',
@@ -137,11 +156,12 @@ const planConfig = {
     color: 'border-gray-200 hover:border-gray-400',
     selectedColor: 'border-gray-700 bg-gray-50 ring-2 ring-gray-300',
     features: [
-      'Unlimited everything',
-      'Dedicated support',
-      'Custom integrations',
-      'SLA guarantee',
-      'White-label options',
+      'Everything in Business',
+      'Unlimited products',
+      'Unlimited storage',
+      'CRM integration',
+      'White-label solution',
+      'Dedicated account manager',
     ],
     limits: { projects: -1, products: -1 },
   },
@@ -155,7 +175,7 @@ export function SubscriptionManager({ showroom }: SubscriptionManagerProps) {
 
   // Form state
   const [status, setStatus] = useState<StatusKey>(showroom.subscription_status as StatusKey)
-  const [plan, setPlan] = useState<PlanKey>((showroom.subscription_plan as PlanKey) || 'pro')
+  const [plan, setPlan] = useState<PlanKey>((showroom.subscription_plan as PlanKey) || 'starter')
   const [trialEndsAt, setTrialEndsAt] = useState(
     showroom.trial_ends_at
       ? new Date(showroom.trial_ends_at).toISOString().split('T')[0]
@@ -172,7 +192,7 @@ export function SubscriptionManager({ showroom }: SubscriptionManagerProps) {
   }>({ open: false, action: null, title: '', description: '' })
 
   // Detect changes
-  const originalPlan = (showroom.subscription_plan as PlanKey) || 'pro'
+  const originalPlan = (showroom.subscription_plan as PlanKey) || 'starter'
   const originalTrialDate = showroom.trial_ends_at
     ? new Date(showroom.trial_ends_at).toISOString().split('T')[0]
     : ''
@@ -546,7 +566,7 @@ export function SubscriptionManager({ showroom }: SubscriptionManagerProps) {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               {Object.entries(planConfig).map(([key, config]) => {
                 const Icon = config.icon
                 const isSelected = plan === key
