@@ -148,7 +148,7 @@ export default function PricingPage() {
             </h1>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
               Choose the plan that fits your showroom. All plans include a 14-day free trial
-              with full access to your selected plan&apos;s features.
+              with full access to Pro features.
             </p>
           </div>
 
