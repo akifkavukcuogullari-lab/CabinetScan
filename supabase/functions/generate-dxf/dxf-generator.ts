@@ -29,15 +29,7 @@ export const FLOOR_PLAN_LAYERS: LayerDef[] = [
   { name: 'WALLS', color: ACI.WHITE },
   { name: 'DOORS', color: ACI.GREEN },
   { name: 'WINDOWS', color: ACI.CYAN },
-  { name: 'CABINETS_LOWER', color: ACI.BLUE },
-  { name: 'CABINETS_UPPER', color: ACI.MAGENTA, lineType: 'DASHED' },
-  { name: 'CABINETS_WALL_OVEN', color: 30 },  // Orange
-  { name: 'CABINETS_PANTRY', color: 92 },     // Green
-  { name: 'CABINETS_UPPER_SMALL', color: 200, lineType: 'DASHED' },  // Purple
   { name: 'APPLIANCES', color: ACI.RED },
-  { name: 'SINKS', color: ACI.YELLOW },
-  { name: 'COUNTERTOPS', color: ACI.GRAY },
-  { name: 'TEXT', color: ACI.WHITE },
 ]
 
 interface Point2D {
