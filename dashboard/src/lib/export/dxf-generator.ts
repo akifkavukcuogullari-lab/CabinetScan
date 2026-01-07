@@ -1,6 +1,7 @@
 /**
  * DXF Generator for Floor Plan Export
- * Converts floor plan measurements to AutoCAD DXF format
+ * Converts floor plan measurements to AutoCAD DXF format (R12/AC1009)
+ * Using R12 format for maximum compatibility with ProKitchen, 2020 Design, and AutoCAD
  */
 
 interface Point2D {
@@ -88,147 +89,279 @@ interface FloorPlanMeasurements {
 
 export class DXFGenerator {
   private dxf: string[] = []
-  private handle = 100 // Starting handle for entities
 
   constructor() {
     this.initializeDXF()
   }
 
   private initializeDXF() {
-    // DXF Header
-    this.dxf.push('0')
+    // HEADER section - R12 format (AC1009) for maximum compatibility
+    this.dxf.push('  0')
     this.dxf.push('SECTION')
-    this.dxf.push('2')
+    this.dxf.push('  2')
     this.dxf.push('HEADER')
-    this.dxf.push('9')
+    this.dxf.push('  9')
     this.dxf.push('$ACADVER')
-    this.dxf.push('1')
-    this.dxf.push('AC1015') // AutoCAD 2000 format
-    this.dxf.push('9')
+    this.dxf.push('  1')
+    this.dxf.push('AC1009')
+    this.dxf.push('  9')
     this.dxf.push('$INSUNITS')
-    this.dxf.push('70')
+    this.dxf.push(' 70')
     this.dxf.push('1') // Inches
-    this.dxf.push('0')
+    this.dxf.push('  9')
+    this.dxf.push('$LUNITS')
+    this.dxf.push(' 70')
+    this.dxf.push('2') // Decimal
+    this.dxf.push('  9')
+    this.dxf.push('$LUPREC')
+    this.dxf.push(' 70')
+    this.dxf.push('4') // 4 decimal places
+    this.dxf.push('  9')
+    this.dxf.push('$EXTMIN')
+    this.dxf.push(' 10')
+    this.dxf.push('0.0')
+    this.dxf.push(' 20')
+    this.dxf.push('0.0')
+    this.dxf.push(' 30')
+    this.dxf.push('0.0')
+    this.dxf.push('  9')
+    this.dxf.push('$EXTMAX')
+    this.dxf.push(' 10')
+    this.dxf.push('1000.0')
+    this.dxf.push(' 20')
+    this.dxf.push('1000.0')
+    this.dxf.push(' 30')
+    this.dxf.push('0.0')
+    this.dxf.push('  0')
     this.dxf.push('ENDSEC')
 
-    // Tables Section
-    this.dxf.push('0')
+    // TABLES section
+    this.dxf.push('  0')
     this.dxf.push('SECTION')
-    this.dxf.push('2')
+    this.dxf.push('  2')
     this.dxf.push('TABLES')
+    this.addLinetypeTable()
     this.addLayerTable()
-    this.dxf.push('0')
+    this.addStyleTable()
+    this.dxf.push('  0')
     this.dxf.push('ENDSEC')
 
-    // Entities Section Start
-    this.dxf.push('0')
+    // BLOCKS section (required for R12)
+    this.dxf.push('  0')
     this.dxf.push('SECTION')
-    this.dxf.push('2')
+    this.dxf.push('  2')
+    this.dxf.push('BLOCKS')
+    this.dxf.push('  0')
+    this.dxf.push('ENDSEC')
+
+    // ENTITIES section start
+    this.dxf.push('  0')
+    this.dxf.push('SECTION')
+    this.dxf.push('  2')
     this.dxf.push('ENTITIES')
   }
 
-  private addLayerTable() {
-    this.dxf.push('0')
+  private addLinetypeTable() {
+    this.dxf.push('  0')
     this.dxf.push('TABLE')
+    this.dxf.push('  2')
+    this.dxf.push('LTYPE')
+    this.dxf.push(' 70')
     this.dxf.push('2')
+
+    // CONTINUOUS linetype
+    this.dxf.push('  0')
+    this.dxf.push('LTYPE')
+    this.dxf.push('  2')
+    this.dxf.push('CONTINUOUS')
+    this.dxf.push(' 70')
+    this.dxf.push('0')
+    this.dxf.push('  3')
+    this.dxf.push('Solid line')
+    this.dxf.push(' 72')
+    this.dxf.push('65')
+    this.dxf.push(' 73')
+    this.dxf.push('0')
+    this.dxf.push(' 40')
+    this.dxf.push('0.0')
+
+    // DASHED linetype
+    this.dxf.push('  0')
+    this.dxf.push('LTYPE')
+    this.dxf.push('  2')
+    this.dxf.push('DASHED')
+    this.dxf.push(' 70')
+    this.dxf.push('0')
+    this.dxf.push('  3')
+    this.dxf.push('Dashed __ __ __ __')
+    this.dxf.push(' 72')
+    this.dxf.push('65')
+    this.dxf.push(' 73')
+    this.dxf.push('2')
+    this.dxf.push(' 40')
+    this.dxf.push('0.75')
+    this.dxf.push(' 49')
+    this.dxf.push('0.5')
+    this.dxf.push(' 49')
+    this.dxf.push('-0.25')
+
+    this.dxf.push('  0')
+    this.dxf.push('ENDTAB')
+  }
+
+  private addLayerTable() {
+    this.dxf.push('  0')
+    this.dxf.push('TABLE')
+    this.dxf.push('  2')
     this.dxf.push('LAYER')
-    this.dxf.push('70')
-    this.dxf.push('13') // Number of layers
+    this.dxf.push(' 70')
+    this.dxf.push('12')
 
     // Walls Layer
-    this.addLayer('WALLS', 7, 'Continuous')
+    this.addLayer('WALLS', 7, 'CONTINUOUS')
     // Doors Layer
-    this.addLayer('DOORS', 4, 'Continuous')
+    this.addLayer('DOORS', 3, 'CONTINUOUS')
     // Windows Layer
-    this.addLayer('WINDOWS', 5, 'Continuous')
+    this.addLayer('WINDOWS', 4, 'CONTINUOUS')
     // Cabinets Lower Layer
-    this.addLayer('CABINETS_LOWER', 8, 'Continuous')
+    this.addLayer('CABINETS_LOWER', 5, 'CONTINUOUS')
     // Cabinets Upper Layer
-    this.addLayer('CABINETS_UPPER', 9, 'DASHED')
+    this.addLayer('CABINETS_UPPER', 6, 'DASHED')
     // Wall Oven Cabinets Layer
-    this.addLayer('CABINETS_WALL_OVEN', 30, 'Continuous')
+    this.addLayer('CABINETS_WALL_OVEN', 30, 'CONTINUOUS')
     // Pantry Cabinets Layer
-    this.addLayer('CABINETS_PANTRY', 92, 'Continuous')
+    this.addLayer('CABINETS_PANTRY', 92, 'CONTINUOUS')
     // Upper Small Cabinets Layer
     this.addLayer('CABINETS_UPPER_SMALL', 200, 'DASHED')
     // Countertops Layer
-    this.addLayer('COUNTERTOPS', 3, 'Continuous')
+    this.addLayer('COUNTERTOPS', 8, 'CONTINUOUS')
     // Appliances Layer
-    this.addLayer('APPLIANCES', 1, 'Continuous')
+    this.addLayer('APPLIANCES', 1, 'CONTINUOUS')
     // Sinks Layer
-    this.addLayer('SINKS', 5, 'Continuous')
+    this.addLayer('SINKS', 2, 'CONTINUOUS')
     // Dimensions Layer
-    this.addLayer('DIMENSIONS', 6, 'Continuous')
+    this.addLayer('DIMENSIONS', 7, 'CONTINUOUS')
 
+    this.dxf.push('  0')
+    this.dxf.push('ENDTAB')
+  }
+
+  private addStyleTable() {
+    this.dxf.push('  0')
+    this.dxf.push('TABLE')
+    this.dxf.push('  2')
+    this.dxf.push('STYLE')
+    this.dxf.push(' 70')
+    this.dxf.push('1')
+
+    this.dxf.push('  0')
+    this.dxf.push('STYLE')
+    this.dxf.push('  2')
+    this.dxf.push('STANDARD')
+    this.dxf.push(' 70')
     this.dxf.push('0')
+    this.dxf.push(' 40')
+    this.dxf.push('0.0')
+    this.dxf.push(' 41')
+    this.dxf.push('1.0')
+    this.dxf.push(' 50')
+    this.dxf.push('0.0')
+    this.dxf.push(' 71')
+    this.dxf.push('0')
+    this.dxf.push(' 42')
+    this.dxf.push('0.2')
+    this.dxf.push('  3')
+    this.dxf.push('txt')
+    this.dxf.push('  4')
+    this.dxf.push('')
+
+    this.dxf.push('  0')
     this.dxf.push('ENDTAB')
   }
 
   private addLayer(name: string, color: number, lineType: string) {
-    this.dxf.push('0')
+    this.dxf.push('  0')
     this.dxf.push('LAYER')
-    this.dxf.push('2')
+    this.dxf.push('  2')
     this.dxf.push(name)
-    this.dxf.push('70')
+    this.dxf.push(' 70')
     this.dxf.push('0')
-    this.dxf.push('62')
+    this.dxf.push(' 62')
     this.dxf.push(color.toString())
-    this.dxf.push('6')
+    this.dxf.push('  6')
     this.dxf.push(lineType)
   }
 
   private addLine(x1: number, y1: number, x2: number, y2: number, layer: string) {
-    this.dxf.push('0')
+    this.dxf.push('  0')
     this.dxf.push('LINE')
-    this.dxf.push('5')
-    this.dxf.push((this.handle++).toString(16))
-    this.dxf.push('8')
+    this.dxf.push('  8')
     this.dxf.push(layer)
-    this.dxf.push('10')
-    this.dxf.push(x1.toFixed(6))
-    this.dxf.push('20')
-    this.dxf.push(y1.toFixed(6))
-    this.dxf.push('11')
-    this.dxf.push(x2.toFixed(6))
-    this.dxf.push('21')
-    this.dxf.push(y2.toFixed(6))
+    this.dxf.push(' 10')
+    this.dxf.push(x1.toFixed(4))
+    this.dxf.push(' 20')
+    this.dxf.push(y1.toFixed(4))
+    this.dxf.push(' 30')
+    this.dxf.push('0.0')
+    this.dxf.push(' 11')
+    this.dxf.push(x2.toFixed(4))
+    this.dxf.push(' 21')
+    this.dxf.push(y2.toFixed(4))
+    this.dxf.push(' 31')
+    this.dxf.push('0.0')
   }
 
   private addPolyline(points: { x: number; y: number }[], layer: string, closed = true) {
-    this.dxf.push('0')
-    this.dxf.push('LWPOLYLINE')
-    this.dxf.push('5')
-    this.dxf.push((this.handle++).toString(16))
-    this.dxf.push('8')
-    this.dxf.push(layer)
-    this.dxf.push('90')
-    this.dxf.push(points.length.toString())
-    this.dxf.push('70')
-    this.dxf.push(closed ? '1' : '0')
+    const flags = closed ? 1 : 0
 
+    // Start POLYLINE (R12 format)
+    this.dxf.push('  0')
+    this.dxf.push('POLYLINE')
+    this.dxf.push('  8')
+    this.dxf.push(layer)
+    this.dxf.push(' 66')
+    this.dxf.push('1')
+    this.dxf.push(' 70')
+    this.dxf.push(flags.toString())
+
+    // Add VERTEX entries
     points.forEach((point) => {
-      this.dxf.push('10')
-      this.dxf.push(point.x.toFixed(6))
-      this.dxf.push('20')
-      this.dxf.push(point.y.toFixed(6))
+      this.dxf.push('  0')
+      this.dxf.push('VERTEX')
+      this.dxf.push('  8')
+      this.dxf.push(layer)
+      this.dxf.push(' 10')
+      this.dxf.push(point.x.toFixed(4))
+      this.dxf.push(' 20')
+      this.dxf.push(point.y.toFixed(4))
+      this.dxf.push(' 30')
+      this.dxf.push('0.0')
     })
+
+    // End with SEQEND
+    this.dxf.push('  0')
+    this.dxf.push('SEQEND')
+    this.dxf.push('  8')
+    this.dxf.push(layer)
   }
 
   private addText(x: number, y: number, text: string, height: number, layer: string) {
-    this.dxf.push('0')
+    this.dxf.push('  0')
     this.dxf.push('TEXT')
-    this.dxf.push('5')
-    this.dxf.push((this.handle++).toString(16))
-    this.dxf.push('8')
+    this.dxf.push('  8')
     this.dxf.push(layer)
-    this.dxf.push('10')
-    this.dxf.push(x.toFixed(6))
-    this.dxf.push('20')
-    this.dxf.push(y.toFixed(6))
-    this.dxf.push('40')
-    this.dxf.push(height.toFixed(6))
-    this.dxf.push('1')
+    this.dxf.push(' 10')
+    this.dxf.push(x.toFixed(4))
+    this.dxf.push(' 20')
+    this.dxf.push(y.toFixed(4))
+    this.dxf.push(' 30')
+    this.dxf.push('0.0')
+    this.dxf.push(' 40')
+    this.dxf.push(height.toFixed(4))
+    this.dxf.push('  1')
     this.dxf.push(text)
+    this.dxf.push(' 50')
+    this.dxf.push('0.0')
   }
 
   public generateFromMeasurements(measurements: FloorPlanMeasurements): string {
@@ -431,12 +564,12 @@ export class DXFGenerator {
       })
     }
 
-    // Close Entities Section
-    this.dxf.push('0')
+    // Close ENTITIES section
+    this.dxf.push('  0')
     this.dxf.push('ENDSEC')
 
-    // End of File
-    this.dxf.push('0')
+    // End of file
+    this.dxf.push('  0')
     this.dxf.push('EOF')
 
     return this.dxf.join('\n')

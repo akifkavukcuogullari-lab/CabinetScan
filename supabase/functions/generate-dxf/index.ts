@@ -216,7 +216,7 @@ serve(async (req) => {
         if (cabinet.corners && cabinet.corners.length === 4) {
           // Use corner points if available
           const points = cabinet.corners.map(c => toDxfCoords(c.x, c.z))
-          dxf.addLwPolyline(points, 'CABINETS_LOWER', true)
+          dxf.addPolyline(points, 'CABINETS_LOWER', true)
         } else if (cabinet.position && cabinet.width_ft && cabinet.depth_ft) {
           // Fall back to position + dimensions
           const pos = toDxfCoords(cabinet.position.x, cabinet.position.z)
@@ -232,7 +232,7 @@ serve(async (req) => {
       for (const cabinet of measurements.cabinets.upper) {
         if (cabinet.corners && cabinet.corners.length === 4) {
           const points = cabinet.corners.map(c => toDxfCoords(c.x, c.z))
-          dxf.addLwPolyline(points, 'CABINETS_UPPER', true)
+          dxf.addPolyline(points, 'CABINETS_UPPER', true)
         } else if (cabinet.position && cabinet.width_ft && cabinet.depth_ft) {
           const pos = toDxfCoords(cabinet.position.x, cabinet.position.z)
           const width = feetToInches(cabinet.width_ft)
@@ -247,7 +247,7 @@ serve(async (req) => {
       for (const cabinet of measurements.cabinets.wall_oven) {
         if (cabinet.corners && cabinet.corners.length === 4) {
           const points = cabinet.corners.map(c => toDxfCoords(c.x, c.z))
-          dxf.addLwPolyline(points, 'CABINETS_WALL_OVEN', true)
+          dxf.addPolyline(points, 'CABINETS_WALL_OVEN', true)
           // Add label
           const centerX = points.reduce((sum, p) => sum + p.x, 0) / 4
           const centerY = points.reduce((sum, p) => sum + p.y, 0) / 4
@@ -267,7 +267,7 @@ serve(async (req) => {
       for (const cabinet of measurements.cabinets.pantry) {
         if (cabinet.corners && cabinet.corners.length === 4) {
           const points = cabinet.corners.map(c => toDxfCoords(c.x, c.z))
-          dxf.addLwPolyline(points, 'CABINETS_PANTRY', true)
+          dxf.addPolyline(points, 'CABINETS_PANTRY', true)
           // Add label
           const centerX = points.reduce((sum, p) => sum + p.x, 0) / 4
           const centerY = points.reduce((sum, p) => sum + p.y, 0) / 4
@@ -287,7 +287,7 @@ serve(async (req) => {
       for (const cabinet of measurements.cabinets.upper_small) {
         if (cabinet.corners && cabinet.corners.length === 4) {
           const points = cabinet.corners.map(c => toDxfCoords(c.x, c.z))
-          dxf.addLwPolyline(points, 'CABINETS_UPPER_SMALL', true)
+          dxf.addPolyline(points, 'CABINETS_UPPER_SMALL', true)
         } else if (cabinet.position && cabinet.width_ft && cabinet.depth_ft) {
           const pos = toDxfCoords(cabinet.position.x, cabinet.position.z)
           const width = feetToInches(cabinet.width_ft)
@@ -302,7 +302,7 @@ serve(async (req) => {
       for (const appliance of measurements.appliances) {
         if (appliance.corners && appliance.corners.length === 4) {
           const points = appliance.corners.map(c => toDxfCoords(c.x, c.z))
-          dxf.addLwPolyline(points, 'APPLIANCES', true)
+          dxf.addPolyline(points, 'APPLIANCES', true)
 
           // Add type label in center
           if (appliance.type) {
@@ -328,7 +328,7 @@ serve(async (req) => {
       for (const sink of measurements.sinks) {
         if (sink.corners && sink.corners.length === 4) {
           const points = sink.corners.map(c => toDxfCoords(c.x, c.z))
-          dxf.addLwPolyline(points, 'SINKS', true)
+          dxf.addPolyline(points, 'SINKS', true)
 
           // Add sink symbol (oval/circle in center)
           const centerX = points.reduce((sum, p) => sum + p.x, 0) / 4
