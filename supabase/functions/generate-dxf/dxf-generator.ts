@@ -1,8 +1,8 @@
 /**
  * DXF Generator for Floor Plans
- * Generates AutoCAD DXF format (R2007/AC1021) compatible with 2020 Design and ProKitchen
+ * Generates ASCII DXF format (R12/AC1009) for maximum compatibility with ProKitchen, 2020 Design, and AutoCAD
  *
- * DXF Format Reference: https://images.autodesk.com/adsk/files/autocad_2012_pdf_dxf-reference_enu.pdf
+ * Using R12 format for best compatibility - most kitchen design software supports this format
  */
 
 // AutoCAD Color Index (ACI) standard colors
@@ -29,15 +29,7 @@ export const FLOOR_PLAN_LAYERS: LayerDef[] = [
   { name: 'WALLS', color: ACI.WHITE },
   { name: 'DOORS', color: ACI.GREEN },
   { name: 'WINDOWS', color: ACI.CYAN },
-  { name: 'CABINETS_LOWER', color: ACI.BLUE },
-  { name: 'CABINETS_UPPER', color: ACI.MAGENTA, lineType: 'DASHED' },
-  { name: 'CABINETS_WALL_OVEN', color: 30 },  // Orange
-  { name: 'CABINETS_PANTRY', color: 92 },     // Green
-  { name: 'CABINETS_UPPER_SMALL', color: 200, lineType: 'DASHED' },  // Purple
   { name: 'APPLIANCES', color: ACI.RED },
-  { name: 'SINKS', color: ACI.YELLOW },
-  { name: 'COUNTERTOPS', color: ACI.GRAY },
-  { name: 'TEXT', color: ACI.WHITE },
 ]
 
 interface Point2D {
@@ -47,20 +39,15 @@ interface Point2D {
 
 /**
  * DXF Generator Class
- * Creates ASCII DXF files compatible with AutoCAD and cabinet design software
+ * Creates ASCII DXF files in R12 format for maximum compatibility
  */
 export class DXFGenerator {
   private entities: string[] = []
   private layers: LayerDef[] = []
-  private handleCounter = 100
 
   constructor() {
     // Add default layers
     this.layers = [...FLOOR_PLAN_LAYERS]
-  }
-
-  private nextHandle(): string {
-    return (this.handleCounter++).toString(16).toUpperCase()
   }
 
   /**
@@ -77,63 +64,72 @@ export class DXFGenerator {
    * @param layer Layer name
    */
   addLine(start: Point2D, end: Point2D, layer: string): void {
-    const handle = this.nextHandle()
-    this.entities.push(`0
+    this.entities.push(`  0
 LINE
-5
-${handle}
-8
+  8
 ${layer}
-10
+ 10
 ${start.x.toFixed(4)}
-20
+ 20
 ${start.y.toFixed(4)}
-30
-0.0000
-11
+ 30
+0.0
+ 11
 ${end.x.toFixed(4)}
-21
+ 21
 ${end.y.toFixed(4)}
-31
-0.0000`)
+ 31
+0.0`)
   }
 
   /**
-   * Add a LWPOLYLINE (lightweight polyline) entity
+   * Add a POLYLINE entity (R12 format - more compatible than LWPOLYLINE)
    * @param points Array of points (inches)
    * @param layer Layer name
    * @param closed Whether the polyline is closed
    */
-  addLwPolyline(points: Point2D[], layer: string, closed = false): void {
+  addPolyline(points: Point2D[], layer: string, closed = false): void {
     if (points.length < 2) return
 
-    const handle = this.nextHandle()
     const flags = closed ? 1 : 0
 
-    let polyline = `0
-LWPOLYLINE
-5
-${handle}
-8
+    // Start POLYLINE
+    let polyline = `  0
+POLYLINE
+  8
 ${layer}
-90
-${points.length}
-70
+ 66
+1
+ 70
 ${flags}`
 
+    // Add VERTEX entries
     for (const pt of points) {
       polyline += `
-10
+  0
+VERTEX
+  8
+${layer}
+ 10
 ${pt.x.toFixed(4)}
-20
-${pt.y.toFixed(4)}`
+ 20
+${pt.y.toFixed(4)}
+ 30
+0.0`
     }
+
+    // End POLYLINE with SEQEND
+    polyline += `
+  0
+SEQEND
+  8
+${layer}`
 
     this.entities.push(polyline)
   }
 
   /**
-   * Add a closed rectangle
+   * Add a closed rectangle using POLYLINE
    * @param x X coordinate of bottom-left corner (inches)
    * @param y Y coordinate of bottom-left corner (inches)
    * @param width Width (inches)
@@ -147,7 +143,7 @@ ${pt.y.toFixed(4)}`
       { x: x + width, y: y + height },
       { x, y: y + height },
     ]
-    this.addLwPolyline(points, layer, true)
+    this.addPolyline(points, layer, true)
   }
 
   /**
@@ -159,24 +155,21 @@ ${pt.y.toFixed(4)}`
    * @param layer Layer name
    */
   addArc(center: Point2D, radius: number, startAngle: number, endAngle: number, layer: string): void {
-    const handle = this.nextHandle()
-    this.entities.push(`0
+    this.entities.push(`  0
 ARC
-5
-${handle}
-8
+  8
 ${layer}
-10
+ 10
 ${center.x.toFixed(4)}
-20
+ 20
 ${center.y.toFixed(4)}
-30
-0.0000
-40
+ 30
+0.0
+ 40
 ${radius.toFixed(4)}
-50
+ 50
 ${startAngle.toFixed(4)}
-51
+ 51
 ${endAngle.toFixed(4)}`)
   }
 
@@ -187,20 +180,17 @@ ${endAngle.toFixed(4)}`)
    * @param layer Layer name
    */
   addCircle(center: Point2D, radius: number, layer: string): void {
-    const handle = this.nextHandle()
-    this.entities.push(`0
+    this.entities.push(`  0
 CIRCLE
-5
-${handle}
-8
+  8
 ${layer}
-10
+ 10
 ${center.x.toFixed(4)}
-20
+ 20
 ${center.y.toFixed(4)}
-30
-0.0000
-40
+ 30
+0.0
+ 40
 ${radius.toFixed(4)}`)
   }
 
@@ -213,29 +203,26 @@ ${radius.toFixed(4)}`)
    * @param rotation Rotation angle (degrees)
    */
   addText(position: Point2D, height: number, text: string, layer: string, rotation = 0): void {
-    const handle = this.nextHandle()
-    this.entities.push(`0
+    this.entities.push(`  0
 TEXT
-5
-${handle}
-8
+  8
 ${layer}
-10
+ 10
 ${position.x.toFixed(4)}
-20
+ 20
 ${position.y.toFixed(4)}
-30
-0.0000
-40
+ 30
+0.0
+ 40
 ${height.toFixed(4)}
-1
+  1
 ${text}
-50
+ 50
 ${rotation.toFixed(4)}`)
   }
 
   /**
-   * Generate the complete DXF file content
+   * Generate the complete DXF file content in R12 format
    */
   generate(): string {
     const sections: string[] = []
@@ -243,139 +230,198 @@ ${rotation.toFixed(4)}`)
     // HEADER section
     sections.push(this.generateHeader())
 
-    // TABLES section (includes layers)
+    // TABLES section (includes linetypes and layers)
     sections.push(this.generateTables())
+
+    // BLOCKS section (required, even if empty)
+    sections.push(this.generateBlocks())
 
     // ENTITIES section
     sections.push(this.generateEntities())
 
     // EOF
-    sections.push(`0
+    sections.push(`  0
 EOF`)
 
     return sections.join('\n')
   }
 
   private generateHeader(): string {
-    return `0
+    return `  0
 SECTION
-2
+  2
 HEADER
-9
+  9
 $ACADVER
-1
-AC1021
-9
+  1
+AC1009
+  9
 $INSUNITS
-70
+ 70
 1
-9
+  9
 $LUNITS
-70
+ 70
 2
-9
+  9
 $LUPREC
-70
+ 70
 4
-9
-$MEASUREMENT
-70
-0
-0
+  9
+$EXTMIN
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$EXTMAX
+ 10
+1000.0
+ 20
+1000.0
+ 30
+0.0
+  0
 ENDSEC`
   }
 
   private generateTables(): string {
+    // Build LTYPE table
+    const linetypeTable = `  0
+TABLE
+  2
+LTYPE
+ 70
+2
+  0
+LTYPE
+  2
+CONTINUOUS
+ 70
+0
+  3
+Solid line
+ 72
+65
+ 73
+0
+ 40
+0.0
+  0
+LTYPE
+  2
+DASHED
+ 70
+0
+  3
+Dashed __ __ __ __
+ 72
+65
+ 73
+2
+ 40
+0.75
+ 49
+0.5
+ 49
+-0.25
+  0
+ENDTAB`
+
+    // Build LAYER table
     const layerEntries = this.layers.map((layer) => {
       const lineType = layer.lineType || 'CONTINUOUS'
-      return `0
+      return `  0
 LAYER
-2
+  2
 ${layer.name}
-70
+ 70
 0
-62
+ 62
 ${layer.color}
-6
+  6
 ${lineType}`
     }).join('\n')
 
-    // Add DASHED linetype definition
-    const linetypes = `0
-LTYPE
-2
-CONTINUOUS
-70
-0
-3
-Solid line
-72
-65
-73
-0
-40
-0.0
-0
-LTYPE
-2
-DASHED
-70
-0
-3
-Dashed line
-72
-65
-73
-2
-40
-0.75
-49
-0.5
-49
--0.25`
-
-    return `0
-SECTION
-2
-TABLES
-0
+    const layerTable = `  0
 TABLE
-2
-LTYPE
-70
-2
-${linetypes}
-0
-ENDTAB
-0
-TABLE
-2
+  2
 LAYER
-70
+ 70
 ${this.layers.length}
 ${layerEntries}
+  0
+ENDTAB`
+
+    // Build STYLE table (required for TEXT entities)
+    const styleTable = `  0
+TABLE
+  2
+STYLE
+ 70
+1
+  0
+STYLE
+  2
+STANDARD
+ 70
 0
-ENDTAB
+ 40
+0.0
+ 41
+1.0
+ 50
+0.0
+ 71
 0
+ 42
+0.2
+  3
+txt
+  4
+
+  0
+ENDTAB`
+
+    return `  0
+SECTION
+  2
+TABLES
+${linetypeTable}
+${layerTable}
+${styleTable}
+  0
+ENDSEC`
+  }
+
+  private generateBlocks(): string {
+    // Minimal BLOCKS section - required for R12 compatibility
+    return `  0
+SECTION
+  2
+BLOCKS
+  0
 ENDSEC`
   }
 
   private generateEntities(): string {
     if (this.entities.length === 0) {
-      return `0
+      return `  0
 SECTION
-2
+  2
 ENTITIES
-0
+  0
 ENDSEC`
     }
 
-    return `0
+    return `  0
 SECTION
-2
+  2
 ENTITIES
 ${this.entities.join('\n')}
-0
+  0
 ENDSEC`
   }
 }
