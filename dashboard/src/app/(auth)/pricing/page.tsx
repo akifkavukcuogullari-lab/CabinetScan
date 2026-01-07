@@ -48,8 +48,8 @@ const plans = [
   {
     name: "Business",
     slug: "business",
-    price: 299,
-    yearlyPrice: 2870,
+    price: 249,
+    yearlyPrice: 2390,
     description: "For power users with automation needs",
     icon: Briefcase,
     iconColor: "from-orange-500 to-orange-600",

@@ -61,13 +61,12 @@ struct SuccessView: View {
             .shadow(color: .black.opacity(0.1), radius: 10, y: 5)
 
             // Thank you message
-            if let message = appState.showroomConfig?.branding.thankYouMessage {
-                Text(message)
-                    .font(.body)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal)
-            }
+            Text("Thank you for your submission. We'll be in touch soon!")
+                .font(.body)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal)
 
             Spacer()
 

@@ -1829,14 +1829,13 @@ struct FullScreenRoomCaptureView: UIViewControllerRepresentable {
 
         // CRITICAL: Start video recording when videoRecorder becomes available
         // This happens AFTER viewDidLoad, so we start it here instead
+        // NOTE: Start immediately - no delay to avoid race condition with Done button
         if let recorder = videoRecorder, previousRecorder == nil, !recorder.isCurrentlyRecording {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                do {
-                    try recorder.startRecording()
-                    print("[updateUIViewController] Video recording started (delayed 2s)")
-                } catch {
-                    print("[updateUIViewController] Failed to start video recording: \(error)")
-                }
+            do {
+                try recorder.startRecording()
+                print("[updateUIViewController] Video recording started")
+            } catch {
+                print("[updateUIViewController] Failed to start video recording: \(error)")
             }
         }
     }

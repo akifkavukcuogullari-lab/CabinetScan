@@ -47,15 +47,6 @@ interface ShowroomConfig {
   branding: {
     logo_url: string | null
     logo_dark_url: string | null
-    primary_color: string
-    secondary_color: string
-    accent_color: string
-    background_color: string
-    text_color: string
-    welcome_message: string | null
-    thank_you_message: string | null
-    terms_url: string | null
-    privacy_url: string | null
   }
   categories: Array<{
     id: string
@@ -253,26 +244,33 @@ serve(async (req) => {
     const isSubscriptionActive = showroom.subscription_status === 'active' ||
       (showroom.subscription_status === 'trial' && !isTrialExpired)
 
+    // Trial users without a plan assigned get Pro features by default
+    const isTrialWithProFeatures = showroom.subscription_status === 'trial' && !isTrialExpired && !plan
+
     console.log(`[VIDEO CAPTURE] Showroom: ${showroom.name}`)
     console.log(`[VIDEO CAPTURE] Subscription status: ${showroom.subscription_status}`)
-    console.log(`[VIDEO CAPTURE] Plan: ${plan?.slug}`)
-    console.log(`[VIDEO CAPTURE] Plan has_video_capture: ${plan?.has_video_capture}`)
+    console.log(`[VIDEO CAPTURE] Plan: ${plan?.slug || (isTrialWithProFeatures ? 'pro (trial default)' : null)}`)
+    console.log(`[VIDEO CAPTURE] Plan has_video_capture: ${plan?.has_video_capture ?? isTrialWithProFeatures}`)
     console.log(`[VIDEO CAPTURE] Is subscription active: ${isSubscriptionActive}`)
 
-    const videoCapture = plan?.has_video_capture && isSubscriptionActive
+    // For trial users without a plan: grant Pro features (video capture enabled)
+    const hasVideoCapture = plan?.has_video_capture ?? isTrialWithProFeatures
+    const videoCapture = hasVideoCapture && isSubscriptionActive
       ? {
           enabled: true,
-          max_duration_seconds: plan.video_max_duration_seconds || 300,
-          max_size_mb: plan.video_max_size_mb || 500,
+          max_duration_seconds: plan?.video_max_duration_seconds || 300,
+          max_size_mb: plan?.video_max_size_mb || 500,
         }
       : null
 
     console.log(`[VIDEO CAPTURE] Final videoCapture:`, videoCapture)
 
     // Check if custom branding (logo) is available for this plan
-    const hasCustomBranding = plan?.has_custom_branding ?? false
+    // Trial users without a plan get Pro features (custom branding = true)
+    const hasCustomBranding = plan?.has_custom_branding ?? isTrialWithProFeatures
     // Check if product selection is available for this plan (Starter = scan-only)
-    const hasProductSelection = plan?.has_product_selection ?? false
+    // Trial users without a plan get Pro features (product selection = true)
+    const hasProductSelection = plan?.has_product_selection ?? isTrialWithProFeatures
 
     // Default CabinetScan branding for Starter plan
     const CABINETSCAN_LOGO = 'https://wnyrnpeabhxdqvcpofmb.supabase.co/storage/v1/object/public/logos/cabinetscan-logo.png'
@@ -283,35 +281,11 @@ serve(async (req) => {
       // Show "CabinetScan" for Starter plan, actual showroom name for Pro+
       name: hasCustomBranding ? showroom.name : 'CabinetScan',
       showroom_code: showroom.showroom_code,
-      branding: branding
-        ? {
-            // Use CabinetScan logo for Starter, custom logo for Pro+
-            logo_url: hasCustomBranding ? branding.logo_url : CABINETSCAN_LOGO,
-            logo_dark_url: hasCustomBranding ? branding.logo_dark_url : CABINETSCAN_LOGO_DARK,
-            primary_color: hasCustomBranding ? branding.primary_color : '#2563EB',
-            secondary_color: hasCustomBranding ? branding.secondary_color : '#1E40AF',
-            accent_color: hasCustomBranding ? branding.accent_color : '#3B82F6',
-            background_color: hasCustomBranding ? branding.background_color : '#FFFFFF',
-            text_color: hasCustomBranding ? branding.text_color : '#1F2937',
-            welcome_message: branding.welcome_message,
-            thank_you_message: branding.thank_you_message,
-            terms_url: branding.terms_url,
-            privacy_url: branding.privacy_url,
-          }
-        : {
-            // Default CabinetScan branding when no branding record exists
-            logo_url: CABINETSCAN_LOGO,
-            logo_dark_url: CABINETSCAN_LOGO_DARK,
-            primary_color: '#2563EB',
-            secondary_color: '#1E40AF',
-            accent_color: '#3B82F6',
-            background_color: '#FFFFFF',
-            text_color: '#1F2937',
-            welcome_message: null,
-            thank_you_message: null,
-            terms_url: null,
-            privacy_url: null,
-          },
+      branding: {
+        // Use CabinetScan logo for Starter, custom logo for Pro+
+        logo_url: hasCustomBranding && branding?.logo_url ? branding.logo_url : CABINETSCAN_LOGO,
+        logo_dark_url: hasCustomBranding && branding?.logo_dark_url ? branding.logo_dark_url : CABINETSCAN_LOGO_DARK,
+      },
       // Only include categories/products if plan has product selection (Pro+)
       categories: hasProductSelection ? categoriesWithProducts : [],
       // Only include addons if plan has product selection (Pro+)
@@ -327,7 +301,8 @@ serve(async (req) => {
       })) : [],
       subscription: {
         status: showroom.subscription_status,
-        plan: plan?.slug || null,
+        // Trial users without a plan get Pro features by default
+        plan: plan?.slug || (isTrialWithProFeatures ? 'pro' : null),
         video_capture: videoCapture,
       },
     }

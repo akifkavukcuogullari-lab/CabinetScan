@@ -135,7 +135,7 @@ const planConfig = {
   },
   business: {
     label: 'Business',
-    price: '$299/mo',
+    price: '$249/mo',
     icon: Briefcase,
     color: 'border-orange-200 hover:border-orange-400',
     selectedColor: 'border-orange-500 bg-orange-50 ring-2 ring-orange-200',
