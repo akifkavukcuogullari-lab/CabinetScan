@@ -113,36 +113,68 @@ serve(async (req) => {
     // Generate DXF
     const dxf = new DXFGenerator()
 
-    // Default wall thickness (6 inches = 0.5 feet)
-    const WALL_THICKNESS_INCHES = 6
-
-    // Add walls with thickness
+    // Build room perimeter from walls - create a single closed polyline
     if (measurements.walls && measurements.walls.length > 0) {
+      // Collect all wall endpoints and try to form a closed perimeter
+      const wallSegments: Array<{start: {x: number, y: number}, end: {x: number, y: number}}> = []
+
       for (const wall of measurements.walls) {
         if (wall.start && wall.end) {
           const start = toDxfCoords(wall.start.x, wall.start.z)
           const end = toDxfCoords(wall.end.x, wall.end.z)
+          wallSegments.push({ start, end })
+        }
+      }
 
-          // Calculate wall direction and perpendicular offset for thickness
-          const dx = end.x - start.x
-          const dy = end.y - start.y
-          const length = Math.sqrt(dx * dx + dy * dy)
+      if (wallSegments.length > 0) {
+        // Try to order segments to form a continuous path
+        const orderedPoints: Array<{x: number, y: number}> = []
+        const used = new Set<number>()
 
-          if (length > 0) {
-            // Normalize and get perpendicular
-            const nx = -dy / length
-            const ny = dx / length
-            const halfThickness = WALL_THICKNESS_INCHES / 2
+        // Start with first segment
+        orderedPoints.push(wallSegments[0].start)
+        orderedPoints.push(wallSegments[0].end)
+        used.add(0)
 
-            // Create wall as a rectangle (4 corners)
-            const wallPoints = [
-              { x: start.x + nx * halfThickness, y: start.y + ny * halfThickness },
-              { x: end.x + nx * halfThickness, y: end.y + ny * halfThickness },
-              { x: end.x - nx * halfThickness, y: end.y - ny * halfThickness },
-              { x: start.x - nx * halfThickness, y: start.y - ny * halfThickness },
-            ]
-            dxf.addPolyline(wallPoints, 'WALLS', true)
+        // Keep finding connecting segments
+        const TOLERANCE = 1.0 // 1 inch tolerance for matching points
+
+        while (used.size < wallSegments.length) {
+          const lastPoint = orderedPoints[orderedPoints.length - 1]
+          let foundNext = false
+
+          for (let i = 0; i < wallSegments.length; i++) {
+            if (used.has(i)) continue
+
+            const seg = wallSegments[i]
+            const distToStart = Math.sqrt(
+              Math.pow(lastPoint.x - seg.start.x, 2) +
+              Math.pow(lastPoint.y - seg.start.y, 2)
+            )
+            const distToEnd = Math.sqrt(
+              Math.pow(lastPoint.x - seg.end.x, 2) +
+              Math.pow(lastPoint.y - seg.end.y, 2)
+            )
+
+            if (distToStart < TOLERANCE) {
+              orderedPoints.push(seg.end)
+              used.add(i)
+              foundNext = true
+              break
+            } else if (distToEnd < TOLERANCE) {
+              orderedPoints.push(seg.start)
+              used.add(i)
+              foundNext = true
+              break
+            }
           }
+
+          if (!foundNext) break // Can't find more connecting segments
+        }
+
+        // Draw as single closed polyline (room perimeter)
+        if (orderedPoints.length >= 3) {
+          dxf.addPolyline(orderedPoints, 'WALLS', true)
         }
       }
     }
