@@ -113,68 +113,13 @@ serve(async (req) => {
     // Generate DXF
     const dxf = new DXFGenerator()
 
-    // Build room perimeter from walls - create a single closed polyline
+    // Draw each wall as a separate LINE entity (modular - can be selected/moved individually)
     if (measurements.walls && measurements.walls.length > 0) {
-      // Collect all wall endpoints and try to form a closed perimeter
-      const wallSegments: Array<{start: {x: number, y: number}, end: {x: number, y: number}}> = []
-
       for (const wall of measurements.walls) {
         if (wall.start && wall.end) {
           const start = toDxfCoords(wall.start.x, wall.start.z)
           const end = toDxfCoords(wall.end.x, wall.end.z)
-          wallSegments.push({ start, end })
-        }
-      }
-
-      if (wallSegments.length > 0) {
-        // Try to order segments to form a continuous path
-        const orderedPoints: Array<{x: number, y: number}> = []
-        const used = new Set<number>()
-
-        // Start with first segment
-        orderedPoints.push(wallSegments[0].start)
-        orderedPoints.push(wallSegments[0].end)
-        used.add(0)
-
-        // Keep finding connecting segments
-        const TOLERANCE = 1.0 // 1 inch tolerance for matching points
-
-        while (used.size < wallSegments.length) {
-          const lastPoint = orderedPoints[orderedPoints.length - 1]
-          let foundNext = false
-
-          for (let i = 0; i < wallSegments.length; i++) {
-            if (used.has(i)) continue
-
-            const seg = wallSegments[i]
-            const distToStart = Math.sqrt(
-              Math.pow(lastPoint.x - seg.start.x, 2) +
-              Math.pow(lastPoint.y - seg.start.y, 2)
-            )
-            const distToEnd = Math.sqrt(
-              Math.pow(lastPoint.x - seg.end.x, 2) +
-              Math.pow(lastPoint.y - seg.end.y, 2)
-            )
-
-            if (distToStart < TOLERANCE) {
-              orderedPoints.push(seg.end)
-              used.add(i)
-              foundNext = true
-              break
-            } else if (distToEnd < TOLERANCE) {
-              orderedPoints.push(seg.start)
-              used.add(i)
-              foundNext = true
-              break
-            }
-          }
-
-          if (!foundNext) break // Can't find more connecting segments
-        }
-
-        // Draw as single closed polyline (room perimeter)
-        if (orderedPoints.length >= 3) {
-          dxf.addPolyline(orderedPoints, 'WALLS', true)
+          dxf.addLine(start, end, 'WALLS')
         }
       }
     }
