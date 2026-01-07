@@ -16,33 +16,33 @@ export default function IntroPage() {
     <div className="min-h-screen bg-white">
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Image
               src="/logo.png"
               alt="CabinetScan Logo"
               width={40}
               height={40}
-              className="w-10 h-10"
+              className="w-8 h-8 sm:w-10 sm:h-10"
             />
-            <span className="text-xl font-semibold text-gray-900">CabinetScan</span>
+            <span className="hidden sm:inline text-xl font-semibold text-gray-900">CabinetScan</span>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 sm:gap-6">
             <Link
               href="/pricing"
-              className="text-sm font-medium text-gray-700 hover:text-purple-600 transition-colors"
+              className="text-xs sm:text-sm font-medium text-gray-700 hover:text-purple-600 transition-colors"
             >
               Pricing
             </Link>
             <Link
               href="/contact"
-              className="text-sm font-medium text-gray-700 hover:text-purple-600 transition-colors"
+              className="hidden sm:inline text-sm font-medium text-gray-700 hover:text-purple-600 transition-colors"
             >
               Contact
             </Link>
             <Link
               href="/login"
-              className="px-5 py-2.5 text-sm font-medium text-white rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hover:opacity-90 transition-opacity"
+              className="px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-medium text-white rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hover:opacity-90 transition-opacity"
             >
               Sign In
             </Link>
