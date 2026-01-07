@@ -3,7 +3,7 @@
 
 // Supabase Production Credentials
 SUPABASE_URL = https:/$()/lhldqenpllbfxjkburzr.supabase.co
-SUPABASE_ANON_KEY = sb_secret_seHfh_KkLF2wvyMlz9h66Q_uoW1QIeS
+SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxobGRxZW5wbGxiZnhqa2J1cnpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3NTE4NTMsImV4cCI6MjA4MjMyNzg1M30.L5IX2HZ64yu44VV4q0RuidxfBGBXJHJ222ETEqAYvRI
 
 // App Identity
 PRODUCT_BUNDLE_IDENTIFIER = ai.nextlyn.cabinetscan
