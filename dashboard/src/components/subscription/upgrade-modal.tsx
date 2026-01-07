@@ -33,7 +33,7 @@ const planInfo: Record<SubscriptionPlan, { name: string; price: string; descript
   trial: {
     name: 'Free Trial',
     price: 'Free for 14 days',
-    description: 'Try selected plan features',
+    description: 'Try Pro features',
   },
   starter: {
     name: 'Starter',
