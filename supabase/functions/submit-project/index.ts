@@ -69,6 +69,11 @@ interface ProjectSubmission {
     ios_version?: string
     app_version?: string
   }
+  consent?: {
+    agreed_at: string  // ISO 8601 timestamp
+    terms_url?: string
+    privacy_url?: string
+  }
 }
 
 // Generate a unique reference number
@@ -755,6 +760,10 @@ serve(async (req) => {
         end_client_phone: submission.end_client?.phone,
         end_client_email: submission.end_client?.email,
         end_client_address: submission.end_client?.address,
+        // Legal consent info
+        consent_agreed_at: submission.consent?.agreed_at,
+        consent_terms_url: submission.consent?.terms_url,
+        consent_privacy_url: submission.consent?.privacy_url,
       })
       .select()
       .single()

@@ -5,6 +5,16 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSubscriptionContextOptional } from '@/contexts/subscription-context'
 import { createClient } from '@/lib/supabase/client'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 interface Project {
   id: string
@@ -42,6 +52,7 @@ interface ProjectSidebarWrapperProps {
   canExportDxf?: boolean
   onStatusChange: (status: string) => Promise<void>
   onCreateQuote?: () => Promise<void>
+  onDeleteProject?: () => Promise<void>
 }
 
 export function ProjectSidebarWrapper({
@@ -49,7 +60,8 @@ export function ProjectSidebarWrapper({
   measurement,
   canExportDxf,
   onStatusChange,
-  onCreateQuote
+  onCreateQuote,
+  onDeleteProject
 }: ProjectSidebarWrapperProps) {
   const router = useRouter()
   const subscription = useSubscriptionContextOptional()
@@ -57,6 +69,8 @@ export function ProjectSidebarWrapper({
   const [isCreatingQuote, setIsCreatingQuote] = useState(false)
   const [quoteError, setQuoteError] = useState<string | null>(null)
   const [isRequestingRestore, setIsRequestingRestore] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const currentPlan = subscription?.subscription?.plan || null
 
@@ -188,20 +202,70 @@ export function ProjectSidebarWrapper({
     }
   }
 
+  const handleDeleteProject = async () => {
+    if (!onDeleteProject) return
+
+    try {
+      setIsDeleting(true)
+      await onDeleteProject()
+      router.push('/showroom/projects')
+    } catch (error) {
+      console.error('Error deleting project:', error)
+      alert('Failed to delete project. Please try again.')
+    } finally {
+      setIsDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }
+
   return (
-    <ProjectSidebar
-      project={project}
-      measurement={measurement}
-      canExportDxf={canExportDxf}
-      currentPlan={currentPlan}
-      onStatusChange={onStatusChange}
-      onCreateQuote={handleCreateQuote}
-      onVisualizeKitchen={handleVisualizeKitchen}
-      isCreatingQuote={isCreatingQuote}
-      quoteError={quoteError}
-      onDismissQuoteError={() => setQuoteError(null)}
-      onRequestRestore={handleRequestRestore}
-      isRequestingRestore={isRequestingRestore}
-    />
+    <>
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this project and all associated data including:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>3D room scan (USDZ file)</li>
+                <li>Scan video recording</li>
+                <li>Photos and visualizations</li>
+                <li>Floor plan measurements</li>
+                <li>Product selections</li>
+                <li>Quote emails</li>
+              </ul>
+              <p className="mt-3 font-medium text-red-600">This action cannot be undone.</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteProject}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete Project'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <ProjectSidebar
+        project={project}
+        measurement={measurement}
+        canExportDxf={canExportDxf}
+        currentPlan={currentPlan}
+        onStatusChange={onStatusChange}
+        onCreateQuote={handleCreateQuote}
+        onVisualizeKitchen={handleVisualizeKitchen}
+        isCreatingQuote={isCreatingQuote}
+        quoteError={quoteError}
+        onDismissQuoteError={() => setQuoteError(null)}
+        onRequestRestore={handleRequestRestore}
+        isRequestingRestore={isRequestingRestore}
+        onDeleteProject={() => setShowDeleteConfirm(true)}
+        isDeleting={isDeleting}
+      />
+    </>
   )
 }

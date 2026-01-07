@@ -88,28 +88,10 @@ struct ShowroomVideoCaptureSettings: Codable {
 struct Branding: Codable {
     let logoUrl: String?
     let logoDarkUrl: String?
-    let primaryColor: String
-    let secondaryColor: String
-    let accentColor: String
-    let backgroundColor: String
-    let textColor: String
-    let welcomeMessage: String?
-    let thankYouMessage: String?
-    let termsUrl: String?
-    let privacyUrl: String?
 
     enum CodingKeys: String, CodingKey {
         case logoUrl = "logo_url"
         case logoDarkUrl = "logo_dark_url"
-        case primaryColor = "primary_color"
-        case secondaryColor = "secondary_color"
-        case accentColor = "accent_color"
-        case backgroundColor = "background_color"
-        case textColor = "text_color"
-        case welcomeMessage = "welcome_message"
-        case thankYouMessage = "thank_you_message"
-        case termsUrl = "terms_url"
-        case privacyUrl = "privacy_url"
     }
 }
 

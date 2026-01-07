@@ -47,7 +47,7 @@ const planInfo: Record<SubscriptionPlan, { name: string; price: string; descript
   },
   business: {
     name: 'Business',
-    price: '$299/month',
+    price: '$249/month',
     description: 'For power users with automation needs',
   },
   enterprise: {

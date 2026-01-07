@@ -51,7 +51,7 @@ export const PRICE_IDS = {
   // Pro: $149/mo, $1430/yr
   pro_monthly: Deno.env.get('STRIPE_PRICE_PRO_MONTHLY') || '',
   pro_yearly: Deno.env.get('STRIPE_PRICE_PRO_YEARLY') || '',
-  // Business: $299/mo, $2870/yr
+  // Business: $249/mo, $2390/yr
   business_monthly: Deno.env.get('STRIPE_PRICE_BUSINESS_MONTHLY') || '',
   business_yearly: Deno.env.get('STRIPE_PRICE_BUSINESS_YEARLY') || '',
 }
