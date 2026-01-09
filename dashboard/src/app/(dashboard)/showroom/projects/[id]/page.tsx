@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { WebhookPayloadViewer } from '@/components/webhook/WebhookPayloadViewer'
 import { QuoteEmailSection } from '@/components/quote/QuoteEmailSection'
+import { ChatHistorySection } from '@/components/project/ChatHistorySection'
 
 interface ProjectDetailPageProps {
   params: Promise<{ id: string }>
@@ -104,6 +105,32 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     .limit(1)
 
   const quoteEmail = quoteEmails && quoteEmails.length > 0 ? quoteEmails[0] : null
+
+  // Get AI chat conversation for this project
+  const { data: chatConversation } = await supabase
+    .from('ai_chat_conversations')
+    .select('id, status, message_count, summary, started_at, last_message_at, completed_at')
+    .eq('project_id', id)
+    .single()
+
+  // Get chat messages if conversation exists
+  let chatMessages: { id: string; role: string; content: string; created_at: string }[] = []
+  if (chatConversation) {
+    const { data: messages } = await supabase
+      .from('ai_chat_messages')
+      .select('id, role, content, created_at')
+      .eq('conversation_id', chatConversation.id)
+      .order('created_at', { ascending: true })
+
+    chatMessages = messages || []
+  }
+
+  // Get showroom AI settings
+  const { data: showroomAiSettings } = await supabase
+    .from('showrooms')
+    .select('ai_assistant_name, ai_assistant_avatar_url')
+    .eq('id', showroomUser.showroom_id)
+    .single()
 
   const statusColors: Record<string, string> = {
     draft: 'bg-gray-100 text-gray-800',
@@ -367,6 +394,14 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                 currentPlan={showroom?.subscription_plan as SubscriptionPlan | null}
               />
             )}
+
+            {/* AI Designer Agent Chat History */}
+            <ChatHistorySection
+              conversation={chatConversation}
+              messages={chatMessages as { id: string; role: 'user' | 'assistant'; content: string; created_at: string }[]}
+              assistantName={showroomAiSettings?.ai_assistant_name || 'Design Assistant'}
+              assistantAvatarUrl={showroomAiSettings?.ai_assistant_avatar_url || null}
+            />
 
             {/* Webhook Payload */}
             {project.webhook_payload && (

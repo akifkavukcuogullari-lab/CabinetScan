@@ -71,6 +71,11 @@ interface ShowroomConfig {
       max_size_mb: number
     } | null
   }
+  ai_chatbot: {
+    enabled: boolean
+    assistant_name: string
+    assistant_avatar_url: string | null
+  } | null
 }
 
 serve(async (req) => {
@@ -102,13 +107,17 @@ serve(async (req) => {
         showroom_code,
         subscription_status,
         trial_ends_at,
+        ai_chatbot_enabled,
+        ai_assistant_name,
+        ai_assistant_avatar_url,
         subscription_plans (
           slug,
           has_video_capture,
           video_max_duration_seconds,
           video_max_size_mb,
           has_custom_branding,
-          has_product_selection
+          has_product_selection,
+          has_ai_agent
         )
       `)
       .eq('showroom_code', showroomCode.toUpperCase())
@@ -271,6 +280,8 @@ serve(async (req) => {
     // Check if product selection is available for this plan (Starter = scan-only)
     // Trial users without a plan get Pro features (product selection = true)
     const hasProductSelection = plan?.has_product_selection ?? isTrialWithProFeatures
+    // Check if AI agent is available (Business+ plans only)
+    const hasAiAgent = plan?.has_ai_agent ?? false
 
     // Default CabinetScan branding for Starter plan
     const CABINETSCAN_LOGO = 'https://wnyrnpeabhxdqvcpofmb.supabase.co/storage/v1/object/public/logos/cabinetscan-logo.png'
@@ -305,6 +316,14 @@ serve(async (req) => {
         plan: plan?.slug || (isTrialWithProFeatures ? 'pro' : null),
         video_capture: videoCapture,
       },
+      // AI chatbot config - only available for Business+ plans with it enabled
+      ai_chatbot: (hasAiAgent && showroom.ai_chatbot_enabled && isSubscriptionActive)
+        ? {
+            enabled: true,
+            assistant_name: showroom.ai_assistant_name || 'Design Assistant',
+            assistant_avatar_url: showroom.ai_assistant_avatar_url,
+          }
+        : null,
     }
 
     return new Response(JSON.stringify(config), {

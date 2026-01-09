@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban, Mail, HardDrive, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban, Mail, HardDrive, TrendingUp, Bot } from 'lucide-react'
 import { InvitationList } from '@/components/invitations/invitation-list'
 import { SubscriptionManager } from '@/components/admin/subscription-manager'
+import { DesignerAgentSettings } from '@/components/admin/designer-agent-settings'
 
 interface ShowroomDetailPageProps {
   params: Promise<{ id: string }>
@@ -186,6 +187,10 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
             )}
           </TabsTrigger>
           <TabsTrigger value="subscription">Subscription</TabsTrigger>
+          <TabsTrigger value="designer-agent" className="gap-1.5">
+            <Bot className="h-4 w-4" />
+            Designer Agent
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="details" className="mt-4 space-y-4">
@@ -326,6 +331,16 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
               trial_ends_at: showroom.trial_ends_at,
               stripe_customer_id: showroom.stripe_customer_id,
               stripe_subscription_id: showroom.stripe_subscription_id,
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="designer-agent" className="mt-4">
+          <DesignerAgentSettings
+            showroom={{
+              id: showroom.id,
+              name: showroom.name,
+              ai_chatbot_enabled: showroom.ai_chatbot_enabled ?? false,
             }}
           />
         </TabsContent>

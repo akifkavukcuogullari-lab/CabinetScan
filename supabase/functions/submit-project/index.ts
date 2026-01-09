@@ -445,6 +445,11 @@ async function buildWebhookPayload(
       id: showroom.id,
       name: showroom.name,
       code: showroom.showroom_code,
+      phone: showroom.phone || null,
+      email: showroom.email || null,
+      notification_emails: showroom.notification_emails
+        ? showroom.notification_emails.split(',').map((e: string) => e.trim()).filter((e: string) => e.length > 0)
+        : [],
     },
     device_info: submission.device_info || null,
   }
@@ -566,7 +571,7 @@ serve(async (req) => {
     logTiming('Before showroom query')
     const { data: showroom, error: showroomError } = await supabaseAdmin
       .from('showrooms')
-      .select('id, name, showroom_code, webhook_url, notification_emails')
+      .select('id, name, showroom_code, webhook_url, notification_emails, phone, email')
       .eq('id', submission.showroom_id)
       .eq('is_active', true)
       .single()

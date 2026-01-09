@@ -10,7 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
-import { Webhook, CheckCircle, AlertCircle, Loader2, Lock, Sparkles, ChevronDown, ChevronUp, Edit2, RefreshCw, Save, X, Mail, Send } from 'lucide-react'
+import { Webhook, CheckCircle, AlertCircle, Loader2, Lock, Sparkles, ChevronDown, ChevronUp, Edit2, RefreshCw, Save, X, Mail, Send, Bot, Upload, Trash2 } from 'lucide-react'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import Link from 'next/link'
 
 interface Category {
@@ -74,6 +75,18 @@ export default function SettingsPage() {
   const [testEmailError, setTestEmailError] = useState<string | null>(null)
   const [testEmailSuccess, setTestEmailSuccess] = useState(false)
 
+  // AI Designer Agent state
+  const [aiChatbotEnabled, setAiChatbotEnabled] = useState(false)
+  const [aiAssistantName, setAiAssistantName] = useState('Design Assistant')
+  const [aiAssistantAvatarUrl, setAiAssistantAvatarUrl] = useState<string | null>(null)
+  const [aiSaving, setAiSaving] = useState(false)
+  const [aiSuccess, setAiSuccess] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+
+  // Check if AI Designer Agent feature is available (Business+ plans)
+  const canUseAiAgent = canUseFeature('aiDesignerAgent')
+
   useEffect(() => {
     async function loadData() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -106,6 +119,10 @@ export default function SettingsPage() {
         setShowroomCode(showroomData.showroom_code || '')
         setShowroomEmail(showroomData.email || '')
         setShowroomPhone(showroomData.phone || '')
+        // AI settings
+        setAiChatbotEnabled(showroomData.ai_chatbot_enabled || false)
+        setAiAssistantName(showroomData.ai_assistant_name || 'Design Assistant')
+        setAiAssistantAvatarUrl(showroomData.ai_assistant_avatar_url || null)
       }
 
       // Load all categories
@@ -504,6 +521,142 @@ export default function SettingsPage() {
     setSendingTestEmail(false)
   }
 
+  const toggleAiChatbot = async (enabled: boolean) => {
+    if (!showroomId) return
+
+    setAiSaving(true)
+    setAiError(null)
+    setAiSuccess(false)
+
+    const { error } = await supabase
+      .from('showrooms')
+      .update({ ai_chatbot_enabled: enabled })
+      .eq('id', showroomId)
+
+    setAiSaving(false)
+
+    if (error) {
+      setAiError('Failed to update AI chatbot setting')
+    } else {
+      setAiChatbotEnabled(enabled)
+      setShowroom({ ...showroom, ai_chatbot_enabled: enabled })
+      setAiSuccess(true)
+      setTimeout(() => setAiSuccess(false), 3000)
+    }
+  }
+
+  const saveAiAssistantName = async () => {
+    if (!showroomId) return
+
+    const trimmedName = aiAssistantName.trim()
+    if (!trimmedName) {
+      setAiError('Assistant name cannot be empty')
+      return
+    }
+
+    if (trimmedName.length > 30) {
+      setAiError('Assistant name must be 30 characters or less')
+      return
+    }
+
+    setAiSaving(true)
+    setAiError(null)
+    setAiSuccess(false)
+
+    const { error } = await supabase
+      .from('showrooms')
+      .update({ ai_assistant_name: trimmedName })
+      .eq('id', showroomId)
+
+    setAiSaving(false)
+
+    if (error) {
+      setAiError('Failed to update assistant name')
+    } else {
+      setAiAssistantName(trimmedName)
+      setShowroom({ ...showroom, ai_assistant_name: trimmedName })
+      setAiSuccess(true)
+      setTimeout(() => setAiSuccess(false), 3000)
+    }
+  }
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !showroomId) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setAiError('Please select an image file')
+      return
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setAiError('Image must be less than 2MB')
+      return
+    }
+
+    setAvatarUploading(true)
+    setAiError(null)
+
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `ai-avatar-${showroomId}-${Date.now()}.${fileExt}`
+      const filePath = `ai-avatars/${fileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('logos')
+        .upload(filePath, file, { upsert: true })
+
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('logos')
+        .getPublicUrl(filePath)
+
+      // Save to database
+      const { error: dbError } = await supabase
+        .from('showrooms')
+        .update({ ai_assistant_avatar_url: publicUrl })
+        .eq('id', showroomId)
+
+      if (dbError) throw dbError
+
+      setAiAssistantAvatarUrl(publicUrl)
+      setShowroom({ ...showroom, ai_assistant_avatar_url: publicUrl })
+      setAiSuccess(true)
+      setTimeout(() => setAiSuccess(false), 3000)
+    } catch (error) {
+      console.error('Error uploading avatar:', error)
+      setAiError('Failed to upload avatar')
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
+  const removeAvatar = async () => {
+    if (!showroomId) return
+
+    setAiSaving(true)
+    setAiError(null)
+
+    const { error } = await supabase
+      .from('showrooms')
+      .update({ ai_assistant_avatar_url: null })
+      .eq('id', showroomId)
+
+    setAiSaving(false)
+
+    if (error) {
+      setAiError('Failed to remove avatar')
+    } else {
+      setAiAssistantAvatarUrl(null)
+      setShowroom({ ...showroom, ai_assistant_avatar_url: null })
+      setAiSuccess(true)
+      setTimeout(() => setAiSuccess(false), 3000)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -898,6 +1051,194 @@ export default function SettingsPage() {
               Notifications are sent immediately when a customer submits a new project from the iOS app.
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* AI Designer Agent */}
+      <Card className={!canUseAiAgent ? 'border-gray-200 bg-gray-50/50' : ''}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="h-5 w-5" />
+            AI Designer Agent
+            {!canUseAiAgent && (
+              <Badge variant="secondary" className="ml-2 gap-1">
+                <Lock className="h-3 w-3" />
+                Business
+              </Badge>
+            )}
+          </CardTitle>
+          <CardDescription>
+            An AI chatbot that helps customers share their design preferences after submitting a project.
+            The AI collects style preferences, timeline, and requirements to help your team prepare better quotes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {canUseAiAgent ? (
+            <>
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <Bot className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Enable for Customers</p>
+                    <p className="text-sm text-gray-500">
+                      Show &quot;Chat with {aiAssistantName}&quot; option after project submission
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {aiSaving && (
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                  )}
+                  <Switch
+                    checked={aiChatbotEnabled}
+                    onCheckedChange={toggleAiChatbot}
+                    disabled={aiSaving}
+                  />
+                </div>
+              </div>
+
+              {aiError && (
+                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  {aiError}
+                </div>
+              )}
+
+              {aiSuccess && (
+                <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+                  <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                  AI chatbot setting updated successfully
+                </div>
+              )}
+
+              <Separator />
+
+              {/* Assistant Identity */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-purple-600" />
+                  Assistant Identity
+                </h4>
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Name */}
+                  <div className="space-y-2">
+                    <Label htmlFor="ai-assistant-name">Assistant Name</Label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      This name will be shown to customers in the chat interface
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        id="ai-assistant-name"
+                        value={aiAssistantName}
+                        onChange={(e) => {
+                          setAiAssistantName(e.target.value)
+                          setAiError(null)
+                        }}
+                        placeholder="e.g., Sophie, Design Assistant"
+                        maxLength={30}
+                        className="max-w-xs"
+                      />
+                      <Button
+                        onClick={saveAiAssistantName}
+                        disabled={aiSaving || aiAssistantName === showroom?.ai_assistant_name}
+                        size="sm"
+                      >
+                        {aiSaving ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Avatar */}
+                  <div className="space-y-2">
+                    <Label>Assistant Avatar</Label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Optional custom avatar for your AI assistant
+                    </p>
+                    <div className="flex items-center gap-4">
+                      <Avatar className="h-16 w-16">
+                        <AvatarImage src={aiAssistantAvatarUrl || undefined} alt={aiAssistantName} />
+                        <AvatarFallback className="bg-purple-100 text-purple-700 text-lg">
+                          {aiAssistantName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            disabled={avatarUploading}
+                            asChild
+                          >
+                            <label className="cursor-pointer">
+                              {avatarUploading ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Upload className="h-4 w-4" />
+                              )}
+                              Upload
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleAvatarUpload}
+                              />
+                            </label>
+                          </Button>
+                          {aiAssistantAvatarUrl && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={removeAvatar}
+                              disabled={aiSaving}
+                              className="gap-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Remove
+                            </Button>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          Square image, max 2MB
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-purple-50 p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-purple-900 mb-2">How it works</h4>
+                <ul className="text-sm text-purple-800 space-y-1">
+                  <li>• Customer submits their project via the iOS app</li>
+                  <li>• After submission, they see an option to chat with {aiAssistantName}</li>
+                  <li>• The AI asks about design preferences, timeline, and requirements</li>
+                  <li>• Conversation summary appears in project details on your dashboard</li>
+                </ul>
+              </div>
+            </>
+          ) : (
+            <div className="py-6 text-center">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-purple-100 mb-4">
+                <Sparkles className="h-6 w-6 text-purple-600" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">Upgrade to Business</h3>
+              <p className="text-gray-500 mb-4 max-w-md mx-auto">
+                {getUpgradeReason('aiDesignerAgent')}
+              </p>
+              <Link href="/showroom/billing">
+                <Button>
+                  Upgrade Plan
+                </Button>
+              </Link>
+            </div>
+          )}
         </CardContent>
       </Card>
 

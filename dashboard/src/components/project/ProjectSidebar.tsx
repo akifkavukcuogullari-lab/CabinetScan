@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,7 +23,8 @@ import {
   Clock,
   AlertTriangle,
   Info,
-  Trash2
+  Trash2,
+  Loader2
 } from 'lucide-react'
 import {
   HoverCard,
@@ -111,7 +113,33 @@ export function ProjectSidebar({
   isDeleting = false,
   className = ''
 }: ProjectSidebarProps) {
+  const [downloadingPhoto, setDownloadingPhoto] = useState<number | null>(null)
+  const [downloadingVideo, setDownloadingVideo] = useState(false)
+  const [downloadingUsdz, setDownloadingUsdz] = useState(false)
   const currentStatus = statusOptions.find(s => s.value === project.status) || statusOptions[0]
+
+  // Download file from URL (handles cross-origin)
+  const downloadFile = async (url: string, filename: string, index?: number) => {
+    if (index !== undefined) setDownloadingPhoto(index)
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(blobUrl)
+    } catch (error) {
+      console.error('Download failed:', error)
+      // Fallback: open in new tab
+      window.open(url, '_blank')
+    } finally {
+      if (index !== undefined) setDownloadingPhoto(null)
+    }
+  }
 
   // Check feature access
   const hasAutocadExport = hasFeature(currentPlan, 'autocadExport')
@@ -359,12 +387,16 @@ export function ProjectSidebar({
                   <Archive className="h-4 w-4 text-gray-400" />
                 </div>
               ) : (
-                <a
-                  href={measurement?.video_url}
-                  download
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-colors group"
+                <button
+                  onClick={async () => {
+                    if (measurement?.video_url) {
+                      setDownloadingVideo(true)
+                      await downloadFile(measurement.video_url, `${project.reference_number}-video.mp4`)
+                      setDownloadingVideo(false)
+                    }
+                  }}
+                  disabled={downloadingVideo}
+                  className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-colors group w-full text-left"
                 >
                   <div className="flex-shrink-0 w-8 h-8 rounded bg-red-100 flex items-center justify-center group-hover:bg-red-200 transition-colors">
                     <Video className="h-4 w-4 text-red-600" />
@@ -373,8 +405,12 @@ export function ProjectSidebar({
                     <p className="text-sm font-medium">Scan Video</p>
                     <p className="text-xs text-gray-500">MP4 recording</p>
                   </div>
-                  <Download className="h-4 w-4 text-gray-400 group-hover:text-red-600" />
-                </a>
+                  {downloadingVideo ? (
+                    <Loader2 className="h-4 w-4 text-red-600 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 text-gray-400 group-hover:text-red-600" />
+                  )}
+                </button>
               )
             )}
             {hasUsdzFile && (
@@ -390,10 +426,16 @@ export function ProjectSidebar({
                   <Archive className="h-4 w-4 text-gray-400" />
                 </div>
               ) : (
-                <a
-                  href={measurement?.usdz_file_url}
-                  download
-                  className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-colors group"
+                <button
+                  onClick={async () => {
+                    if (measurement?.usdz_file_url) {
+                      setDownloadingUsdz(true)
+                      await downloadFile(measurement.usdz_file_url, `${project.reference_number}-3d-model.usdz`)
+                      setDownloadingUsdz(false)
+                    }
+                  }}
+                  disabled={downloadingUsdz}
+                  className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-colors group w-full text-left"
                 >
                   <div className="flex-shrink-0 w-8 h-8 rounded bg-purple-100 flex items-center justify-center group-hover:bg-purple-200 transition-colors">
                     <FileBox className="h-4 w-4 text-purple-600" />
@@ -402,8 +444,12 @@ export function ProjectSidebar({
                     <p className="text-sm font-medium">3D Model (USDZ)</p>
                     <p className="text-xs text-gray-500">AR Quick Look</p>
                   </div>
-                  <Download className="h-4 w-4 text-gray-400 group-hover:text-purple-600" />
-                </a>
+                  {downloadingUsdz ? (
+                    <Loader2 className="h-4 w-4 text-purple-600 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 text-gray-400 group-hover:text-purple-600" />
+                  )}
+                </button>
               )
             )}
             {hasVisualizationPhotos && (
@@ -432,19 +478,36 @@ export function ProjectSidebar({
                   </div>
                   <div className="grid grid-cols-3 gap-1.5 mt-2">
                     {visualizationPhotos.slice(0, 6).map((photoUrl: string, index: number) => (
-                      <a
-                        key={index}
-                        href={photoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="aspect-square rounded overflow-hidden hover:opacity-80 transition-opacity"
-                      >
-                        <img
-                          src={photoUrl}
-                          alt={`Photo ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                      </a>
+                      <div key={index} className="relative group aspect-square rounded overflow-hidden">
+                        <a
+                          href={photoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block w-full h-full"
+                        >
+                          <img
+                            src={photoUrl}
+                            alt={`Photo ${index + 1}`}
+                            className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
+                          />
+                        </a>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            downloadFile(photoUrl, `photo-${index + 1}.jpg`, index)
+                          }}
+                          disabled={downloadingPhoto === index}
+                          className="absolute bottom-1 right-1 p-1 bg-black/60 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80 disabled:opacity-100"
+                          title="Download photo"
+                        >
+                          {downloadingPhoto === index ? (
+                            <Loader2 className="h-3 w-3 text-white animate-spin" />
+                          ) : (
+                            <Download className="h-3 w-3 text-white" />
+                          )}
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
