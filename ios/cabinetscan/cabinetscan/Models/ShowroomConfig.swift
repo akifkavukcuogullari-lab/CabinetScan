@@ -9,10 +9,12 @@ struct ShowroomConfig: Codable, Identifiable {
     let categories: [Category]
     let addons: [Addon]
     let subscription: SubscriptionInfo?
+    let aiChatbot: AIChatbotConfig?
 
     enum CodingKeys: String, CodingKey {
         case id, name, branding, categories, addons, subscription
         case showroomCode = "showroom_code"
+        case aiChatbot = "ai_chatbot"
     }
 
     init(from decoder: Decoder) throws {
@@ -24,6 +26,20 @@ struct ShowroomConfig: Codable, Identifiable {
         categories = try container.decode([Category].self, forKey: .categories)
         addons = try container.decodeIfPresent([Addon].self, forKey: .addons) ?? []
         subscription = try container.decodeIfPresent(SubscriptionInfo.self, forKey: .subscription)
+        aiChatbot = try container.decodeIfPresent(AIChatbotConfig.self, forKey: .aiChatbot)
+    }
+}
+
+// MARK: - AI Chatbot Config
+struct AIChatbotConfig: Codable {
+    let enabled: Bool
+    let assistantName: String
+    let assistantAvatarUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case assistantName = "assistant_name"
+        case assistantAvatarUrl = "assistant_avatar_url"
     }
 }
 

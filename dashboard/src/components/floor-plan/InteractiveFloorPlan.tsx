@@ -1221,7 +1221,7 @@ export function InteractiveFloorPlan({
   if (minimal) {
     return (
       <div className={`relative ${className}`}>
-        {/* Top right controls: Rotation + Reset + Labels + Fullscreen */}
+        {/* Top right controls: Rotation + Reset + Labels + Download + Fullscreen */}
         <div className="absolute top-3 right-3 z-20 flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-sm border border-gray-200/50">
           {/* Rotation slider */}
           <input
@@ -1253,6 +1253,15 @@ export function InteractiveFloorPlan({
             className="h-7 w-7 hover:bg-gray-100"
           >
             {showLabels ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={exportAsPNG}
+            title="Download PNG"
+            className="h-7 w-7 hover:bg-gray-100"
+          >
+            <Download className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"

@@ -33,7 +33,7 @@ class AppState: ObservableObject {
         case addons
         case review
         case submission
-        case success(referenceNumber: String)
+        case success(referenceNumber: String, projectId: String)
     }
 
     // MARK: - Actions
@@ -222,8 +222,8 @@ class AppState: ObservableObject {
 
             let response = try await APIService.shared.submitProject(submission)
 
-            if let referenceNumber = response.referenceNumber {
-                currentScreen = .success(referenceNumber: referenceNumber)
+            if let referenceNumber = response.referenceNumber, let projectId = response.projectId {
+                currentScreen = .success(referenceNumber: referenceNumber, projectId: projectId)
             } else {
                 throw APIError.submissionFailed(message: "No reference number received")
             }

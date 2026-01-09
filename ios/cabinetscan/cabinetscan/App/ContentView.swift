@@ -22,8 +22,8 @@ struct ContentView: View {
                     ReviewView()
                 case .submission:
                     SubmissionView()
-                case .success(let referenceNumber):
-                    SuccessView(referenceNumber: referenceNumber)
+                case .success(let referenceNumber, let projectId):
+                    SuccessView(referenceNumber: referenceNumber, projectId: projectId)
                 }
             }
             .animation(.easeInOut, value: appState.currentScreen)
@@ -96,8 +96,8 @@ extension AppState.Screen: Equatable {
              (.review, .review),
              (.submission, .submission):
             return true
-        case (.success(let lhsRef), .success(let rhsRef)):
-            return lhsRef == rhsRef
+        case (.success(let lhsRef, let lhsId), .success(let rhsRef, let rhsId)):
+            return lhsRef == rhsRef && lhsId == rhsId
         default:
             return false
         }

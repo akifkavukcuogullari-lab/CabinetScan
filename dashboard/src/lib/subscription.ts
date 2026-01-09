@@ -27,6 +27,7 @@ export interface PlanFeatures {
   prioritySupport: boolean
   crmIntegration: boolean
   aiAgent: boolean
+  aiDesignerAgent: boolean
   customBranding: boolean
   productSelection: boolean
   emailToCustomer: boolean
@@ -48,6 +49,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     prioritySupport: true,
     crmIntegration: false,
     aiAgent: false,
+    aiDesignerAgent: false,
     customBranding: true,
     productSelection: true,
     emailToCustomer: false,
@@ -65,6 +67,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     prioritySupport: false,
     crmIntegration: false,
     aiAgent: false,
+    aiDesignerAgent: false,
     customBranding: false, // White-labeling is Pro+ only
     productSelection: false, // Scan-only, no product selection
     emailToCustomer: false,
@@ -82,6 +85,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     prioritySupport: true,
     crmIntegration: false,
     aiAgent: false,
+    aiDesignerAgent: false,
     customBranding: true,
     productSelection: true,
     emailToCustomer: false,
@@ -99,6 +103,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     prioritySupport: true,
     crmIntegration: false,
     aiAgent: true,
+    aiDesignerAgent: true,
     customBranding: true,
     productSelection: true,
     emailToCustomer: true,
@@ -116,6 +121,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     prioritySupport: true,
     crmIntegration: true,
     aiAgent: true,
+    aiDesignerAgent: true,
     customBranding: true,
     productSelection: true,
     emailToCustomer: true,
@@ -237,6 +243,7 @@ export const featureNames: Record<keyof PlanFeatures, string> = {
   prioritySupport: 'Priority support',
   crmIntegration: 'CRM integration',
   aiAgent: 'AI-generated quotes',
+  aiDesignerAgent: 'AI Designer Agent',
   customBranding: 'Custom branding',
   productSelection: 'Product selection',
   emailToCustomer: 'Email to customer',

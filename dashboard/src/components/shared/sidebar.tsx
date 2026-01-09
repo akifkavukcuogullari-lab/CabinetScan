@@ -48,6 +48,7 @@ interface NavLink {
 const adminLinks: NavLink[] = [
   { href: '/admin/showrooms', label: 'Showrooms', icon: Building2 },
   { href: '/admin/categories', label: 'Categories', icon: LayoutGrid },
+  { href: '/admin/settings', label: 'Settings', icon: Settings },
 ]
 
 const showroomLinks: NavLink[] = [
