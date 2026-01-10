@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -111,6 +112,10 @@ interface InteractiveFloorPlanProps {
   className?: string
   isLoading?: boolean
   minimal?: boolean
+  // Props for auto-generating and saving floor plan PNG
+  measurementId?: string
+  previewImageUrl?: string | null
+  showroomCode?: string
 }
 
 interface SelectedObject {
@@ -187,7 +192,10 @@ export function InteractiveFloorPlan({
   measurements,
   className = '',
   isLoading = false,
-  minimal = false
+  minimal = false,
+  measurementId,
+  previewImageUrl,
+  showroomCode
 }: InteractiveFloorPlanProps) {
   const [selectedObject, setSelectedObject] = useState<SelectedObject | null>(null)
   const [hoveredObject, setHoveredObject] = useState<string | null>(null)
@@ -230,6 +238,133 @@ export function InteractiveFloorPlan({
     initialRotationValue: 0,
     lastTouchEnd: 0
   })
+
+  // Track if PNG has been generated this session
+  const pngGeneratedRef = useRef(false)
+
+  // Auto-generate and upload floor plan PNG if not already exists
+  useEffect(() => {
+    const generateAndUploadPng = async () => {
+      // Skip if already generated, no measurementId, or previewImageUrl already exists
+      if (pngGeneratedRef.current || !measurementId || !showroomCode || previewImageUrl) {
+        return
+      }
+
+      // Wait for SVG to be rendered
+      if (!svgRef.current) {
+        return
+      }
+
+      // Small delay to ensure SVG is fully rendered
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      if (!svgRef.current) return
+
+      pngGeneratedRef.current = true
+      console.log('[FloorPlan] Auto-generating PNG for measurement:', measurementId)
+
+      try {
+        // Clone SVG for export
+        const svg = svgRef.current.cloneNode(true) as SVGSVGElement
+        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+        svg.setAttribute('width', '700')
+        svg.setAttribute('height', '550')
+
+        const svgData = new XMLSerializer().serializeToString(svg)
+        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
+        const svgUrl = URL.createObjectURL(svgBlob)
+
+        // Convert SVG to PNG
+        const img = new Image()
+
+        await new Promise<void>((resolve, reject) => {
+          img.onload = async () => {
+            try {
+              const canvas = document.createElement('canvas')
+              const scale = 2 // Higher resolution
+              canvas.width = 700 * scale
+              canvas.height = 550 * scale
+
+              const ctx = canvas.getContext('2d')
+              if (!ctx) {
+                reject(new Error('Could not get canvas context'))
+                return
+              }
+
+              ctx.fillStyle = '#ffffff'
+              ctx.fillRect(0, 0, canvas.width, canvas.height)
+              ctx.scale(scale, scale)
+              ctx.drawImage(img, 0, 0, 700, 550)
+
+              // Convert to blob
+              canvas.toBlob(async (blob) => {
+                if (!blob) {
+                  reject(new Error('Could not convert canvas to blob'))
+                  return
+                }
+
+                try {
+                  // Upload to Supabase storage
+                  const supabase = createClient()
+                  const timestamp = Date.now()
+                  const randomId = Math.random().toString(36).substring(2, 10)
+                  const filename = `floor_plan_${timestamp}_${randomId}.png`
+                  const storagePath = `${showroomCode.toLowerCase()}/${filename}`
+
+                  const { error: uploadError } = await supabase.storage
+                    .from('scans')
+                    .upload(storagePath, blob, {
+                      contentType: 'image/png',
+                      upsert: false
+                    })
+
+                  if (uploadError) {
+                    console.error('[FloorPlan] Upload error:', uploadError)
+                    reject(uploadError)
+                    return
+                  }
+
+                  // Get public URL
+                  const { data: urlData } = supabase.storage
+                    .from('scans')
+                    .getPublicUrl(storagePath)
+
+                  const publicUrl = urlData.publicUrl
+
+                  // Update database
+                  const { error: updateError } = await supabase
+                    .from('project_measurements')
+                    .update({ preview_image_url: publicUrl })
+                    .eq('id', measurementId)
+
+                  if (updateError) {
+                    console.error('[FloorPlan] Database update error:', updateError)
+                    reject(updateError)
+                    return
+                  }
+
+                  console.log('[FloorPlan] PNG generated and saved:', publicUrl)
+                  resolve()
+                } catch (err) {
+                  reject(err)
+                }
+              }, 'image/png')
+            } catch (err) {
+              reject(err)
+            }
+          }
+          img.onerror = () => reject(new Error('Failed to load SVG image'))
+        })
+
+        URL.revokeObjectURL(svgUrl)
+      } catch (error) {
+        console.error('[FloorPlan] Error generating PNG:', error)
+        pngGeneratedRef.current = false // Allow retry on error
+      }
+    }
+
+    generateAndUploadPng()
+  }, [measurementId, showroomCode, previewImageUrl])
 
   // Smooth animation for rotation and zoom
   useEffect(() => {
@@ -576,17 +711,17 @@ export function InteractiveFloorPlan({
     }
   }, [roomCenter])
 
-  // Get short appliance label
+  // Get appliance label for display and AI analysis
   const getApplianceLabel = (type: string): string => {
     const t = type.toLowerCase()
-    if (t.includes('refrigerator') || t.includes('fridge')) return 'REF'
-    if (t.includes('stove') || t.includes('oven') || t.includes('range')) return 'STOVE'
-    if (t.includes('dishwasher')) return 'DW'
-    if (t.includes('sink')) return 'SINK'
-    if (t.includes('microwave')) return 'MW'
-    if (t.includes('washer')) return 'W'
-    if (t.includes('dryer')) return 'D'
-    return type.substring(0, 3).toUpperCase()
+    if (t.includes('refrigerator') || t.includes('fridge')) return 'Fridge'
+    if (t.includes('stove') || t.includes('oven') || t.includes('range')) return 'Stove'
+    if (t.includes('dishwasher')) return 'Dishwasher'
+    if (t.includes('sink')) return 'Sink'
+    if (t.includes('microwave')) return 'Microwave'
+    if (t.includes('washer')) return 'Washer'
+    if (t.includes('dryer')) return 'Dryer'
+    return type
   }
 
   // Render appliance icon
@@ -682,7 +817,7 @@ export function InteractiveFloorPlan({
             y={cy + (icon ? 8 : 0)}
             textAnchor="middle"
             dominantBaseline="middle"
-            fontSize="8"
+            fontSize="6"
             fontWeight="600"
             fill="#92400e"
             className="pointer-events-none"
@@ -733,7 +868,16 @@ export function InteractiveFloorPlan({
   const exportAsPNG = useCallback(async () => {
     if (!svgRef.current) return
 
-    const svg = svgRef.current
+    // Clone the SVG to modify it for export
+    const svg = svgRef.current.cloneNode(true) as SVGSVGElement
+
+    // Change preserveAspectRatio from 'slice' to 'meet' to prevent clipping
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+
+    // Set explicit width/height attributes to ensure proper rendering
+    svg.setAttribute('width', String(viewWidth))
+    svg.setAttribute('height', String(viewHeight))
+
     const svgData = new XMLSerializer().serializeToString(svg)
     const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
     const svgUrl = URL.createObjectURL(svgBlob)
@@ -751,7 +895,7 @@ export function InteractiveFloorPlan({
       ctx.fillStyle = '#ffffff'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       ctx.scale(scale, scale)
-      ctx.drawImage(img, 0, 0)
+      ctx.drawImage(img, 0, 0, viewWidth, viewHeight)
 
       const pngUrl = canvas.toDataURL('image/png')
       const link = document.createElement('a')
@@ -1462,7 +1606,7 @@ export function InteractiveFloorPlan({
                       onMouseLeave={handleHoverEnd}
                       onClick={() => setSelectedObject({ type: 'appliance', data: appliance, label: applianceType })}
                     />
-                    {renderApplianceIcon(applianceType, centerX, centerY, boxWidth, boxHeight, false)}
+                    {renderApplianceIcon(applianceType, centerX, centerY, boxWidth, boxHeight, true)}
                   </g>
                 )
               }
@@ -1488,7 +1632,7 @@ export function InteractiveFloorPlan({
                     onMouseLeave={handleHoverEnd}
                     onClick={() => setSelectedObject({ type: 'appliance', data: appliance, label: applianceType })}
                   />
-                  {renderApplianceIcon(applianceType, screen.x, screen.y, w, d, false)}
+                  {renderApplianceIcon(applianceType, screen.x, screen.y, w, d, true)}
                 </g>
               )
             })}
@@ -2254,7 +2398,7 @@ export function InteractiveFloorPlan({
                       onMouseLeave={handleHoverEnd}
                       onClick={() => setSelectedObject({ type: 'appliance', data: appliance, label: applianceType })}
                     />
-                    {renderApplianceIcon(applianceType, centerX, centerY, boxWidth, boxHeight, false)}
+                    {renderApplianceIcon(applianceType, centerX, centerY, boxWidth, boxHeight, true)}
                   </g>
                 )
               }
@@ -2280,7 +2424,7 @@ export function InteractiveFloorPlan({
                     onMouseLeave={handleHoverEnd}
                     onClick={() => setSelectedObject({ type: 'appliance', data: appliance, label: applianceType })}
                   />
-                  {renderApplianceIcon(applianceType, screen.x, screen.y, w, d, false)}
+                  {renderApplianceIcon(applianceType, screen.x, screen.y, w, d, true)}
                 </g>
               )
             })}

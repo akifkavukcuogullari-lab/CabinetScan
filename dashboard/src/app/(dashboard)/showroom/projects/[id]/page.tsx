@@ -50,10 +50,10 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
 
   if (!showroomUser) redirect('/login')
 
-  // Get showroom subscription plan
+  // Get showroom subscription plan and code
   const { data: showroom } = await supabase
     .from('showrooms')
-    .select('subscription_plan, subscription_status')
+    .select('subscription_plan, subscription_status, showroom_code')
     .eq('id', showroomUser.showroom_id)
     .single()
 
@@ -352,7 +352,13 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                 </div>
 
                 <TabsContent value="2d" className="m-0">
-                  <InteractiveFloorPlan measurements={measurement?.measurements} minimal />
+                  <InteractiveFloorPlan
+                    measurements={measurement?.measurements}
+                    minimal
+                    measurementId={measurement?.id}
+                    previewImageUrl={measurement?.preview_image_url}
+                    showroomCode={showroom?.showroom_code}
+                  />
                 </TabsContent>
 
                 {canExportDxf && (

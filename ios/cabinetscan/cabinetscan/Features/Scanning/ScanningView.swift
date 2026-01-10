@@ -454,16 +454,6 @@ struct ScanningView: View {
             return
         }
 
-        // Generate floor plan image
-        await MainActor.run {
-            processingStatus = "Generating floor plan..."
-        }
-        print("Generating floor plan image...")
-        var floorPlanUrl: String? = nil
-        if let floorPlanImage = FloorPlanRenderer.renderFloorPlan(from: room, size: CGSize(width: 1200, height: 1200)) {
-            floorPlanUrl = await uploadFloorPlanImage(floorPlanImage, showroomCode: showroomCode)
-        }
-
         // Export and upload USDZ
         await MainActor.run {
             processingStatus = "Creating 3D model..."
@@ -489,7 +479,7 @@ struct ScanningView: View {
         await MainActor.run {
             processingStatus = "Finalizing measurements..."
         }
-        let measurements = extractMeasurements(from: room, floorPlanUrl: floorPlanUrl, usdzUrl: usdzUrl, glbUrl: nil, videoData: videoData)
+        let measurements = extractMeasurements(from: room, floorPlanUrl: nil, usdzUrl: usdzUrl, glbUrl: nil, videoData: videoData)
 
         await MainActor.run {
             isProcessing = false
@@ -762,34 +752,6 @@ struct ScanningView: View {
             sizeBytes: uploadedSizeBytes,
             resolution: metadata.resolution
         )
-    }
-
-    // MARK: - Floor Plan Image Upload
-
-    private func uploadFloorPlanImage(_ image: UIImage, showroomCode: String) async -> String? {
-        guard let imageData = image.pngData() else {
-            print("Failed to convert floor plan image to PNG data")
-            return nil
-        }
-
-        let timestamp = Int(Date().timeIntervalSince1970)
-        let randomId = UUID().uuidString.prefix(8)
-        let filename = "floor_plan_\(timestamp)_\(randomId).png"
-        let storagePath = "\(showroomCode.lowercased())/\(filename)"
-
-        do {
-            let uploadedUrl = try await APIService.shared.uploadFile(
-                bucket: "scans",
-                path: storagePath,
-                data: imageData,
-                contentType: "image/png"
-            )
-            print("Floor plan image uploaded: \(uploadedUrl)")
-            return uploadedUrl
-        } catch {
-            print("Failed to upload floor plan image: \(error.localizedDescription)")
-            return nil
-        }
     }
 
     // MARK: - USDZ Export and Upload
