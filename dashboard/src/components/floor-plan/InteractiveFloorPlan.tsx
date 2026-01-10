@@ -250,12 +250,20 @@ export function InteractiveFloorPlan({
         return
       }
 
-      // Wait for SVG to be rendered
+      // Wait for SVG to be rendered with retry
+      let retries = 0
+      const maxRetries = 10
+      while (!svgRef.current && retries < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 300))
+        retries++
+      }
+
       if (!svgRef.current) {
+        console.log('[FloorPlan] SVG not available after retries, skipping PNG generation')
         return
       }
 
-      // Small delay to ensure SVG is fully rendered
+      // Additional delay to ensure SVG content is fully rendered
       await new Promise(resolve => setTimeout(resolve, 500))
 
       if (!svgRef.current) return
