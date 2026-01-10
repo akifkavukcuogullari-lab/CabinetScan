@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -111,6 +112,9 @@ interface InteractiveFloorPlanProps {
   className?: string
   isLoading?: boolean
   minimal?: boolean
+  measurementId?: string
+  previewImageUrl?: string | null
+  showroomCode?: string
 }
 
 interface SelectedObject {
@@ -187,7 +191,10 @@ export function InteractiveFloorPlan({
   measurements,
   className = '',
   isLoading = false,
-  minimal = false
+  minimal = false,
+  measurementId,
+  previewImageUrl,
+  showroomCode
 }: InteractiveFloorPlanProps) {
   const [selectedObject, setSelectedObject] = useState<SelectedObject | null>(null)
   const [hoveredObject, setHoveredObject] = useState<string | null>(null)
@@ -230,6 +237,93 @@ export function InteractiveFloorPlan({
     initialRotationValue: 0,
     lastTouchEnd: 0
   })
+
+  // Auto-save floor plan PNG when viewing project
+  const hasSavedRef = useRef(false)
+
+  useEffect(() => {
+    if (hasSavedRef.current || !measurementId || !showroomCode || previewImageUrl || !svgRef.current) {
+      return
+    }
+
+    const saveFloorPlan = async () => {
+      // Wait for SVG to be fully rendered
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      if (!svgRef.current || hasSavedRef.current) return
+      hasSavedRef.current = true
+
+      try {
+        const svg = svgRef.current.cloneNode(true) as SVGSVGElement
+        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+        svg.setAttribute('width', '700')
+        svg.setAttribute('height', '550')
+
+        const svgData = new XMLSerializer().serializeToString(svg)
+        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
+        const svgUrl = URL.createObjectURL(svgBlob)
+
+        const img = new Image()
+
+        img.onload = async () => {
+          try {
+            const canvas = document.createElement('canvas')
+            canvas.width = 1400
+            canvas.height = 1100
+            const ctx = canvas.getContext('2d')
+            if (!ctx) return
+
+            ctx.fillStyle = '#ffffff'
+            ctx.fillRect(0, 0, 1400, 1100)
+            ctx.scale(2, 2)
+            ctx.drawImage(img, 0, 0, 700, 550)
+
+            canvas.toBlob(async (blob) => {
+              if (!blob) return
+
+              const supabase = createClient()
+              const filename = `floor_plan_${Date.now()}_${Math.random().toString(36).slice(2, 10)}.png`
+              const path = `${showroomCode.toLowerCase()}/${filename}`
+
+              const { error: uploadError } = await supabase.storage
+                .from('scans')
+                .upload(path, blob, { contentType: 'image/png' })
+
+              if (uploadError) {
+                console.error('Floor plan upload error:', uploadError)
+                return
+              }
+
+              const { data: urlData } = supabase.storage.from('scans').getPublicUrl(path)
+
+              await supabase
+                .from('project_measurements')
+                .update({ preview_image_url: urlData.publicUrl })
+                .eq('id', measurementId)
+
+              console.log('Floor plan saved:', urlData.publicUrl)
+            }, 'image/png')
+          } catch (e) {
+            console.error('Canvas error:', e)
+          }
+          URL.revokeObjectURL(svgUrl)
+        }
+
+        img.onerror = () => {
+          console.error('Failed to load SVG')
+          URL.revokeObjectURL(svgUrl)
+        }
+
+        // Set src AFTER attaching handlers
+        img.src = svgUrl
+      } catch (e) {
+        console.error('Floor plan save error:', e)
+        hasSavedRef.current = false
+      }
+    }
+
+    saveFloorPlan()
+  }, [measurementId, showroomCode, previewImageUrl])
 
   // Smooth animation for rotation and zoom
   useEffect(() => {
