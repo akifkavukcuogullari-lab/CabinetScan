@@ -89,10 +89,24 @@ serve(async (req) => {
       )
     }
 
-    // Update the event type to indicate this is a quote request
+    // Get the latest preview_image_url from project_measurements
+    // (floor plan PNG may have been generated after initial submission)
+    const { data: measurements } = await supabaseAdmin
+      .from('project_measurements')
+      .select('preview_image_url')
+      .eq('project_id', project_id)
+      .single()
+
+    // Update the event type and include latest floor plan URL
+    const storedPayload = project.webhook_payload as Record<string, any>
     const webhookPayload = {
-      ...project.webhook_payload,
+      ...storedPayload,
       event: 'quote.requested',
+      // Update files.floor_plan with the latest preview_image_url
+      files: {
+        ...(storedPayload.files || {}),
+        floor_plan: measurements?.preview_image_url || storedPayload.files?.floor_plan || null,
+      },
       generate_quote: true, // Signal n8n to generate AI quote email
       triggered_at: new Date().toISOString(),
     }
