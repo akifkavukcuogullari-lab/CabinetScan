@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -112,10 +111,6 @@ interface InteractiveFloorPlanProps {
   className?: string
   isLoading?: boolean
   minimal?: boolean
-  // Props for auto-generating and saving floor plan PNG
-  measurementId?: string
-  previewImageUrl?: string | null
-  showroomCode?: string
 }
 
 interface SelectedObject {
@@ -192,10 +187,7 @@ export function InteractiveFloorPlan({
   measurements,
   className = '',
   isLoading = false,
-  minimal = false,
-  measurementId,
-  previewImageUrl,
-  showroomCode
+  minimal = false
 }: InteractiveFloorPlanProps) {
   const [selectedObject, setSelectedObject] = useState<SelectedObject | null>(null)
   const [hoveredObject, setHoveredObject] = useState<string | null>(null)
@@ -238,141 +230,6 @@ export function InteractiveFloorPlan({
     initialRotationValue: 0,
     lastTouchEnd: 0
   })
-
-  // Track if PNG has been generated this session
-  const pngGeneratedRef = useRef(false)
-
-  // Auto-generate and upload floor plan PNG if not already exists
-  useEffect(() => {
-    const generateAndUploadPng = async () => {
-      // Skip if already generated, no measurementId, or previewImageUrl already exists
-      if (pngGeneratedRef.current || !measurementId || !showroomCode || previewImageUrl) {
-        return
-      }
-
-      // Wait for SVG to be rendered with retry
-      let retries = 0
-      const maxRetries = 10
-      while (!svgRef.current && retries < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 300))
-        retries++
-      }
-
-      if (!svgRef.current) {
-        console.log('[FloorPlan] SVG not available after retries, skipping PNG generation')
-        return
-      }
-
-      // Additional delay to ensure SVG content is fully rendered
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      if (!svgRef.current) return
-
-      pngGeneratedRef.current = true
-      console.log('[FloorPlan] Auto-generating PNG for measurement:', measurementId)
-
-      try {
-        // Clone SVG for export
-        const svg = svgRef.current.cloneNode(true) as SVGSVGElement
-        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet')
-        svg.setAttribute('width', '700')
-        svg.setAttribute('height', '550')
-
-        const svgData = new XMLSerializer().serializeToString(svg)
-        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
-        const svgUrl = URL.createObjectURL(svgBlob)
-
-        // Convert SVG to PNG
-        const img = new Image()
-
-        await new Promise<void>((resolve, reject) => {
-          img.onload = async () => {
-            try {
-              const canvas = document.createElement('canvas')
-              const scale = 2 // Higher resolution
-              canvas.width = 700 * scale
-              canvas.height = 550 * scale
-
-              const ctx = canvas.getContext('2d')
-              if (!ctx) {
-                reject(new Error('Could not get canvas context'))
-                return
-              }
-
-              ctx.fillStyle = '#ffffff'
-              ctx.fillRect(0, 0, canvas.width, canvas.height)
-              ctx.scale(scale, scale)
-              ctx.drawImage(img, 0, 0, 700, 550)
-
-              // Convert to blob
-              canvas.toBlob(async (blob) => {
-                if (!blob) {
-                  reject(new Error('Could not convert canvas to blob'))
-                  return
-                }
-
-                try {
-                  // Upload to Supabase storage
-                  const supabase = createClient()
-                  const timestamp = Date.now()
-                  const randomId = Math.random().toString(36).substring(2, 10)
-                  const filename = `floor_plan_${timestamp}_${randomId}.png`
-                  const storagePath = `${showroomCode.toLowerCase()}/${filename}`
-
-                  const { error: uploadError } = await supabase.storage
-                    .from('scans')
-                    .upload(storagePath, blob, {
-                      contentType: 'image/png',
-                      upsert: false
-                    })
-
-                  if (uploadError) {
-                    console.error('[FloorPlan] Upload error:', uploadError)
-                    reject(uploadError)
-                    return
-                  }
-
-                  // Get public URL
-                  const { data: urlData } = supabase.storage
-                    .from('scans')
-                    .getPublicUrl(storagePath)
-
-                  const publicUrl = urlData.publicUrl
-
-                  // Update database
-                  const { error: updateError } = await supabase
-                    .from('project_measurements')
-                    .update({ preview_image_url: publicUrl })
-                    .eq('id', measurementId)
-
-                  if (updateError) {
-                    console.error('[FloorPlan] Database update error:', updateError)
-                    reject(updateError)
-                    return
-                  }
-
-                  console.log('[FloorPlan] PNG generated and saved:', publicUrl)
-                  resolve()
-                } catch (err) {
-                  reject(err)
-                }
-              }, 'image/png')
-            } catch (err) {
-              reject(err)
-            }
-          }
-          img.onerror = () => reject(new Error('Failed to load SVG image'))
-        })
-
-        URL.revokeObjectURL(svgUrl)
-      } catch (error) {
-        console.error('[FloorPlan] Error generating PNG:', error)
-        pngGeneratedRef.current = false // Allow retry on error
-      }
-    }
-
-    generateAndUploadPng()
-  }, [measurementId, showroomCode, previewImageUrl])
 
   // Smooth animation for rotation and zoom
   useEffect(() => {
