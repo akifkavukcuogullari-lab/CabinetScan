@@ -44,6 +44,7 @@ interface Measurement {
   preview_image_url?: string
   visualization_photo_urls?: string[]
   measurements?: any
+  new_design_svg_url?: string
 }
 
 interface ProjectSidebarWrapperProps {

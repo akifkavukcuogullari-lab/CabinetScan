@@ -67,6 +67,7 @@ interface Measurement {
   preview_image_url?: string
   visualization_photo_urls?: string[]
   measurements?: any
+  new_design_svg_url?: string
 }
 
 interface ProjectSidebarProps {
@@ -116,6 +117,7 @@ export function ProjectSidebar({
   const [downloadingPhoto, setDownloadingPhoto] = useState<number | null>(null)
   const [downloadingVideo, setDownloadingVideo] = useState(false)
   const [downloadingUsdz, setDownloadingUsdz] = useState(false)
+  const [downloadingSvg, setDownloadingSvg] = useState(false)
   const currentStatus = statusOptions.find(s => s.value === project.status) || statusOptions[0]
 
   // Download file from URL (handles cross-origin)
@@ -144,13 +146,15 @@ export function ProjectSidebar({
   // Check feature access
   const hasAutocadExport = hasFeature(currentPlan, 'autocadExport')
   const hasAiAgent = hasFeature(currentPlan, 'aiAgent')
+  const hasAiDesigner = hasFeature(currentPlan, 'aiDesignerAgent')
 
   const hasUsdzFile = measurement?.usdz_file_url
   const hasVideoFile = measurement?.video_url
+  const hasNewDesignSvg = measurement?.new_design_svg_url
   const visualizationPhotos = measurement?.visualization_photo_urls || []
   const hasVisualizationPhotos = visualizationPhotos.length > 0
   const hasFloorPlanData = measurement?.measurements?.walls?.length > 0 || measurement?.measurements?.room
-  const hasDownloadableFiles = hasUsdzFile || hasVideoFile || hasVisualizationPhotos || hasFloorPlanData
+  const hasDownloadableFiles = hasUsdzFile || hasVideoFile || hasVisualizationPhotos || hasFloorPlanData || hasNewDesignSvg
 
   // Storage tier states
   const isArchived = project.storage_tier === 'archived'
@@ -371,6 +375,47 @@ export function ProjectSidebar({
                     </div>
                     <Download className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
                   </a>
+                </LockedFeature>
+              )
+            )}
+            {hasNewDesignSvg && (
+              isArchived || isRestoring ? (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed">
+                  <div className="flex-shrink-0 w-8 h-8 rounded bg-gray-200 flex items-center justify-center">
+                    <Sparkles className="h-4 w-4 text-gray-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-500">New Design (SVG)</p>
+                    <p className="text-xs text-gray-400">AI-generated layout</p>
+                  </div>
+                  <Archive className="h-4 w-4 text-gray-400" />
+                </div>
+              ) : (
+                <LockedFeature feature="aiDesignerAgent" isLocked={!hasAiDesigner}>
+                  <button
+                    onClick={async () => {
+                      if (measurement?.new_design_svg_url) {
+                        setDownloadingSvg(true)
+                        await downloadFile(measurement.new_design_svg_url, `${project.reference_number}-new-design.svg`)
+                        setDownloadingSvg(false)
+                      }
+                    }}
+                    disabled={!hasAiDesigner || downloadingSvg}
+                    className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50 transition-colors group w-full text-left"
+                  >
+                    <div className="flex-shrink-0 w-8 h-8 rounded bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
+                      <Sparkles className="h-4 w-4 text-emerald-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">New Design (SVG)</p>
+                      <p className="text-xs text-gray-500">AI-generated layout</p>
+                    </div>
+                    {downloadingSvg ? (
+                      <Loader2 className="h-4 w-4 text-emerald-600 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 text-gray-400 group-hover:text-emerald-600" />
+                    )}
+                  </button>
                 </LockedFeature>
               )
             )}
