@@ -141,7 +141,7 @@ struct ScanningView: View {
                         Button {
                             startScanning()
                         } label: {
-                            Label("Start Scanning", systemImage: "camera")
+                            Label("Begin", systemImage: "camera")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
