@@ -31,7 +31,6 @@ struct CustomerInfoView: View {
         !lastName.trimmingCharacters(in: .whitespaces).isEmpty &&
         isValidEmail(email) &&
         !phone.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !addressLine1.trimmingCharacters(in: .whitespaces).isEmpty &&
         !city.trimmingCharacters(in: .whitespaces).isEmpty &&
         !state.trimmingCharacters(in: .whitespaces).isEmpty &&
         !zipCode.trimmingCharacters(in: .whitespaces).isEmpty
@@ -53,9 +52,6 @@ struct CustomerInfoView: View {
         }
         if phone.trimmingCharacters(in: .whitespaces).isEmpty {
             return "Phone is required"
-        }
-        if addressLine1.trimmingCharacters(in: .whitespaces).isEmpty {
-            return "Street Address is required"
         }
         if city.trimmingCharacters(in: .whitespaces).isEmpty {
             return "City is required"
@@ -140,7 +136,7 @@ struct CustomerInfoView: View {
 
                 // Address section
                 Section {
-                    TextField("Street Address", text: $addressLine1)
+                    TextField("Street Address (Optional)", text: $addressLine1)
                         .textContentType(.streetAddressLine1)
                         .focused($focusedField, equals: .addressLine1)
                         .submitLabel(.next)
@@ -224,12 +220,12 @@ struct CustomerInfoView: View {
                     }
                 }
 
-                // Start Scanning button
+                // Continue button
                 Section {
                     Button {
                         saveAndContinue()
                     } label: {
-                        Text("Start Scanning")
+                        Text("Continue")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
