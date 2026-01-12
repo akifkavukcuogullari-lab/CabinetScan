@@ -981,7 +981,6 @@ struct ScanningView: View {
         var lowerCabinets: [[String: Any]] = []
         var wallOvenCabinets: [[String: Any]] = []
         var pantryCabinets: [[String: Any]] = []
-        var upperSmallCabinets: [[String: Any]] = []
         var appliances: [[String: Any]] = []
         var sinks: [[String: Any]] = []
 
@@ -989,7 +988,6 @@ struct ScanningView: View {
         var lowerIndex = 1
         var wallOvenIndex = 1
         var pantryIndex = 1
-        var upperSmallIndex = 1
         var applianceIndex = 1
         var sinkIndex = 1
 
@@ -1351,24 +1349,11 @@ struct ScanningView: View {
             var cabinetData = createBaseObjectData(for: info.object)
             let cabinetHeight = info.dimensions.y
 
-            // Check if this is a small cabinet above appliance or sink
-            let (isAbove, aboveType) = isAboveApplianceOrSink(info.position)
-
-            if cabinetHeight < smallUpperCabinetMaxHeight && isAbove {
-                cabinetData["id"] = "upper_small_\(upperSmallIndex)"
-                cabinetData["type"] = "upper_small_cabinet"
-                if let aboveType = aboveType {
-                    cabinetData["above"] = aboveType
-                }
-                upperSmallCabinets.append(cabinetData)
-                upperSmallIndex += 1
-            } else {
-                // Standard upper cabinet
-                cabinetData["id"] = "upper_\(upperIndex)"
-                cabinetData["type"] = "upper_cabinet"
-                upperCabinets.append(cabinetData)
-                upperIndex += 1
-            }
+            // All upper cabinets are treated as standard upper cabinets
+            cabinetData["id"] = "upper_\(upperIndex)"
+            cabinetData["type"] = "upper_cabinet"
+            upperCabinets.append(cabinetData)
+            upperIndex += 1
         }
 
         // PHASE 3: Process remaining lower cabinets
@@ -1408,7 +1393,6 @@ struct ScanningView: View {
         print("Lower cabinets: \(lowerCabinets.count)")
         print("Wall oven cabinets: \(wallOvenCabinets.count)")
         print("Pantry cabinets: \(pantryCabinets.count)")
-        print("Upper small cabinets: \(upperSmallCabinets.count)")
         print("--- Classification Thresholds (Industry Standard) ---")
         print("Pantry: gap<6\", height>=80\", width<=30\"")
         print("Wall Oven: has oven OR (height>=80\" AND width>=28\")")
@@ -1516,8 +1500,7 @@ struct ScanningView: View {
             "upper": upperCabinets,
             "lower": lowerCabinets,
             "wall_oven": wallOvenCabinets,
-            "pantry": pantryCabinets,
-            "upper_small": upperSmallCabinets
+            "pantry": pantryCabinets
         ]
         measurements["appliances"] = appliances
         measurements["sinks"] = sinks
@@ -1534,7 +1517,6 @@ struct ScanningView: View {
             "lower_cabinet_count": lowerCabinets.count,
             "wall_oven_cabinet_count": wallOvenCabinets.count,
             "pantry_cabinet_count": pantryCabinets.count,
-            "upper_small_cabinet_count": upperSmallCabinets.count,
             "appliance_count": appliances.count,
             "sink_count": sinks.count,
             "door_count": doorsData.count,

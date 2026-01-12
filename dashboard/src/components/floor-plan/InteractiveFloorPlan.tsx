@@ -96,7 +96,6 @@ interface MeasurementsData {
     lower?: CabinetData[]
     wall_oven?: CabinetData[]
     pantry?: CabinetData[]
-    upper_small?: CabinetData[]
   }
   appliances?: ApplianceData[]
   sinks?: ApplianceData[]  // Sinks are stored separately from appliances
@@ -115,6 +114,7 @@ interface InteractiveFloorPlanProps {
   measurementId?: string
   previewImageUrl?: string | null
   showroomCode?: string
+  projectId?: string
 }
 
 interface SelectedObject {
@@ -139,7 +139,6 @@ interface LayerVisibility {
   CABINETS_UPPER: boolean
   CABINETS_WALL_OVEN: boolean
   CABINETS_PANTRY: boolean
-  CABINETS_UPPER_SMALL: boolean
   APPLIANCES: boolean
   DOORS: boolean
   WINDOWS: boolean
@@ -194,7 +193,8 @@ export function InteractiveFloorPlan({
   minimal = false,
   measurementId,
   previewImageUrl,
-  showroomCode
+  showroomCode,
+  projectId
 }: InteractiveFloorPlanProps) {
   const [selectedObject, setSelectedObject] = useState<SelectedObject | null>(null)
   const [hoveredObject, setHoveredObject] = useState<string | null>(null)
@@ -213,7 +213,6 @@ export function InteractiveFloorPlan({
     CABINETS_UPPER: true,
     CABINETS_WALL_OVEN: true,
     CABINETS_PANTRY: true,
-    CABINETS_UPPER_SMALL: true,
     APPLIANCES: true,
     DOORS: true,
     WINDOWS: true
@@ -242,6 +241,14 @@ export function InteractiveFloorPlan({
   const hasSavedRef = useRef(false)
 
   useEffect(() => {
+    console.log('[FloorPlan] Auto-save check:', {
+      hasSaved: hasSavedRef.current,
+      measurementId,
+      showroomCode,
+      previewImageUrl,
+      hasSvgRef: !!svgRef.current
+    })
+
     if (hasSavedRef.current || !measurementId || !showroomCode || previewImageUrl || !svgRef.current) {
       return
     }
@@ -253,34 +260,51 @@ export function InteractiveFloorPlan({
       if (!svgRef.current || hasSavedRef.current) return
       hasSavedRef.current = true
 
+      console.log('[FloorPlan] Starting PNG generation...')
+
       try {
         const svg = svgRef.current.cloneNode(true) as SVGSVGElement
         svg.setAttribute('preserveAspectRatio', 'xMidYMid meet')
         svg.setAttribute('width', '700')
         svg.setAttribute('height', '550')
+        svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
 
         const svgData = new XMLSerializer().serializeToString(svg)
-        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
-        const svgUrl = URL.createObjectURL(svgBlob)
+
+        // Use base64 encoding instead of blob URL for better compatibility
+        const base64 = btoa(unescape(encodeURIComponent(svgData)))
+        const dataUrl = `data:image/svg+xml;base64,${base64}`
+
+        console.log('[FloorPlan] SVG converted to data URL')
 
         const img = new Image()
 
         img.onload = async () => {
+          console.log('[FloorPlan] Image loaded, creating canvas...')
           try {
             const canvas = document.createElement('canvas')
             canvas.width = 1400
             canvas.height = 1100
             const ctx = canvas.getContext('2d')
-            if (!ctx) return
+            if (!ctx) {
+              console.error('[FloorPlan] Failed to get canvas context')
+              return
+            }
 
             ctx.fillStyle = '#ffffff'
             ctx.fillRect(0, 0, 1400, 1100)
             ctx.scale(2, 2)
             ctx.drawImage(img, 0, 0, 700, 550)
 
-            canvas.toBlob(async (blob) => {
-              if (!blob) return
+            console.log('[FloorPlan] Canvas drawn, converting to blob...')
 
+            canvas.toBlob(async (blob) => {
+              if (!blob) {
+                console.error('[FloorPlan] Failed to create blob')
+                return
+              }
+
+              console.log('[FloorPlan] Uploading to Supabase...')
               const supabase = createClient()
               const filename = `floor_plan_${Date.now()}_${Math.random().toString(36).slice(2, 10)}.png`
               const path = `${showroomCode.toLowerCase()}/${filename}`
@@ -290,40 +314,69 @@ export function InteractiveFloorPlan({
                 .upload(path, blob, { contentType: 'image/png' })
 
               if (uploadError) {
-                console.error('Floor plan upload error:', uploadError)
+                console.error('[FloorPlan] Upload error:', uploadError)
                 return
               }
 
               const { data: urlData } = supabase.storage.from('scans').getPublicUrl(path)
 
-              await supabase
+              const { error: updateError } = await supabase
                 .from('project_measurements')
                 .update({ preview_image_url: urlData.publicUrl })
                 .eq('id', measurementId)
 
-              console.log('Floor plan saved:', urlData.publicUrl)
+              if (updateError) {
+                console.error('[FloorPlan] Database update error:', updateError)
+                return
+              }
+
+              // Also update the project's webhook_payload with the floor plan URL
+              if (projectId) {
+                const { data: project } = await supabase
+                  .from('projects')
+                  .select('webhook_payload')
+                  .eq('id', projectId)
+                  .single()
+
+                if (project?.webhook_payload) {
+                  const updatedPayload = {
+                    ...project.webhook_payload as Record<string, unknown>,
+                    files: {
+                      ...(project.webhook_payload as Record<string, unknown>).files as Record<string, unknown>,
+                      floor_plan: urlData.publicUrl
+                    }
+                  }
+
+                  await supabase
+                    .from('projects')
+                    .update({ webhook_payload: updatedPayload })
+                    .eq('id', projectId)
+
+                  console.log('[FloorPlan] Webhook payload updated with floor_plan URL')
+                }
+              }
+
+              console.log('[FloorPlan] Saved successfully:', urlData.publicUrl)
             }, 'image/png')
           } catch (e) {
-            console.error('Canvas error:', e)
+            console.error('[FloorPlan] Canvas error:', e)
           }
-          URL.revokeObjectURL(svgUrl)
         }
 
-        img.onerror = () => {
-          console.error('Failed to load SVG')
-          URL.revokeObjectURL(svgUrl)
+        img.onerror = (e) => {
+          console.error('[FloorPlan] Image load error:', e)
         }
 
         // Set src AFTER attaching handlers
-        img.src = svgUrl
+        img.src = dataUrl
       } catch (e) {
-        console.error('Floor plan save error:', e)
+        console.error('[FloorPlan] Save error:', e)
         hasSavedRef.current = false
       }
     }
 
     saveFloorPlan()
-  }, [measurementId, showroomCode, previewImageUrl])
+  }, [measurementId, showroomCode, previewImageUrl, projectId])
 
   // Smooth animation for rotation and zoom
   useEffect(() => {
@@ -471,7 +524,6 @@ export function InteractiveFloorPlan({
   const lowerCabinets = Array.isArray(measurements?.cabinets?.lower) ? measurements.cabinets.lower : []
   const wallOvenCabinets = Array.isArray(measurements?.cabinets?.wall_oven) ? measurements.cabinets.wall_oven : []
   const pantryCabinets = Array.isArray(measurements?.cabinets?.pantry) ? measurements.cabinets.pantry : []
-  const upperSmallCabinets = Array.isArray(measurements?.cabinets?.upper_small) ? measurements.cabinets.upper_small : []
   const rawAppliances = Array.isArray(measurements?.appliances) ? measurements.appliances : []
   const sinks = Array.isArray(measurements?.sinks) ? measurements.sinks : []
   // Combine appliances and sinks for rendering (sinks have type: "sink")
@@ -917,7 +969,6 @@ export function InteractiveFloorPlan({
     CABINETS_UPPER: measurements?.cabinets?.upper?.length || 0,
     CABINETS_WALL_OVEN: measurements?.cabinets?.wall_oven?.length || 0,
     CABINETS_PANTRY: measurements?.cabinets?.pantry?.length || 0,
-    CABINETS_UPPER_SMALL: measurements?.cabinets?.upper_small?.length || 0,
     APPLIANCES: (measurements?.appliances?.length || 0) + (measurements?.sinks?.length || 0),
     DOORS: measurements?.doors?.length || 0,
     WINDOWS: measurements?.windows?.length || 0
@@ -1813,34 +1864,6 @@ export function InteractiveFloorPlan({
               )
             })}
 
-            {/* Upper Small Cabinets */}
-            {layerVisibility.CABINETS_UPPER_SMALL && upperSmallCabinets.map((cabinet, idx) => {
-              const id = `cabinet-upper-small-${idx}`
-              const isHovered = hoveredObject === id
-              const isSelected = selectedObject?.data?.id === cabinet.id
-              const screen = toScreen(cabinet.position.x, cabinet.position.z)
-              const w = cabinet.width_ft * viewConfig.scale
-              const d = cabinet.depth_ft * viewConfig.scale
-
-              if (cabinet.corners && cabinet.corners.length >= 4) {
-                const screenCorners = cabinet.corners.map(c => toScreen(c.x, c.z))
-                const points = screenCorners.map(s => `${s.x},${s.y}`).join(' ')
-                const centerX = screenCorners.reduce((sum, c) => sum + c.x, 0) / screenCorners.length
-                const centerY = screenCorners.reduce((sum, c) => sum + c.y, 0) / screenCorners.length
-                return (
-                  <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
-                    <polygon points={points} fill={isSelected ? 'rgba(168, 85, 247, 0.2)' : isHovered ? 'rgba(168, 85, 247, 0.15)' : 'rgba(168, 85, 247, 0.1)'} stroke={isSelected ? '#7e22ce' : isHovered ? '#9333ea' : '#a855f7'} strokeWidth={isSelected ? 2 : isHovered ? 1.5 : 1.5} strokeDasharray="4,2" className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Upper Small: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Upper Small Cabinet' })} />
-                    {showLabels && (<text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" fontSize="7" fontWeight="bold" fill="#7e22ce" className="pointer-events-none">US</text>)}
-                  </g>
-                )
-              }
-              return (
-                <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
-                  <rect x={screen.x - w / 2} y={screen.y - d / 2} width={w} height={d} fill={isSelected ? 'rgba(168, 85, 247, 0.2)' : isHovered ? 'rgba(168, 85, 247, 0.15)' : 'rgba(168, 85, 247, 0.1)'} stroke={isSelected ? '#7e22ce' : isHovered ? '#9333ea' : '#a855f7'} strokeWidth={isSelected ? 2 : isHovered ? 1.5 : 1.5} strokeDasharray="4,2" rx="2" className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Upper Small: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Upper Small Cabinet' })} />
-                  {showLabels && (<text x={screen.x} y={screen.y} textAnchor="middle" dominantBaseline="middle" fontSize="7" fontWeight="bold" fill="#7e22ce" className="pointer-events-none">US</text>)}
-                </g>
-              )
-            })}
 
             {/* Windows */}
             {layerVisibility.WINDOWS && windows.map((windowItem, idx) => {
@@ -2605,34 +2628,6 @@ export function InteractiveFloorPlan({
               )
             })}
 
-            {/* Upper Small Cabinets */}
-            {layerVisibility.CABINETS_UPPER_SMALL && upperSmallCabinets.map((cabinet, idx) => {
-              const id = `cabinet-upper-small-${idx}`
-              const isHovered = hoveredObject === id
-              const isSelected = selectedObject?.data?.id === cabinet.id
-              const screen = toScreen(cabinet.position.x, cabinet.position.z)
-              const w = cabinet.width_ft * viewConfig.scale
-              const d = cabinet.depth_ft * viewConfig.scale
-
-              if (cabinet.corners && cabinet.corners.length >= 4) {
-                const screenCorners = cabinet.corners.map(c => toScreen(c.x, c.z))
-                const points = screenCorners.map(s => `${s.x},${s.y}`).join(' ')
-                const centerX = screenCorners.reduce((sum, c) => sum + c.x, 0) / screenCorners.length
-                const centerY = screenCorners.reduce((sum, c) => sum + c.y, 0) / screenCorners.length
-                return (
-                  <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
-                    <polygon points={points} fill={isSelected ? 'rgba(168, 85, 247, 0.2)' : isHovered ? 'rgba(168, 85, 247, 0.15)' : 'rgba(168, 85, 247, 0.1)'} stroke={isSelected ? '#7e22ce' : isHovered ? '#9333ea' : '#a855f7'} strokeWidth={isSelected ? 2 : isHovered ? 1.5 : 1.5} strokeDasharray="4,2" className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Upper Small: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Upper Small Cabinet' })} />
-                    {showLabels && (<text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" fontSize="7" fontWeight="bold" fill="#7e22ce" className="pointer-events-none">US</text>)}
-                  </g>
-                )
-              }
-              return (
-                <g key={id} filter={isHovered || isSelected ? 'url(#dropShadow)' : undefined}>
-                  <rect x={screen.x - w / 2} y={screen.y - d / 2} width={w} height={d} fill={isSelected ? 'rgba(168, 85, 247, 0.2)' : isHovered ? 'rgba(168, 85, 247, 0.15)' : 'rgba(168, 85, 247, 0.1)'} stroke={isSelected ? '#7e22ce' : isHovered ? '#9333ea' : '#a855f7'} strokeWidth={isSelected ? 2 : isHovered ? 1.5 : 1.5} strokeDasharray="4,2" rx="2" className="cursor-pointer" style={{ transition: 'all 0.2s ease-out' }} onMouseEnter={(e) => handleHover(e, id, `Upper Small: ${formatInches(cabinet.width_ft)} x ${formatInches(cabinet.depth_ft)}`)} onMouseLeave={handleHoverEnd} onClick={() => setSelectedObject({ type: 'cabinet', data: cabinet, label: 'Upper Small Cabinet' })} />
-                  {showLabels && (<text x={screen.x} y={screen.y} textAnchor="middle" dominantBaseline="middle" fontSize="7" fontWeight="bold" fill="#7e22ce" className="pointer-events-none">US</text>)}
-                </g>
-              )
-            })}
 
             {/* Windows */}
             {layerVisibility.WINDOWS && windows.map((windowItem, idx) => {

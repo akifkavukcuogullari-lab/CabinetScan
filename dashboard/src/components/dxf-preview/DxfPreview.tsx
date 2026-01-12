@@ -82,7 +82,6 @@ interface MeasurementsData {
     lower?: CabinetData[]
     wall_oven?: CabinetData[]
     pantry?: CabinetData[]
-    upper_small?: CabinetData[]
   }
   appliances?: ApplianceData[]
   sinks?: ApplianceData[]
@@ -106,7 +105,6 @@ const LAYER_COLORS = {
   CABINETS_UPPER: '#d946ef', // Magenta
   CABINETS_WALL_OVEN: '#f97316', // Orange
   CABINETS_PANTRY: '#10b981', // Emerald
-  CABINETS_UPPER_SMALL: '#8b5cf6', // Violet
   APPLIANCES: '#ef4444',    // Red
   SINKS: '#eab308',         // Yellow
   DOORS: '#22c55e',         // Green
@@ -124,7 +122,6 @@ interface LayerVisibility {
   CABINETS_UPPER: boolean
   CABINETS_WALL_OVEN: boolean
   CABINETS_PANTRY: boolean
-  CABINETS_UPPER_SMALL: boolean
   APPLIANCES: boolean
   SINKS: boolean
   DOORS: boolean
@@ -150,7 +147,6 @@ export function DxfPreview({
     CABINETS_UPPER: true,
     CABINETS_WALL_OVEN: true,
     CABINETS_PANTRY: true,
-    CABINETS_UPPER_SMALL: true,
     APPLIANCES: true,
     SINKS: true,
     DOORS: true,
@@ -310,7 +306,6 @@ export function DxfPreview({
     CABINETS_UPPER: measurements?.cabinets?.upper?.length || 0,
     CABINETS_WALL_OVEN: measurements?.cabinets?.wall_oven?.length || 0,
     CABINETS_PANTRY: measurements?.cabinets?.pantry?.length || 0,
-    CABINETS_UPPER_SMALL: measurements?.cabinets?.upper_small?.length || 0,
     APPLIANCES: measurements?.appliances?.length || 0,
     SINKS: measurements?.sinks?.length || 0,
     DOORS: measurements?.doors?.length || 0,
@@ -634,42 +629,6 @@ export function DxfPreview({
                 fillOpacity="0.2"
                 stroke={LAYER_COLORS.CABINETS_PANTRY}
                 strokeWidth="2"
-              />
-            )
-          })}
-
-          {/* Upper Small Cabinets (dashed) */}
-          {layerVisibility.CABINETS_UPPER_SMALL && measurements.cabinets?.upper_small?.map(cabinet => {
-            if (cabinet.corners && cabinet.corners.length >= 3) {
-              const points = cabinet.corners.map(c => `${c.x * scale},${c.z * scale}`).join(' ')
-              return (
-                <polygon
-                  key={cabinet.id}
-                  points={points}
-                  fill={LAYER_COLORS.CABINETS_UPPER_SMALL}
-                  fillOpacity="0.15"
-                  stroke={LAYER_COLORS.CABINETS_UPPER_SMALL}
-                  strokeWidth="1.5"
-                  strokeDasharray="6 3"
-                />
-              )
-            }
-            const x = (cabinet.position.x - cabinet.width_ft / 2) * scale
-            const y = (cabinet.position.z - cabinet.depth_ft / 2) * scale
-            const width = cabinet.width_ft * scale
-            const height = cabinet.depth_ft * scale
-            return (
-              <rect
-                key={cabinet.id}
-                x={x}
-                y={y}
-                width={width}
-                height={height}
-                fill={LAYER_COLORS.CABINETS_UPPER_SMALL}
-                fillOpacity="0.15"
-                stroke={LAYER_COLORS.CABINETS_UPPER_SMALL}
-                strokeWidth="1.5"
-                strokeDasharray="6 3"
               />
             )
           })}
