@@ -102,6 +102,7 @@ serve(async (req) => {
     const webhookPayload = {
       ...storedPayload,
       event: 'quote.requested',
+      showroom_id: project.showroom_id, // For vector DB price catalog filtering
       // Update files.floor_plan with the latest preview_image_url
       files: {
         ...(storedPayload.files || {}),

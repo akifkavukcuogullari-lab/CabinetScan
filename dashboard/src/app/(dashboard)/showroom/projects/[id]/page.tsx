@@ -162,41 +162,75 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   const createQuote = async () => {
     'use server'
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-    if (!supabaseUrl || !supabaseKey) {
-      console.error('Missing Supabase environment variables')
-      throw new Error('Server configuration error: Missing Supabase credentials')
+    const estimateApiHost = process.env.ESTIMATE_API_HOST
+    if (!estimateApiHost) {
+      console.error('Missing ESTIMATE_API_HOST environment variable')
+      throw new Error('Server configuration error: Missing estimate API host')
     }
 
-    // Trigger the webhook for this project
+    const supabase = await createClient()
+
+    // Get project with webhook payload
+    const { data: projectData, error: projectError } = await supabase
+      .from('projects')
+      .select('webhook_payload, reference_number')
+      .eq('id', id)
+      .single()
+
+    if (projectError || !projectData) {
+      console.error('Failed to fetch project:', projectError)
+      throw new Error('Project not found')
+    }
+
+    if (!projectData.webhook_payload) {
+      throw new Error('No webhook payload stored for this project')
+    }
+
+    // Get the latest preview_image_url from project_measurements
+    const { data: measurementsData } = await supabase
+      .from('project_measurements')
+      .select('preview_image_url')
+      .eq('project_id', id)
+      .single()
+
+    // Build the payload with latest floor plan URL
+    const storedPayload = projectData.webhook_payload as Record<string, any>
+    const webhookPayload = {
+      ...storedPayload,
+      event: 'quote.requested',
+      files: {
+        ...(storedPayload.files || {}),
+        floor_plan: measurementsData?.preview_image_url || storedPayload.files?.floor_plan || null,
+      },
+      generate_quote: true,
+      triggered_at: new Date().toISOString(),
+    }
+
+    // Send to estimate API endpoint
     const response = await fetch(
-      `${supabaseUrl}/functions/v1/trigger-webhook`,
+      `${estimateApiHost}/api/estimate`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseKey}`
         },
-        body: JSON.stringify({ project_id: id })
+        body: JSON.stringify(webhookPayload)
       }
     )
 
     if (!response.ok) {
-      let errorMessage = 'Failed to trigger webhook'
+      let errorMessage = 'Failed to send to estimate API'
       try {
         const error = await response.json()
-        console.error('Failed to trigger webhook:', error)
+        console.error('Failed to send to estimate API:', error)
         errorMessage = error.error || errorMessage
       } catch {
-        console.error('Failed to trigger webhook, status:', response.status)
+        console.error('Failed to send to estimate API, status:', response.status)
       }
       throw new Error(errorMessage)
     }
 
     // Update project status to quoted
-    const supabase = await createClient()
     await supabase
       .from('projects')
       .update({
@@ -358,6 +392,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                     measurementId={measurement?.id}
                     previewImageUrl={measurement?.preview_image_url}
                     showroomCode={showroom?.showroom_code}
+                    projectId={project.id}
                   />
                 </TabsContent>
 
