@@ -80,7 +80,6 @@ interface FloorPlanMeasurements {
     lower: Cabinet[]
     wall_oven?: Cabinet[]
     pantry?: Cabinet[]
-    upper_small?: Cabinet[]
   }
   appliances: Appliance[]
   sinks?: Sink[]
@@ -231,8 +230,6 @@ export class DXFGenerator {
     this.addLayer('CABINETS_WALL_OVEN', 30, 'CONTINUOUS')
     // Pantry Cabinets Layer
     this.addLayer('CABINETS_PANTRY', 92, 'CONTINUOUS')
-    // Upper Small Cabinets Layer
-    this.addLayer('CABINETS_UPPER_SMALL', 200, 'DASHED')
     // Countertops Layer
     this.addLayer('COUNTERTOPS', 8, 'CONTINUOUS')
     // Appliances Layer
@@ -483,22 +480,6 @@ export class DXFGenerator {
         ]
         this.addPolyline(points, 'CABINETS_PANTRY')
         this.addText(cabinet.position.x, cabinet.position.z, 'PANTRY', 0.25, 'DIMENSIONS')
-      })
-    }
-
-    // Add Upper Small Cabinets
-    if (measurements.cabinets.upper_small) {
-      measurements.cabinets.upper_small.forEach((cabinet) => {
-        const halfWidth = cabinet.width_ft / 2
-        const halfDepth = cabinet.depth_ft / 2
-        const points = [
-          { x: cabinet.position.x - halfWidth, y: cabinet.position.z - halfDepth },
-          { x: cabinet.position.x + halfWidth, y: cabinet.position.z - halfDepth },
-          { x: cabinet.position.x + halfWidth, y: cabinet.position.z + halfDepth },
-          { x: cabinet.position.x - halfWidth, y: cabinet.position.z + halfDepth },
-        ]
-        this.addPolyline(points, 'CABINETS_UPPER_SMALL')
-        this.addText(cabinet.position.x, cabinet.position.z, cabinet.id, 0.2, 'DIMENSIONS')
       })
     }
 

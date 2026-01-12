@@ -221,6 +221,7 @@ async function buildWebhookPayload(
       created_at: project.created_at,
       submitted_at: project.submitted_at,
     },
+    showroom_id: showroom.id, // For vector DB price catalog filtering
     customer: {
       id: data.customerId,
       first_name: submission.customer.first_name,
@@ -285,14 +286,6 @@ async function buildWebhookPayload(
             lower_section_height: formatDimension(cab.lower_section_height_ft),
           })),
 
-          upper_small_cabinets: (Array.isArray(measurements.measurements?.cabinets?.upper_small) ? measurements.measurements.cabinets.upper_small : []).map((cab: any, index: number) => ({
-            id: `upper_small_cabinet_${index + 1}`,
-            width: formatDimension(cab.width_ft),
-            height: formatDimension(cab.height_ft),
-            depth: formatDimension(cab.depth_ft),
-            above: cab.above || null,
-          })),
-
           appliances: (Array.isArray(measurements.measurements?.appliances) ? measurements.measurements.appliances : []).map((app: any, index: number) => ({
             id: `appliance_${index + 1}`,
             type: app.type || 'appliance',
@@ -341,7 +334,6 @@ async function buildWebhookPayload(
             upper_cabinet_count: measurements.measurements?.summary?.upper_cabinet_count || 0,
             wall_oven_cabinet_count: measurements.measurements?.summary?.wall_oven_cabinet_count || 0,
             pantry_cabinet_count: measurements.measurements?.summary?.pantry_cabinet_count || 0,
-            upper_small_cabinet_count: measurements.measurements?.summary?.upper_small_cabinet_count || 0,
             appliance_count: measurements.measurements?.summary?.appliance_count || 0,
             sink_count: measurements.measurements?.summary?.sink_count || 0,
             window_count: measurements.window_count || 0,
@@ -450,6 +442,7 @@ async function buildWebhookPayload(
       notification_emails: showroom.notification_emails
         ? showroom.notification_emails.split(',').map((e: string) => e.trim()).filter((e: string) => e.length > 0)
         : [],
+      postbackUrl: showroom.webhook_url || null,
     },
     device_info: submission.device_info || null,
   }

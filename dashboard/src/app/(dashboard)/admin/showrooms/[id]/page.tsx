@@ -5,10 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban, Mail, HardDrive, TrendingUp, Bot } from 'lucide-react'
+import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban, Mail, HardDrive, TrendingUp, Bot, FileSpreadsheet } from 'lucide-react'
 import { InvitationList } from '@/components/invitations/invitation-list'
 import { SubscriptionManager } from '@/components/admin/subscription-manager'
 import { DesignerAgentSettings } from '@/components/admin/designer-agent-settings'
+import { PriceCatalogUpload } from '@/components/admin/price-catalog-upload'
 
 interface ShowroomDetailPageProps {
   params: Promise<{ id: string }>
@@ -191,6 +192,10 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
             <Bot className="h-4 w-4" />
             Designer Agent
           </TabsTrigger>
+          <TabsTrigger value="price-catalog" className="gap-1.5">
+            <FileSpreadsheet className="h-4 w-4" />
+            Price Catalog
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="details" className="mt-4 space-y-4">
@@ -341,6 +346,15 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
               id: showroom.id,
               name: showroom.name,
               ai_chatbot_enabled: showroom.ai_chatbot_enabled ?? false,
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="price-catalog" className="mt-4">
+          <PriceCatalogUpload
+            showroom={{
+              id: showroom.id,
+              name: showroom.name,
             }}
           />
         </TabsContent>

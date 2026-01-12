@@ -22,7 +22,6 @@ interface MeasurementsData {
     lower?: any[]
     wall_oven?: any[]
     pantry?: any[]
-    upper_small?: any[]
   }
   appliances?: any[]
   sinks?: any[]
@@ -61,7 +60,6 @@ export function RoomMeasurementsSection({
   const upperCabinetCount = measurements?.cabinets?.upper?.length || 0
   const wallOvenCabinetCount = measurements?.cabinets?.wall_oven?.length || 0
   const pantryCabinetCount = measurements?.cabinets?.pantry?.length || 0
-  const upperSmallCabinetCount = measurements?.cabinets?.upper_small?.length || 0
   const applianceCount = measurements?.appliances?.length || 0
   const sinkCount = measurements?.sinks?.length || 0
   const doorCount = measurement.door_count || measurements?.doors?.length || 0
@@ -77,7 +75,7 @@ export function RoomMeasurementsSection({
     ? Math.abs(measurements.room.max_z - measurements.room.min_z)
     : 0
 
-  const totalCabinets = lowerCabinetCount + upperCabinetCount + wallOvenCabinetCount + pantryCabinetCount + upperSmallCabinetCount
+  const totalCabinets = lowerCabinetCount + upperCabinetCount + wallOvenCabinetCount + pantryCabinetCount
   const summaryItems = [
     wallCount > 0 && `${wallCount} walls`,
     totalCabinets > 0 && `${totalCabinets} cabinets`,
@@ -157,7 +155,7 @@ export function RoomMeasurementsSection({
           </div>
 
           {/* Cabinet & Appliance breakdown */}
-          {(lowerCabinetCount > 0 || upperCabinetCount > 0 || wallOvenCabinetCount > 0 || pantryCabinetCount > 0 || upperSmallCabinetCount > 0 || applianceCount > 0 || sinkCount > 0 || windowCount > 0) && (
+          {(lowerCabinetCount > 0 || upperCabinetCount > 0 || wallOvenCabinetCount > 0 || pantryCabinetCount > 0 || applianceCount > 0 || sinkCount > 0 || windowCount > 0) && (
             <div className="mt-4 pt-4 border-t">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 {lowerCabinetCount > 0 && (
@@ -182,12 +180,6 @@ export function RoomMeasurementsSection({
                   <div className="flex items-center justify-between p-2 bg-emerald-50 rounded">
                     <span className="text-emerald-700">Pantry</span>
                     <span className="font-medium text-emerald-900">{pantryCabinetCount}</span>
-                  </div>
-                )}
-                {upperSmallCabinetCount > 0 && (
-                  <div className="flex items-center justify-between p-2 bg-violet-50 rounded">
-                    <span className="text-violet-700">Upper Small</span>
-                    <span className="font-medium text-violet-900">{upperSmallCabinetCount}</span>
                   </div>
                 )}
                 {applianceCount > 0 && (
