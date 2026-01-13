@@ -89,7 +89,7 @@ actor APIService {
         request.httpMethod = "POST"
         request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 60 // 60 second timeout for submission
+        request.timeoutInterval = 90 // 90 second timeout for submission
 
         // Encode the submission - catch encoding errors for better debugging
         do {
@@ -99,43 +99,91 @@ actor APIService {
             throw APIError.submissionFailed(message: "Failed to prepare submission data. Please try scanning again.")
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        // Use custom session configuration for better reliability
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 90
+        config.timeoutIntervalForResource = 120
+        config.waitsForConnectivity = true  // Wait for network instead of failing immediately
+        let session = URLSession(configuration: config)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
-        }
+        // Retry logic for network errors
+        let maxRetries = 3
+        var lastError: Error?
 
-        // Handle error status codes first
-        if httpResponse.statusCode != 201 {
-            // Try to parse error response
-            if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data) {
-                // Use customer-friendly message if available (for plan limit errors)
-                if let customerMessage = errorResponse.customerMessage {
-                    throw APIError.submissionFailed(message: customerMessage)
+        for attempt in 1...maxRetries {
+            do {
+                Config.logInfo("📤 [APIService] Submit attempt \(attempt)/\(maxRetries)")
+                let (data, response) = try await session.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
                 }
-                // Otherwise use the message or error field
-                let errorMessage = errorResponse.message ?? errorResponse.error ?? "Server error (code: \(httpResponse.statusCode))"
-                throw APIError.submissionFailed(message: errorMessage)
-            }
 
-            // Log raw response for debugging
-            if let errorString = String(data: data, encoding: .utf8) {
-                Config.logError("❌ Raw error response: \(errorString)")
+                // Handle error status codes first
+                if httpResponse.statusCode != 201 {
+                    // Try to parse error response
+                    if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data) {
+                        // Use customer-friendly message if available (for plan limit errors)
+                        if let customerMessage = errorResponse.customerMessage {
+                            throw APIError.submissionFailed(message: customerMessage)
+                        }
+                        // Otherwise use the message or error field
+                        let errorMessage = errorResponse.message ?? errorResponse.error ?? "Server error (code: \(httpResponse.statusCode))"
+                        throw APIError.submissionFailed(message: errorMessage)
+                    }
+
+                    // Log raw response for debugging
+                    if let errorString = String(data: data, encoding: .utf8) {
+                        Config.logError("❌ Raw error response: \(errorString)")
+                    }
+                    throw APIError.submissionFailed(message: "Server error (code: \(httpResponse.statusCode)). Please try again.")
+                }
+
+                // Try to decode success response
+                do {
+                    let submissionResponse = try decoder.decode(SubmissionResponse.self, from: data)
+                    Config.logInfo("✅ [APIService] Submission successful on attempt \(attempt)")
+                    return submissionResponse
+                } catch let decodingError as DecodingError {
+                    Config.logError("❌ Failed to decode response: \(decodingError)")
+                    if let errorString = String(data: data, encoding: .utf8) {
+                        Config.logError("❌ Raw response: \(errorString)")
+                    }
+                    throw APIError.submissionFailed(message: "Server returned an unexpected response. Please try again.")
+                }
+            } catch let error as URLError {
+                lastError = error
+                Config.logError("❌ [APIService] Attempt \(attempt) failed: \(error.localizedDescription) (code: \(error.code.rawValue))")
+
+                // Only retry on network-related errors
+                let retryableCodes: [URLError.Code] = [
+                    .networkConnectionLost,      // -1005
+                    .timedOut,                   // -1001
+                    .cannotConnectToHost,        // -1004
+                    .notConnectedToInternet,     // -1009
+                    .dataNotAllowed,             // -1020
+                    .internationalRoamingOff,    // -1018
+                    .cannotFindHost              // -1003
+                ]
+
+                if retryableCodes.contains(error.code) && attempt < maxRetries {
+                    // Exponential backoff: 2s, 4s, 8s
+                    let delay = pow(2.0, Double(attempt))
+                    Config.logInfo("⏳ [APIService] Retrying in \(Int(delay)) seconds...")
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    continue
+                }
+
+                // Non-retryable error or max retries reached
+                throw error
+            } catch {
+                // Non-URLError - don't retry (e.g., server returned error response)
+                throw error
             }
-            throw APIError.submissionFailed(message: "Server error (code: \(httpResponse.statusCode)). Please try again.")
         }
 
-        // Try to decode success response
-        do {
-            let submissionResponse = try decoder.decode(SubmissionResponse.self, from: data)
-            return submissionResponse
-        } catch let decodingError as DecodingError {
-            Config.logError("❌ Failed to decode response: \(decodingError)")
-            if let errorString = String(data: data, encoding: .utf8) {
-                Config.logError("❌ Raw response: \(errorString)")
-            }
-            throw APIError.submissionFailed(message: "Server returned an unexpected response. Please try again.")
-        }
+        // Should not reach here, but just in case
+        throw lastError ?? APIError.connectionFailed
     }
 
     // MARK: - Upload File to Storage

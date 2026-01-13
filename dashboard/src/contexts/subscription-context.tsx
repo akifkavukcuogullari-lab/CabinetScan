@@ -344,11 +344,12 @@ export function SubscriptionProvider({
   // Methods
   const canUseFeature = useCallback(
     (feature: keyof PlanFeatures): boolean => {
-      // During trial, user has access to Pro features
+      // During trial, user gets features from their actual plan
+      // If no plan specified, default to Pro features
       if (isTrial && !isTrialExpired) {
-        // Trial users get Pro-level features
-        const proFeatures = getPlanFeatures('pro')
-        const value = proFeatures[feature]
+        const trialPlan = subscription?.plan || 'pro'
+        const planFeatures = getPlanFeatures(trialPlan)
+        const value = planFeatures[feature]
         if (typeof value === 'boolean') return value
         return true
       }
