@@ -24,16 +24,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // TODO: Replace with actual microservice endpoint URL
-    const VISUALIZATION_MICROSERVICE_URL = process.env.VISUALIZATION_MICROSERVICE_URL || 'https://your-visualization-service.com/api/generate'
+    // Cabinet AI Service endpoint
+    const CABINET_AI_SERVICE_URL = process.env.CABINET_AI_SERVICE_URL || 'https://cabinetai.nextlyn.ai'
 
-    // Call the visualization microservice
-    const response = await fetch(VISUALIZATION_MICROSERVICE_URL, {
+    // Call the Cabinet AI service
+    const response = await fetch(`${CABINET_AI_SERVICE_URL}/api/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         // Add any auth headers required by your microservice
-        'Authorization': `Bearer ${process.env.VISUALIZATION_SERVICE_API_KEY || ''}`,
+        'Authorization': `Bearer ${process.env.CABINET_AI_SERVICE_API_KEY || ''}`,
       },
       body: JSON.stringify({
         project_id,
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('Visualization service error:', errorText)
+      console.error('Cabinet AI service error:', errorText)
       return NextResponse.json(
         { error: 'Failed to generate visualization' },
         { status: 500 }
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       data,
     })
   } catch (error) {
-    console.error('Error calling visualization service:', error)
+    console.error('Error calling Cabinet AI service:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
