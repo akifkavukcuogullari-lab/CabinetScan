@@ -2,6 +2,7 @@
   "functions": {
     "src/app/**/*.tsx": {
       "maxDuration": 120
+
     }
   },
   "redirects": [
