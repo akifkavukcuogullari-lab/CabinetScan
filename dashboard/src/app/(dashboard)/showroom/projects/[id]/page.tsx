@@ -50,10 +50,10 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
 
   if (!showroomUser) redirect('/login')
 
-  // Get showroom subscription plan and code
+  // Get showroom subscription plan, code, and visualization settings
   const { data: showroom } = await supabase
     .from('showrooms')
-    .select('subscription_plan, subscription_status, showroom_code')
+    .select('subscription_plan, subscription_status, showroom_code, visualize_kitchen_enabled')
     .eq('id', showroomUser.showroom_id)
     .single()
 
@@ -478,6 +478,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             project={project}
             measurement={measurement}
             canExportDxf={canExportDxf}
+            visualizeKitchenEnabled={showroom?.visualize_kitchen_enabled ?? false}
             onStatusChange={async (status) => {
               'use server'
               const formData = new FormData()

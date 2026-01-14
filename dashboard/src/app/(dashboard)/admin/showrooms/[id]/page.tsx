@@ -5,11 +5,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban, Mail, HardDrive, TrendingUp, Bot, FileSpreadsheet } from 'lucide-react'
+import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban, Mail, HardDrive, TrendingUp, Bot, FileSpreadsheet, Sparkles } from 'lucide-react'
 import { InvitationList } from '@/components/invitations/invitation-list'
 import { SubscriptionManager } from '@/components/admin/subscription-manager'
 import { DesignerAgentSettings } from '@/components/admin/designer-agent-settings'
 import { PriceCatalogUpload } from '@/components/admin/price-catalog-upload'
+import { VisualizationSettings } from '@/components/admin/visualization-settings'
 
 interface ShowroomDetailPageProps {
   params: Promise<{ id: string }>
@@ -196,6 +197,10 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
             <FileSpreadsheet className="h-4 w-4" />
             Price Catalog
           </TabsTrigger>
+          <TabsTrigger value="visualization" className="gap-1.5">
+            <Sparkles className="h-4 w-4" />
+            Visualization
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="details" className="mt-4 space-y-4">
@@ -355,6 +360,16 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
             showroom={{
               id: showroom.id,
               name: showroom.name,
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="visualization" className="mt-4">
+          <VisualizationSettings
+            showroom={{
+              id: showroom.id,
+              name: showroom.name,
+              visualize_kitchen_enabled: showroom.visualize_kitchen_enabled ?? false,
             }}
           />
         </TabsContent>

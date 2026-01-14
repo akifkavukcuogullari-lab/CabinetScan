@@ -51,6 +51,7 @@ interface ProjectSidebarWrapperProps {
   project: Project
   measurement?: Measurement | null
   canExportDxf?: boolean
+  visualizeKitchenEnabled?: boolean
   onStatusChange: (status: string) => Promise<void>
   onCreateQuote?: () => Promise<void>
   onDeleteProject?: () => Promise<void>
@@ -60,6 +61,7 @@ export function ProjectSidebarWrapper({
   project,
   measurement,
   canExportDxf,
+  visualizeKitchenEnabled = false,
   onStatusChange,
   onCreateQuote,
   onDeleteProject
@@ -255,6 +257,7 @@ export function ProjectSidebarWrapper({
         project={project}
         measurement={measurement}
         canExportDxf={canExportDxf}
+        visualizeKitchenEnabled={visualizeKitchenEnabled}
         currentPlan={currentPlan}
         onStatusChange={onStatusChange}
         onCreateQuote={handleCreateQuote}
