@@ -64,6 +64,7 @@ serve(async (req) => {
           ai_assistant_name,
           ai_assistant_avatar_url,
           subscription_status,
+          subscription_plan,
           subscription_plans (
             slug,
             has_ai_agent
@@ -98,9 +99,10 @@ serve(async (req) => {
     }
 
     // 3. Check subscription plan has AI agent access (Business+)
+    // First check subscription_plans table, then fallback to subscription_plan TEXT field
     const plan = showroom.subscription_plans as any
-    const isTrialWithProFeatures = showroom.subscription_status === 'trial' && !plan
-    const hasAiAgent = plan?.has_ai_agent || isTrialWithProFeatures
+    const hasAiAgent = plan?.has_ai_agent ??
+      ['business', 'enterprise'].includes((showroom as any).subscription_plan || '')
 
     if (!hasAiAgent) {
       return new Response(
