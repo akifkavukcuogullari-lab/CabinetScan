@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "src/app/**/*.tsx": {
+      "maxDuration": 60
+    }
+  },
   "redirects": [
     {
       "source": "/:path*",
