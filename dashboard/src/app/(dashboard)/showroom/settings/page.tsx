@@ -87,6 +87,12 @@ export default function SettingsPage() {
   // Check if AI Designer Agent feature is available (Business+ plans)
   const canUseAiAgent = canUseFeature('aiDesignerAgent')
 
+  // DEBUG: Log subscription context values
+  console.log('[DEBUG] AI Designer Agent check:', {
+    canUseAiAgent,
+    upgradeReason: getUpgradeReason('aiDesignerAgent'),
+  })
+
   useEffect(() => {
     async function loadData() {
       const { data: { user } } = await supabase.auth.getUser()
