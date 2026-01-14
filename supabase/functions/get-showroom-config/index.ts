@@ -106,6 +106,7 @@ serve(async (req) => {
         name,
         showroom_code,
         subscription_status,
+        subscription_plan,
         trial_ends_at,
         ai_chatbot_enabled,
         ai_assistant_name,
@@ -281,7 +282,9 @@ serve(async (req) => {
     // Trial users without a plan get Pro features (product selection = true)
     const hasProductSelection = plan?.has_product_selection ?? isTrialWithProFeatures
     // Check if AI agent is available (Business+ plans only)
-    const hasAiAgent = plan?.has_ai_agent ?? false
+    // First check subscription_plans table, then fallback to subscription_plan TEXT field
+    const hasAiAgent = plan?.has_ai_agent ??
+      ['business', 'enterprise'].includes((showroom as any).subscription_plan || '')
 
     // Default CabinetScan branding for Starter plan
     const CABINETSCAN_LOGO = 'https://wnyrnpeabhxdqvcpofmb.supabase.co/storage/v1/object/public/logos/cabinetscan-logo.png'

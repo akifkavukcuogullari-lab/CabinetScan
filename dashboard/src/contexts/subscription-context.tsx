@@ -344,27 +344,16 @@ export function SubscriptionProvider({
   // Methods
   const canUseFeature = useCallback(
     (feature: keyof PlanFeatures): boolean => {
-      // DEBUG: Log all values
-      console.log('[DEBUG] canUseFeature called:', {
-        feature,
-        subscriptionPlan: subscription?.plan,
-        isTrial,
-        isTrialExpired,
-      })
-
       // During trial, user gets features from their actual plan
       // If no plan specified, default to Pro features
       if (isTrial && !isTrialExpired) {
         const trialPlan = subscription?.plan || 'pro'
         const planFeatures = getPlanFeatures(trialPlan)
         const value = planFeatures[feature]
-        console.log('[DEBUG] Trial mode - trialPlan:', trialPlan, 'feature value:', value)
         if (typeof value === 'boolean') return value
         return true
       }
-      const result = checkHasFeature(subscription?.plan || null, feature)
-      console.log('[DEBUG] Non-trial mode - result:', result)
-      return result
+      return checkHasFeature(subscription?.plan || null, feature)
     },
     [subscription?.plan, isTrial, isTrialExpired]
   )
