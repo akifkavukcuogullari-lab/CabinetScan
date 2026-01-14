@@ -74,6 +74,7 @@ interface ProjectSidebarProps {
   project: Project
   measurement?: Measurement | null
   canExportDxf?: boolean
+  visualizeKitchenEnabled?: boolean
   currentPlan?: SubscriptionPlan | null
   onStatusChange?: (status: string) => void
   onCreateQuote?: () => void
@@ -101,6 +102,7 @@ export function ProjectSidebar({
   project,
   measurement,
   canExportDxf = true,
+  visualizeKitchenEnabled = false,
   currentPlan = null,
   onStatusChange,
   onCreateQuote,
@@ -613,19 +615,19 @@ export function ProjectSidebar({
               </div>
             </div>
           )}
-          <LockedFeature feature="aiAgent" isLocked={!hasAiAgent}>
+          {/* Visualize Kitchen - controlled by Super Admin toggle */}
+          {visualizeKitchenEnabled && (
             <Button
               className="w-full justify-start gap-2 bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100 border-purple-200"
               variant="outline"
-              onClick={hasAiAgent ? onVisualizeKitchen : undefined}
-              disabled={!hasAiAgent}
+              onClick={onVisualizeKitchen}
             >
               <Sparkles className="h-4 w-4 text-purple-600" />
               <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent font-medium">
                 Visualize Kitchen
               </span>
             </Button>
-          </LockedFeature>
+          )}
 
           {/* Delete Project */}
           <Button
