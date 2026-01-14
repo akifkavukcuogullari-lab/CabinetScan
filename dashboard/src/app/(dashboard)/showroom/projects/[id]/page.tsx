@@ -204,7 +204,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
 
     // Send to estimate API endpoint
     const response = await fetch(
-      `${cabinetAiServiceUrl}/estimate`,
+      `${cabinetAiServiceUrl}/api/estimate`,
       {
         method: 'POST',
         headers: {
