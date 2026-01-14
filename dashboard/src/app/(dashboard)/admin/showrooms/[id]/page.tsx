@@ -5,12 +5,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban, Mail, HardDrive, TrendingUp, Bot, FileSpreadsheet, Sparkles } from 'lucide-react'
+import { ArrowLeft, Copy, ExternalLink, Users, Package, FolderKanban, Mail, HardDrive, TrendingUp, Bot, FileSpreadsheet, Settings2 } from 'lucide-react'
 import { InvitationList } from '@/components/invitations/invitation-list'
 import { SubscriptionManager } from '@/components/admin/subscription-manager'
 import { DesignerAgentSettings } from '@/components/admin/designer-agent-settings'
 import { PriceCatalogUpload } from '@/components/admin/price-catalog-upload'
-import { VisualizationSettings } from '@/components/admin/visualization-settings'
+import { CustomConfigSettings } from '@/components/admin/custom-config-settings'
 
 interface ShowroomDetailPageProps {
   params: Promise<{ id: string }>
@@ -197,9 +197,9 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
             <FileSpreadsheet className="h-4 w-4" />
             Price Catalog
           </TabsTrigger>
-          <TabsTrigger value="visualization" className="gap-1.5">
-            <Sparkles className="h-4 w-4" />
-            Visualization
+          <TabsTrigger value="custom-configs" className="gap-1.5">
+            <Settings2 className="h-4 w-4" />
+            Custom Configs
           </TabsTrigger>
         </TabsList>
 
@@ -364,8 +364,8 @@ export default async function ShowroomDetailPage({ params }: ShowroomDetailPageP
           />
         </TabsContent>
 
-        <TabsContent value="visualization" className="mt-4">
-          <VisualizationSettings
+        <TabsContent value="custom-configs" className="mt-4">
+          <CustomConfigSettings
             showroom={{
               id: showroom.id,
               name: showroom.name,
