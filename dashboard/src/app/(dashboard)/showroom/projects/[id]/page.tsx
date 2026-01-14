@@ -162,11 +162,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   const createQuote = async () => {
     'use server'
 
-    const estimateApiHost = process.env.ESTIMATE_API_HOST
-    if (!estimateApiHost) {
-      console.error('Missing ESTIMATE_API_HOST environment variable')
-      throw new Error('Server configuration error: Missing estimate API host')
-    }
+    const cabinetAiServiceUrl = process.env.CABINET_AI_SERVICE_URL || 'https://cabinetai.nextlyn.ai'
 
     const supabase = await createClient()
 
@@ -208,7 +204,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
 
     // Send to estimate API endpoint
     const response = await fetch(
-      `${estimateApiHost}/api/estimate`,
+      `${cabinetAiServiceUrl}/api/estimate`,
       {
         method: 'POST',
         headers: {
