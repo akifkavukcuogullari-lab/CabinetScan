@@ -162,7 +162,7 @@ export function ProjectSidebarWrapper({
 
     // Check if price catalog is uploaded
     if (!hasPriceCatalog) {
-      setQuoteError('Please upload a price catalog in Settings before creating a quote.')
+      setQuoteError('No price catalog found. Please contact your admin to upload a price catalog before creating a quote.')
       return
     }
 
