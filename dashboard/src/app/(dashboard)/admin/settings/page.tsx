@@ -86,16 +86,22 @@ export default function AdminSettingsPage() {
     setSaving(true)
     try {
       if (promptId) {
-        // Update existing
-        const { error } = await supabase
+        // Update existing and verify it was updated
+        const { data, error } = await supabase
           .from('ai_system_prompts')
           .update({
             system_prompt: systemPrompt,
             updated_at: new Date().toISOString(),
           })
           .eq('id', promptId)
+          .select('id')
 
         if (error) throw error
+
+        // Check if update actually happened (RLS might silently block it)
+        if (!data || data.length === 0) {
+          throw new Error('Update failed - you may not have permission to modify this prompt')
+        }
       } else {
         // Insert new
         const { data, error } = await supabase
