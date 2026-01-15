@@ -53,7 +53,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   // Get showroom subscription plan, code, and visualization settings
   const { data: showroom } = await supabase
     .from('showrooms')
-    .select('subscription_plan, subscription_status, showroom_code, visualize_kitchen_enabled')
+    .select('subscription_plan, subscription_status, showroom_code, visualize_kitchen_enabled, quote_webhook_url')
     .eq('id', showroomUser.showroom_id)
     .single()
 
