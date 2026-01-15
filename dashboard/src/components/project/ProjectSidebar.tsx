@@ -593,26 +593,11 @@ export function ProjectSidebar({
             </Button>
           </LockedFeature>
           {quoteError && (
-            <div className="p-3 rounded-lg bg-red-50 border border-red-200">
-              <p className="text-sm text-red-700 mb-2">{quoteError}</p>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-red-700 border-red-300 hover:bg-red-100"
-                  onClick={onCreateQuote}
-                >
-                  Try Again
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-gray-500"
-                  onClick={onDismissQuoteError}
-                >
-                  Dismiss
-                </Button>
-              </div>
+            <div
+              className="p-3 rounded-lg bg-amber-50 border border-amber-200 cursor-pointer hover:bg-amber-100 transition-colors"
+              onClick={onDismissQuoteError}
+            >
+              <p className="text-sm text-amber-700">{quoteError}</p>
             </div>
           )}
           {/* Visualize Kitchen - controlled by Super Admin toggle */}
