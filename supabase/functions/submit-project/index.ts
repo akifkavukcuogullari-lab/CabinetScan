@@ -211,6 +211,7 @@ async function buildWebhookPayload(
   return {
     event: 'project.submitted',
     generate_quote: false, // Only generate quote when Create Quote button is clicked
+    callback_url: showroom.webhook_url || null, // For CabinetAI to call back after processing
     timestamp: new Date().toISOString(),
     project: {
       id: project.id,
