@@ -166,10 +166,10 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
 
     const supabase = await createClient()
 
-    // Get project with webhook payload
+    // Get project with webhook payload and showroom_id
     const { data: projectData, error: projectError } = await supabase
       .from('projects')
-      .select('webhook_payload, reference_number')
+      .select('webhook_payload, reference_number, showroom_id')
       .eq('id', id)
       .single()
 
@@ -182,6 +182,13 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
       throw new Error('No webhook payload stored for this project')
     }
 
+    // Get showroom's webhook URL for callback
+    const { data: showroomData } = await supabase
+      .from('showrooms')
+      .select('webhook_url')
+      .eq('id', projectData.showroom_id)
+      .single()
+
     // Get the latest preview_image_url from project_measurements
     const { data: measurementsData } = await supabase
       .from('project_measurements')
@@ -189,7 +196,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
       .eq('project_id', id)
       .single()
 
-    // Build the payload with latest floor plan URL
+    // Build the payload with latest floor plan URL and callback URL
     const storedPayload = projectData.webhook_payload as Record<string, any>
     const webhookPayload = {
       ...storedPayload,
@@ -199,6 +206,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         floor_plan: measurementsData?.preview_image_url || storedPayload.files?.floor_plan || null,
       },
       generate_quote: true,
+      callback_url: showroomData?.webhook_url || null,
       triggered_at: new Date().toISOString(),
     }
 
