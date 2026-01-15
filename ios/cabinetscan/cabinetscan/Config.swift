@@ -34,37 +34,59 @@ enum Config {
     
     // MARK: - Supabase Configuration
 
+    // Hardcoded fallback credentials (anon keys are safe to include in app binary)
+    // These ensure the app never crashes even if Info.plist substitution fails
+    private static let fallbackProductionURL = "https://lhldqenpllbfxjkburzr.supabase.co"
+    private static let fallbackProductionKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxobGRxZW5wbGxiZnhqa2J1cnpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3NTE4NTMsImV4cCI6MjA4MjMyNzg1M30.L5IX2HZ64yu44VV4q0RuidxfBGBXJHJ222ETEqAYvRI"
+    private static let fallbackQAURL = "https://wnyrnpeabhxdqvcpofmb.supabase.co"
+    private static let fallbackQAKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndueXJucGVhYmh4ZHF2Y3BvZm1iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNDYzNTgsImV4cCI6MjA3OTgyMjM1OH0.OOangh4u0sy7oHFQl1pFv6ldNPlN201uY774gpyQlHc"
+
     static var supabaseURL: String {
-        guard let url = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String,
-              !url.isEmpty else {
-            #if DEBUG
-            // For local development on physical device, use your Mac's IP
-            if let devIP = localDevIP {
-                logInfo("🔧 Using local dev IP: \(devIP)")
-                return "http://\(devIP):54321"
-            }
-            
-            // Fallback to localhost (simulator only)
-            logInfo("⚠️ Using localhost - will only work on simulator")
-            return "http://127.0.0.1:54321"
-            #else
-            fatalError("SUPABASE_URL not configured in Info.plist")
-            #endif
+        // First try to get from Info.plist (set via xcconfig)
+        if let url = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String,
+           !url.isEmpty,
+           !url.contains("$(") { // Ensure variable was actually substituted
+            logInfo("🌐 Using Supabase URL from Info.plist: \(url)")
+            return url
         }
-        logInfo("🌐 Using Supabase URL: \(url)")
+
+        #if DEBUG
+        // For local development on physical device, use your Mac's IP
+        if let devIP = localDevIP {
+            logInfo("🔧 Using local dev IP: \(devIP)")
+            return "http://\(devIP):54321"
+        }
+
+        // Fallback to QA for debug builds
+        logInfo("⚠️ Info.plist missing SUPABASE_URL, using QA fallback")
+        return fallbackQAURL
+        #else
+        // Production fallback - check IS_QA_BUILD flag
+        let isQA = Bundle.main.object(forInfoDictionaryKey: "IS_QA_BUILD") as? String == "YES"
+        let url = isQA ? fallbackQAURL : fallbackProductionURL
+        logError("⚠️ Info.plist missing SUPABASE_URL, using \(isQA ? "QA" : "Production") fallback: \(url)")
         return url
+        #endif
     }
 
     static var supabaseAnonKey: String {
-        guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String,
-              !key.isEmpty else {
-            #if DEBUG
-            return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
-            #else
-            fatalError("SUPABASE_ANON_KEY not configured in Info.plist")
-            #endif
+        // First try to get from Info.plist (set via xcconfig)
+        if let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String,
+           !key.isEmpty,
+           !key.contains("$(") { // Ensure variable was actually substituted
+            return key
         }
-        return key
+
+        #if DEBUG
+        // Fallback to QA for debug builds
+        logInfo("⚠️ Info.plist missing SUPABASE_ANON_KEY, using QA fallback")
+        return fallbackQAKey
+        #else
+        // Production fallback - check IS_QA_BUILD flag
+        let isQA = Bundle.main.object(forInfoDictionaryKey: "IS_QA_BUILD") as? String == "YES"
+        logError("⚠️ Info.plist missing SUPABASE_ANON_KEY, using \(isQA ? "QA" : "Production") fallback")
+        return isQA ? fallbackQAKey : fallbackProductionKey
+        #endif
     }
 
     // MARK: - App Configuration
