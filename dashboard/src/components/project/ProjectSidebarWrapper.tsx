@@ -52,6 +52,7 @@ interface ProjectSidebarWrapperProps {
   measurement?: Measurement | null
   canExportDxf?: boolean
   visualizeKitchenEnabled?: boolean
+  hasPriceCatalog?: boolean
   onStatusChange: (status: string) => Promise<void>
   onCreateQuote?: () => Promise<void>
   onDeleteProject?: () => Promise<void>
@@ -62,6 +63,7 @@ export function ProjectSidebarWrapper({
   measurement,
   canExportDxf,
   visualizeKitchenEnabled = false,
+  hasPriceCatalog = false,
   onStatusChange,
   onCreateQuote,
   onDeleteProject
@@ -157,6 +159,12 @@ export function ProjectSidebarWrapper({
 
   const handleCreateQuote = async () => {
     if (!onCreateQuote) return
+
+    // Check if price catalog is uploaded
+    if (!hasPriceCatalog) {
+      setQuoteError('Please upload a price catalog in Settings before creating a quote.')
+      return
+    }
 
     try {
       setIsCreatingQuote(true)

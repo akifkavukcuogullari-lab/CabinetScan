@@ -132,6 +132,14 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     .eq('id', showroomUser.showroom_id)
     .single()
 
+  // Check if showroom has price catalog uploaded
+  const { count: priceCatalogCount } = await supabase
+    .from('price_catalog')
+    .select('*', { count: 'exact', head: true })
+    .eq('showroom_id', showroomUser.showroom_id)
+
+  const hasPriceCatalog = (priceCatalogCount ?? 0) > 0
+
   const statusColors: Record<string, string> = {
     draft: 'bg-gray-100 text-gray-800',
     submitted: 'bg-blue-100 text-blue-800',
@@ -495,6 +503,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             measurement={measurement}
             canExportDxf={canExportDxf}
             visualizeKitchenEnabled={showroom?.visualize_kitchen_enabled ?? false}
+            hasPriceCatalog={hasPriceCatalog}
             onStatusChange={async (status) => {
               'use server'
               const formData = new FormData()
