@@ -50,17 +50,21 @@ export default function AdminSettingsPage() {
     async function loadPrompt() {
       setLoading(true)
       try {
-        const { data } = await supabase
+        // Use limit(1) instead of single() to handle multiple rows gracefully
+        const { data, error } = await supabase
           .from('ai_system_prompts')
           .select('id, system_prompt')
           .is('showroom_id', null)
           .eq('is_active', true)
-          .single()
+          .order('updated_at', { ascending: false })
+          .limit(1)
 
-        if (data) {
-          setSystemPrompt(data.system_prompt)
-          setOriginalPrompt(data.system_prompt)
-          setPromptId(data.id)
+        if (error) throw error
+
+        if (data && data.length > 0) {
+          setSystemPrompt(data[0].system_prompt)
+          setOriginalPrompt(data[0].system_prompt)
+          setPromptId(data[0].id)
         } else {
           // Use default
           setSystemPrompt(DEFAULT_SYSTEM_PROMPT)
@@ -86,16 +90,22 @@ export default function AdminSettingsPage() {
     setSaving(true)
     try {
       if (promptId) {
-        // Update existing
-        const { error } = await supabase
+        // Update existing and verify it was updated
+        const { data, error } = await supabase
           .from('ai_system_prompts')
           .update({
             system_prompt: systemPrompt,
             updated_at: new Date().toISOString(),
           })
           .eq('id', promptId)
+          .select('id')
 
         if (error) throw error
+
+        // Check if update actually happened (RLS might silently block it)
+        if (!data || data.length === 0) {
+          throw new Error('Update failed - you may not have permission to modify this prompt')
+        }
       } else {
         // Insert new
         const { data, error } = await supabase
