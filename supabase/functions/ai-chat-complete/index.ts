@@ -90,27 +90,42 @@ serve(async (req) => {
       )
     }
 
-    // 2. Get all messages for summary
-    const { data: messages } = await supabaseAdmin
-      .from('ai_chat_messages')
-      .select('role, content')
-      .eq('conversation_id', conversation_id)
-      .order('created_at', { ascending: true })
+    // 2. Mark conversation as completed immediately (fast response to user)
+    const { error: updateError } = await supabaseAdmin
+      .from('ai_chat_conversations')
+      .update({
+        status: 'completed',
+        summary: 'Generating summary...', // Placeholder, will be updated async
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', conversation_id)
 
-    // 3. Generate summary using OpenAI
-    let summary = 'No conversation recorded.'
+    if (updateError) {
+      throw new Error(`Failed to update conversation: ${updateError.message}`)
+    }
 
-    if (messages && messages.length > 0) {
-      const conversationText = messages
-        .map(m => `${m.role === 'assistant' ? 'Assistant' : 'Customer'}: ${m.content}`)
-        .join('\n\n')
+    // 3. Generate summary and call webhook in background (non-blocking)
+    const generateSummaryAndNotify = async () => {
+      try {
+        const { data: messages } = await supabaseAdmin
+          .from('ai_chat_messages')
+          .select('role, content')
+          .eq('conversation_id', conversation_id)
+          .order('created_at', { ascending: true })
 
-      const summaryResponse = await openai.chat.completions.create({
-        model: OPENAI_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: `You are summarizing a design consultation conversation between a customer and an AI design assistant.
+        let summary = 'No conversation recorded.'
+
+        if (messages && messages.length > 0) {
+          const conversationText = messages
+            .map((m: { role: string; content: string }) => `${m.role === 'assistant' ? 'Assistant' : 'Customer'}: ${m.content}`)
+            .join('\n\n')
+
+          const summaryResponse = await openai.chat.completions.create({
+            model: OPENAI_MODEL,
+            messages: [
+              {
+                role: 'system',
+                content: `You are summarizing a design consultation conversation between a customer and an AI design assistant.
 Create a concise summary (3-5 bullet points) highlighting:
 - Customer's style preferences
 - Color/material preferences
@@ -120,100 +135,99 @@ Create a concise summary (3-5 bullet points) highlighting:
 - Overall design vision
 
 Be specific and actionable for the showroom team. Use bullet points.`
-          },
-          {
-            role: 'user',
-            content: `Please summarize this conversation:\n\n${conversationText}`
+              },
+              {
+                role: 'user',
+                content: `Please summarize this conversation:\n\n${conversationText}`
+              }
+            ],
+            max_tokens: 500,
+            temperature: 0.3,
+          })
+
+          summary = summaryResponse.choices[0]?.message?.content || 'Unable to generate summary.'
+        }
+
+        // Update with actual summary
+        await supabaseAdmin
+          .from('ai_chat_conversations')
+          .update({ summary })
+          .eq('id', conversation_id)
+
+        console.log(`[SUMMARY] Generated summary for conversation ${conversation_id}`)
+
+        // Get project and showroom details for webhook
+        const { data: project } = await supabaseAdmin
+          .from('projects')
+          .select(`
+            id,
+            reference_number,
+            customer_first_name,
+            customer_last_name,
+            customer_email,
+            customer_phone,
+            project_name,
+            showroom_id,
+            showrooms (
+              id,
+              name,
+              showroom_code,
+              webhook_url,
+              notification_emails,
+              phone,
+              email
+            )
+          `)
+          .eq('id', conversation.project_id)
+          .single()
+
+        // Call webhook if configured
+        if (project?.showrooms?.webhook_url) {
+          const showroom = project.showrooms as any
+          const webhookPayload = {
+            event: 'conversation.completed',
+            timestamp: new Date().toISOString(),
+            project: {
+              id: project.id,
+              reference_number: project.reference_number,
+              name: project.project_name,
+            },
+            customer: {
+              first_name: project.customer_first_name,
+              last_name: project.customer_last_name,
+              email: project.customer_email,
+              phone: project.customer_phone,
+            },
+            conversation: {
+              id: conversation_id,
+              message_count: messages?.length || 0,
+              summary: summary,
+              completed_at: new Date().toISOString(),
+            },
+            showroom: {
+              id: showroom.id,
+              name: showroom.name,
+              code: showroom.showroom_code,
+              phone: showroom.phone || null,
+              email: showroom.email || null,
+              notification_emails: showroom.notification_emails
+                ? showroom.notification_emails.split(',').map((e: string) => e.trim()).filter((e: string) => e.length > 0)
+                : [],
+            },
           }
-        ],
-        max_tokens: 500,
-        temperature: 0.3,
-      })
 
-      summary = summaryResponse.choices[0]?.message?.content || 'Unable to generate summary.'
-    }
-
-    // 4. Update conversation as completed with summary
-    const { error: updateError } = await supabaseAdmin
-      .from('ai_chat_conversations')
-      .update({
-        status: 'completed',
-        summary: summary,
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', conversation_id)
-
-    if (updateError) {
-      throw new Error(`Failed to update conversation: ${updateError.message}`)
-    }
-
-    // 5. Get project and showroom details for webhook
-    const { data: project } = await supabaseAdmin
-      .from('projects')
-      .select(`
-        id,
-        reference_number,
-        customer_first_name,
-        customer_last_name,
-        customer_email,
-        customer_phone,
-        project_name,
-        showroom_id,
-        showrooms (
-          id,
-          name,
-          showroom_code,
-          webhook_url,
-          notification_emails,
-          phone,
-          email
-        )
-      `)
-      .eq('id', conversation.project_id)
-      .single()
-
-    // 6. Call webhook if configured (async, non-blocking)
-    if (project?.showrooms?.webhook_url) {
-      const showroom = project.showrooms as any
-      const webhookPayload = {
-        event: 'conversation.completed',
-        timestamp: new Date().toISOString(),
-        project: {
-          id: project.id,
-          reference_number: project.reference_number,
-          name: project.project_name,
-        },
-        customer: {
-          first_name: project.customer_first_name,
-          last_name: project.customer_last_name,
-          email: project.customer_email,
-          phone: project.customer_phone,
-        },
-        conversation: {
-          id: conversation_id,
-          message_count: messages?.length || 0,
-          summary: summary,
-          completed_at: new Date().toISOString(),
-        },
-        showroom: {
-          id: showroom.id,
-          name: showroom.name,
-          code: showroom.showroom_code,
-          phone: showroom.phone || null,
-          email: showroom.email || null,
-          notification_emails: showroom.notification_emails
-            ? showroom.notification_emails.split(',').map((e: string) => e.trim()).filter((e: string) => e.length > 0)
-            : [],
-        },
+          await callConversationWebhook(showroom.webhook_url, webhookPayload, project.id)
+        }
+      } catch (err) {
+        console.error(`[SUMMARY] Failed to generate summary or call webhook:`, err)
       }
-
-      // Call webhook async (don't block response)
-      callConversationWebhook(showroom.webhook_url, webhookPayload, project.id)
-        .catch((err) => console.error('[WEBHOOK] Background webhook error:', err))
     }
+
+    // Fire and forget - don't await
+    generateSummaryAndNotify()
 
     return new Response(
-      JSON.stringify({ success: true, summary }),
+      JSON.stringify({ success: true, summary: 'Generating summary...' }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
