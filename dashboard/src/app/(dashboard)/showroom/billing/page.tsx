@@ -609,8 +609,8 @@ export default function BillingPage() {
                       <Button className="w-full" disabled>
                         Current Plan
                       </Button>
-                    ) : showroom?.subscription_status === 'active' && showroom?.stripe_customer_id ? (
-                      // Existing subscriber should use portal to switch plans
+                    ) : showroom?.stripe_customer_id ? (
+                      // Anyone with existing Stripe customer should use portal to manage/switch plans
                       <Button
                         className="w-full"
                         onClick={handleManageBilling}
@@ -621,11 +621,14 @@ export default function BillingPage() {
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             Loading...
                           </>
-                        ) : (
+                        ) : showroom?.subscription_status === 'active' ? (
                           'Switch Plan'
+                        ) : (
+                          'Select Plan'
                         )}
                       </Button>
                     ) : (
+                      // New users without Stripe customer go through checkout
                       <Button
                         className="w-full"
                         onClick={() => handleSubscribe(plan.slug)}
@@ -637,7 +640,7 @@ export default function BillingPage() {
                             Loading...
                           </>
                         ) : (
-                          'Subscribe'
+                          'Start Free Trial'
                         )}
                       </Button>
                     )}
