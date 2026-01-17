@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Check, Zap, Sparkles, Briefcase, Building2 } from "lucide-react";
@@ -57,9 +60,11 @@ const plans = [
     features: [
       "Unlimited projects",
       "300 products",
-      "API & Webhook access",
-      "AI-generated quotes",
+      "AI Design Assistant",
+      "Upload price catalog",
+      "Instant quote generation",
       "Email quotes to customers",
+      "API & Webhook access",
       "Custom branding",
       "100 GB storage",
       "10 team members",
@@ -88,6 +93,8 @@ const plans = [
 ];
 
 export default function PricingPage() {
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
+
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
@@ -150,6 +157,33 @@ export default function PricingPage() {
               Choose the plan that fits your showroom. All plans include a 14-day free trial
               with full access to Pro features.
             </p>
+
+            {/* Billing Toggle */}
+            <div className="flex items-center justify-center gap-4 mt-8">
+              <button
+                onClick={() => setBillingPeriod("monthly")}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                  billingPeriod === "monthly"
+                    ? "bg-gray-900 text-white"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setBillingPeriod("yearly")}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                  billingPeriod === "yearly"
+                    ? "bg-gray-900 text-white"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                Yearly
+                <span className="ml-2 px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
+                  Save 20%
+                </span>
+              </button>
+            </div>
           </div>
 
           {/* Pricing Cards */}
@@ -186,10 +220,24 @@ export default function PricingPage() {
 
                   <div className="mb-6">
                     {plan.price !== null ? (
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-4xl font-bold text-gray-900">${plan.price}</span>
-                        <span className="text-gray-500">/month</span>
-                      </div>
+                      billingPeriod === "yearly" && plan.yearlyPrice ? (
+                        <div>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-4xl font-bold text-gray-900">
+                              ${Math.round(plan.yearlyPrice / 12)}
+                            </span>
+                            <span className="text-gray-500">/month</span>
+                          </div>
+                          <p className="text-sm text-green-600 mt-1">
+                            ${plan.yearlyPrice}/year (save ${plan.price * 12 - plan.yearlyPrice})
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-4xl font-bold text-gray-900">${plan.price}</span>
+                          <span className="text-gray-500">/month</span>
+                        </div>
+                      )
                     ) : (
                       <div className="text-4xl font-bold text-gray-900">Custom</div>
                     )}
