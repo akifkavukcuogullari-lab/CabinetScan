@@ -23,6 +23,7 @@ interface Addon {
   image_url: string | null
   display_order: number
   use_color_coefficient: boolean
+  show_price_to_customer: boolean
 }
 
 interface Product {
@@ -175,7 +176,7 @@ serve(async (req) => {
     // Fetch enabled addons for this showroom
     const { data: addons } = await supabaseAdmin
       .from('showroom_addons')
-      .select('id, question, description, unit, price_per_unit, image_url, display_order, use_color_coefficient')
+      .select('id, question, description, unit, price_per_unit, image_url, display_order, use_color_coefficient, show_price_to_customer')
       .eq('showroom_id', showroom.id)
       .eq('is_enabled', true)
       .order('display_order')
@@ -312,6 +313,7 @@ serve(async (req) => {
         image_url: a.image_url,
         display_order: a.display_order,
         use_color_coefficient: a.use_color_coefficient || false,
+        show_price_to_customer: a.show_price_to_customer ?? true,
       })) : [],
       subscription: {
         status: showroom.subscription_status,
