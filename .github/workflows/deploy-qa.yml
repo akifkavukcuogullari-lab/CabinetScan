@@ -1,0 +1,19 @@
+name: Deploy QA
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'dashboard/**'
+      - '.github/workflows/deploy-qa.yml'
+
+jobs:
+  deploy:
+    name: Deploy to QA
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel Deploy Hook
+        run: |
+          curl -X POST "${{ secrets.VERCEL_QA_DEPLOY_HOOK }}"
+          echo "Deployment triggered for QA environment"

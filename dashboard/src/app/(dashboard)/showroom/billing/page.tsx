@@ -96,9 +96,7 @@ export default function BillingPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
-
-  // Always use monthly billing
-  const billingPeriod = 'monthly'
+  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly')
 
   // Check for success/cancel query params
   useEffect(() => {
@@ -306,6 +304,21 @@ export default function BillingPage() {
     return Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)))
   }
 
+  // Get effective subscription status (checks if trial actually expired)
+  const getEffectiveStatus = () => {
+    if (!showroom) return 'unknown'
+
+    // If status is 'trial' but trial has expired, show 'expired'
+    if (showroom.subscription_status === 'trial' && showroom.trial_ends_at) {
+      const trialEnd = new Date(showroom.trial_ends_at)
+      if (trialEnd < new Date()) {
+        return 'expired'
+      }
+    }
+
+    return showroom.subscription_status
+  }
+
   const getPlanIcon = (slug: string) => {
     switch (slug) {
       case 'starter':
@@ -331,6 +344,7 @@ export default function BillingPage() {
 
   const currentPlan = getCurrentPlan()
   const trialDays = getTrialDaysRemaining()
+  const effectiveStatus = getEffectiveStatus()
 
   return (
     <div className="space-y-6">
@@ -391,16 +405,18 @@ export default function BillingPage() {
             </div>
             <Badge
               className={
-                showroom?.subscription_status === 'active'
+                effectiveStatus === 'active'
                   ? 'bg-green-100 text-green-800'
-                  : showroom?.subscription_status === 'trial'
+                  : effectiveStatus === 'trial'
                   ? 'bg-yellow-100 text-yellow-800'
-                  : showroom?.subscription_status === 'past_due'
+                  : effectiveStatus === 'expired'
+                  ? 'bg-red-100 text-red-800'
+                  : effectiveStatus === 'past_due'
                   ? 'bg-red-100 text-red-800'
                   : 'bg-gray-100 text-gray-800'
               }
             >
-              {showroom?.subscription_status}
+              {effectiveStatus}
             </Badge>
           </div>
 
@@ -506,9 +522,38 @@ export default function BillingPage() {
 
       {/* Pricing Plans */}
       <div>
-        <div className="mb-4">
-          <h2 className="text-xl font-semibold">Available Plans</h2>
-          <p className="text-sm text-gray-500 mt-1">All plans are billed monthly</p>
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">Available Plans</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              {billingPeriod === 'yearly' ? 'Save 20% with annual billing' : 'Switch to yearly for 20% savings'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
+            <button
+              onClick={() => setBillingPeriod('monthly')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                billingPeriod === 'monthly'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setBillingPeriod('yearly')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
+                billingPeriod === 'yearly'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Yearly
+              <span className="px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded">
+                -20%
+              </span>
+            </button>
+          </div>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -516,7 +561,12 @@ export default function BillingPage() {
             .filter((p) => p.slug !== 'trial')
             .map((plan) => {
               const isCurrentPlan = showroom?.subscription_plan === plan.slug
-              const price = plan.price_monthly
+              const monthlyPrice = plan.price_monthly
+              const yearlyPrice = plan.price_yearly
+              const displayPrice = billingPeriod === 'yearly' && yearlyPrice
+                ? Math.round(yearlyPrice / 12)
+                : monthlyPrice
+              const yearlySavings = yearlyPrice ? monthlyPrice * 12 - yearlyPrice : 0
 
               return (
                 <Card
@@ -539,9 +589,19 @@ export default function BillingPage() {
                     <div>
                       {plan.slug === 'enterprise' ? (
                         <p className="text-3xl font-bold">Custom</p>
+                      ) : billingPeriod === 'yearly' && yearlyPrice ? (
+                        <div>
+                          <p className="text-3xl font-bold">
+                            ${displayPrice}
+                            <span className="text-base font-normal text-gray-500">/month</span>
+                          </p>
+                          <p className="text-sm text-green-600 mt-1">
+                            ${yearlyPrice}/year (save ${yearlySavings})
+                          </p>
+                        </div>
                       ) : (
                         <p className="text-3xl font-bold">
-                          ${price.toFixed(0)}
+                          ${monthlyPrice.toFixed(0)}
                           <span className="text-base font-normal text-gray-500">/month</span>
                         </p>
                       )}
@@ -561,13 +621,30 @@ export default function BillingPage() {
                   <CardFooter className="mt-auto">
                     {plan.slug === 'enterprise' ? (
                       <Button className="w-full bg-gray-900 hover:bg-gray-800" asChild>
-                        <a href="mailto:sales@nextlyn.ai">Contact Sales</a>
+                        <a href="mailto:contact@nextlyn.ai">Contact Sales</a>
                       </Button>
                     ) : isCurrentPlan ? (
                       <Button className="w-full" disabled>
                         Current Plan
                       </Button>
+                    ) : effectiveStatus === 'active' && showroom?.stripe_customer_id ? (
+                      // Only active subscribers with Stripe customer use portal to switch plans
+                      <Button
+                        className="w-full"
+                        onClick={handleManageBilling}
+                        disabled={portalLoading}
+                      >
+                        {portalLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Loading...
+                          </>
+                        ) : (
+                          'Switch Plan'
+                        )}
+                      </Button>
                     ) : (
+                      // Trial users, expired trials, and new users go through checkout
                       <Button
                         className="w-full"
                         onClick={() => handleSubscribe(plan.slug)}
@@ -578,10 +655,12 @@ export default function BillingPage() {
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             Loading...
                           </>
-                        ) : showroom?.subscription_plan ? (
-                          'Switch Plan'
-                        ) : (
+                        ) : effectiveStatus === 'trial' ? (
                           'Subscribe'
+                        ) : effectiveStatus === 'expired' ? (
+                          'Subscribe Now'
+                        ) : (
+                          'Start Free Trial'
                         )}
                       </Button>
                     )}
