@@ -304,6 +304,21 @@ export default function BillingPage() {
     return Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)))
   }
 
+  // Get effective subscription status (checks if trial actually expired)
+  const getEffectiveStatus = () => {
+    if (!showroom) return 'unknown'
+
+    // If status is 'trial' but trial has expired, show 'expired'
+    if (showroom.subscription_status === 'trial' && showroom.trial_ends_at) {
+      const trialEnd = new Date(showroom.trial_ends_at)
+      if (trialEnd < new Date()) {
+        return 'expired'
+      }
+    }
+
+    return showroom.subscription_status
+  }
+
   const getPlanIcon = (slug: string) => {
     switch (slug) {
       case 'starter':
@@ -329,6 +344,7 @@ export default function BillingPage() {
 
   const currentPlan = getCurrentPlan()
   const trialDays = getTrialDaysRemaining()
+  const effectiveStatus = getEffectiveStatus()
 
   return (
     <div className="space-y-6">
@@ -389,16 +405,18 @@ export default function BillingPage() {
             </div>
             <Badge
               className={
-                showroom?.subscription_status === 'active'
+                effectiveStatus === 'active'
                   ? 'bg-green-100 text-green-800'
-                  : showroom?.subscription_status === 'trial'
+                  : effectiveStatus === 'trial'
                   ? 'bg-yellow-100 text-yellow-800'
-                  : showroom?.subscription_status === 'past_due'
+                  : effectiveStatus === 'expired'
+                  ? 'bg-red-100 text-red-800'
+                  : effectiveStatus === 'past_due'
                   ? 'bg-red-100 text-red-800'
                   : 'bg-gray-100 text-gray-800'
               }
             >
-              {showroom?.subscription_status}
+              {effectiveStatus}
             </Badge>
           </div>
 
@@ -621,7 +639,7 @@ export default function BillingPage() {
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             Loading...
                           </>
-                        ) : showroom?.subscription_status === 'active' ? (
+                        ) : effectiveStatus === 'active' ? (
                           'Switch Plan'
                         ) : (
                           'Select Plan'
