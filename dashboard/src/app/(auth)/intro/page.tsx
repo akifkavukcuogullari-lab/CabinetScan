@@ -9,6 +9,8 @@ import {
   Mail,
   Smartphone,
   Monitor,
+  Bot,
+  FileSpreadsheet,
 } from "lucide-react";
 
 export default function IntroPage() {
@@ -202,6 +204,30 @@ export default function IntroPage() {
               <p className="text-gray-600 leading-relaxed">
                 Dashboard to track customer submissions, manage quotes, and follow up.
                 All project data in one place — measurements, selections, and contact info.
+              </p>
+            </div>
+
+            {/* Feature 5 - AI Design Assistant */}
+            <div className="group p-8 bg-white rounded-2xl border border-gray-100 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-500/5 transition-all">
+              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-6">
+                <Bot className="w-7 h-7 text-white" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">AI Design Assistant</h3>
+              <p className="text-gray-600 leading-relaxed">
+                An intelligent assistant that guides customers through their design preferences.
+                Collects style ideas, material choices, and project requirements — so you have all the details before the first call.
+              </p>
+            </div>
+
+            {/* Feature 6 - Price Catalog & Instant Quotes */}
+            <div className="group p-8 bg-white rounded-2xl border border-gray-100 hover:border-green-200 hover:shadow-xl hover:shadow-green-500/5 transition-all">
+              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center mb-6">
+                <FileSpreadsheet className="w-7 h-7 text-white" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">Instant Quote Generation</h3>
+              <p className="text-gray-600 leading-relaxed">
+                Upload your price catalog and let AI generate accurate estimates automatically.
+                Get ready-to-send quote emails in seconds — impress customers with lightning-fast responses.
               </p>
             </div>
           </div>

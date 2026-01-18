@@ -53,6 +53,7 @@ struct Addon: Codable, Identifiable {
     let imageUrl: String?
     let displayOrder: Int
     let useColorCoefficient: Bool
+    let showPriceToCustomer: Bool
 
     enum CodingKeys: String, CodingKey {
         case id, question, description, unit
@@ -60,6 +61,7 @@ struct Addon: Codable, Identifiable {
         case imageUrl = "image_url"
         case displayOrder = "display_order"
         case useColorCoefficient = "use_color_coefficient"
+        case showPriceToCustomer = "show_price_to_customer"
     }
 
     init(from decoder: Decoder) throws {
@@ -72,6 +74,7 @@ struct Addon: Codable, Identifiable {
         imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
         displayOrder = try container.decode(Int.self, forKey: .displayOrder)
         useColorCoefficient = try container.decodeIfPresent(Bool.self, forKey: .useColorCoefficient) ?? false
+        showPriceToCustomer = try container.decodeIfPresent(Bool.self, forKey: .showPriceToCustomer) ?? true
     }
 }
 
