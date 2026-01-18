@@ -627,8 +627,8 @@ export default function BillingPage() {
                       <Button className="w-full" disabled>
                         Current Plan
                       </Button>
-                    ) : showroom?.stripe_customer_id ? (
-                      // Anyone with existing Stripe customer should use portal to manage/switch plans
+                    ) : effectiveStatus === 'active' && showroom?.stripe_customer_id ? (
+                      // Only active subscribers with Stripe customer use portal to switch plans
                       <Button
                         className="w-full"
                         onClick={handleManageBilling}
@@ -639,14 +639,12 @@ export default function BillingPage() {
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             Loading...
                           </>
-                        ) : effectiveStatus === 'active' ? (
-                          'Switch Plan'
                         ) : (
-                          'Select Plan'
+                          'Switch Plan'
                         )}
                       </Button>
                     ) : (
-                      // New users without Stripe customer go through checkout
+                      // Trial users, expired trials, and new users go through checkout
                       <Button
                         className="w-full"
                         onClick={() => handleSubscribe(plan.slug)}
@@ -657,6 +655,10 @@ export default function BillingPage() {
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             Loading...
                           </>
+                        ) : effectiveStatus === 'trial' ? (
+                          'Subscribe'
+                        ) : effectiveStatus === 'expired' ? (
+                          'Subscribe Now'
                         ) : (
                           'Start Free Trial'
                         )}
