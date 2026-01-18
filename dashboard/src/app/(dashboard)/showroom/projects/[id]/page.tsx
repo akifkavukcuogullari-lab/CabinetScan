@@ -335,7 +335,17 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     // Delete files from storage (scans bucket)
     if (storagePaths.length > 0) {
       const pathsOnly = storagePaths.map(p => p.replace('scans/', ''))
-      await supabase.storage.from('scans').remove(pathsOnly)
+      console.log(`[DELETE PROJECT] Attempting to delete ${pathsOnly.length} files from storage:`, pathsOnly)
+
+      const { data: deleteResult, error: storageError } = await supabase.storage.from('scans').remove(pathsOnly)
+
+      if (storageError) {
+        console.error('[DELETE PROJECT] Storage delete error:', storageError)
+        // Continue with database deletion even if storage fails
+        // The files may need manual cleanup
+      } else {
+        console.log(`[DELETE PROJECT] Successfully deleted ${deleteResult?.length || 0} files from storage`)
+      }
     }
 
     // Delete related database records (cascade should handle most, but be explicit)
