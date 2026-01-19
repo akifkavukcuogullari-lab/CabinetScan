@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { formatError, logError, FormattedError } from '@/lib/errors'
@@ -236,7 +237,22 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 relative">
+      {/* Logo - Top Left */}
+      <Link
+        href="/intro"
+        className="absolute top-6 left-6 flex items-center gap-2 hover:opacity-80 transition-opacity"
+      >
+        <Image
+          src="/logo.png"
+          alt="CabinetScan Logo"
+          width={36}
+          height={36}
+          className="w-9 h-9"
+        />
+        <span className="text-lg font-semibold text-gray-900">CabinetScan</span>
+      </Link>
+
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold">Sign in</CardTitle>
