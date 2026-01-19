@@ -34,7 +34,7 @@ actor ChatService {
         request.httpMethod = "POST"
         request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30 // 30 second timeout for AI response
+        request.timeoutInterval = 60 // 60 second timeout (cold starts + OpenAI can be slow)
 
         let body: [String: String] = [
             "project_id": projectId,
@@ -164,7 +164,7 @@ actor ChatService {
         request.httpMethod = "POST"
         request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
+        request.timeoutInterval = 60 // 60 second timeout for AI summary generation
 
         let body: [String: String] = [
             "conversation_id": conversationId
