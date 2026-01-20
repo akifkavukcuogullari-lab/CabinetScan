@@ -67,6 +67,9 @@ ip_version = 4
 [analytics]
 enabled = false
 
+# All Edge Functions use verify_jwt = false
+# Functions handle their own authentication internally
+
 [functions.get-showroom-config]
 verify_jwt = false
 
@@ -86,4 +89,43 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.send-test-notification]
+verify_jwt = false
+
+[functions.ai-chat-start]
+verify_jwt = false
+
+[functions.ai-chat-message]
+verify_jwt = false
+
+[functions.ai-chat-complete]
+verify_jwt = false
+
+[functions.create-checkout-session]
+verify_jwt = false
+
+[functions.create-portal-session]
+verify_jwt = false
+
+[functions.send-quote-email]
+verify_jwt = false
+
+[functions.receive-quote-email]
+verify_jwt = false
+
+[functions.archive-project-files]
+verify_jwt = false
+
+[functions.restore-project-files]
+verify_jwt = false
+
+[functions.complete-restore]
+verify_jwt = false
+
+[functions.trigger-webhook]
+verify_jwt = false
+
+[functions.upload-price-catalog]
+verify_jwt = false
+
+[functions.convert-usdz-to-glb]
 verify_jwt = false
