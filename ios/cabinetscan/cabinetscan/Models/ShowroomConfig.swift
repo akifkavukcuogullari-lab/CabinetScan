@@ -200,6 +200,7 @@ struct Product: Codable, Identifiable {
 struct ProductVariant: Codable, Identifiable {
     let id: String
     let name: String
+    let sku: String?
     let colorCode: String?
     let price: Double?
     let priceCoefficient: Double
@@ -209,7 +210,7 @@ struct ProductVariant: Codable, Identifiable {
     let isDefault: Bool
 
     enum CodingKeys: String, CodingKey {
-        case id, name, price
+        case id, name, sku, price
         case colorCode = "color_code"
         case priceCoefficient = "price_coefficient"
         case imageUrl = "image_url"
@@ -222,6 +223,7 @@ struct ProductVariant: Codable, Identifiable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
+        sku = try container.decodeIfPresent(String.self, forKey: .sku)
         colorCode = try container.decodeIfPresent(String.self, forKey: .colorCode)
         price = try container.decodeIfPresent(Double.self, forKey: .price)
         priceCoefficient = try container.decodeIfPresent(Double.self, forKey: .priceCoefficient) ?? 1.0

@@ -1374,7 +1374,7 @@ export default function SettingsPage() {
   },
   "selections": {
     "cabinet_model": {
-      "category_name": "Cabinet Model",
+      "category_name": "Cabinet Style",
       "product": "Shaker Premium",
       "variant": null,
       "price": 125.00,

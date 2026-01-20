@@ -48,6 +48,7 @@ interface ProductVariant {
   id: string
   product_id: string
   name: string
+  sku: string | null
   color_code: string | null
   price: number | null
   price_coefficient: number
@@ -109,6 +110,7 @@ export default function EditProductPage({
 
   const [variantForm, setVariantForm] = useState({
     name: '',
+    sku: '',
     price: '',
     price_coefficient: '1.00',
     image_url: '',
@@ -293,6 +295,7 @@ export default function EditProductPage({
   const resetVariantForm = () => {
     setVariantForm({
       name: '',
+      sku: '',
       price: '',
       price_coefficient: '1.00',
       image_url: '',
@@ -343,6 +346,7 @@ export default function EditProductPage({
           .from('product_variants')
           .update({
             name: variantForm.name,
+            sku: variantForm.sku || null,
             color_code: null,
             price: variantForm.price ? parseFloat(variantForm.price) : null,
             price_coefficient: coefficient,
@@ -359,6 +363,7 @@ export default function EditProductPage({
               ? {
                   ...v,
                   name: variantForm.name,
+                  sku: variantForm.sku || null,
                   color_code: null,
                   price: variantForm.price ? parseFloat(variantForm.price) : null,
                   price_coefficient: coefficient,
@@ -375,6 +380,7 @@ export default function EditProductPage({
           .insert({
             product_id: product.id,
             name: variantForm.name,
+            sku: variantForm.sku || null,
             color_code: null,
             price: variantForm.price ? parseFloat(variantForm.price) : null,
             price_coefficient: coefficient,
@@ -406,6 +412,7 @@ export default function EditProductPage({
     setEditingVariant(variant)
     setVariantForm({
       name: variant.name,
+      sku: variant.sku || '',
       price: variant.price?.toString() || '',
       price_coefficient: variant.price_coefficient?.toString() || '1.00',
       image_url: variant.image_url || '',
@@ -647,7 +654,7 @@ export default function EditProductPage({
               </CardContent>
             </Card>
 
-            {/* Color Variants - Only show for Cabinet Model category */}
+            {/* Color Variants - Only show for Cabinet Style category */}
             {isCabinetModel && (
               <Card>
                 <CardHeader>
@@ -658,7 +665,7 @@ export default function EditProductPage({
                         Color Variants
                       </CardTitle>
                       <CardDescription>
-                        Add available colors for this cabinet model
+                        Add available colors for this cabinet style
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
@@ -700,6 +707,9 @@ export default function EditProductPage({
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium truncate">{variant.name}</span>
+                                {variant.sku && (
+                                  <span className="text-xs text-gray-400">({variant.sku})</span>
+                                )}
                                 {variant.is_default && (
                                   <Badge variant="secondary" className="text-xs">
                                     Default
@@ -760,15 +770,27 @@ export default function EditProductPage({
                         <h4 className="font-medium">
                           {editingVariant ? 'Edit Color' : 'Add New Color'}
                         </h4>
-                        <div className="space-y-2">
-                          <Label>Color Name *</Label>
-                          <Input
-                            value={variantForm.name}
-                            onChange={(e) =>
-                              setVariantForm((prev) => ({ ...prev, name: e.target.value }))
-                            }
-                            placeholder="e.g., White, Navy Blue"
-                          />
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Color Name *</Label>
+                            <Input
+                              value={variantForm.name}
+                              onChange={(e) =>
+                                setVariantForm((prev) => ({ ...prev, name: e.target.value }))
+                              }
+                              placeholder="e.g., White, Navy Blue"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>SKU</Label>
+                            <Input
+                              value={variantForm.sku}
+                              onChange={(e) =>
+                                setVariantForm((prev) => ({ ...prev, sku: e.target.value }))
+                              }
+                              placeholder="e.g., CAB-001-WHT"
+                            />
+                          </div>
                         </div>
                         <div className="space-y-2">
                           <Label>Color Image *</Label>
