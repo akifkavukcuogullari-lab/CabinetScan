@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -191,6 +191,28 @@ export function SubscriptionManager({ showroom }: SubscriptionManagerProps) {
     description: string
   }>({ open: false, action: null, title: '', description: '' })
 
+  // Plan ID mapping (slug -> UUID)
+  const [planIdMap, setPlanIdMap] = useState<Record<string, string>>({})
+
+  // Fetch subscription_plans to get slug -> id mapping
+  useEffect(() => {
+    const fetchPlans = async () => {
+      const { data } = await supabase
+        .from('subscription_plans')
+        .select('id, slug')
+        .eq('is_active', true)
+
+      if (data) {
+        const map: Record<string, string> = {}
+        data.forEach((p: { id: string; slug: string }) => {
+          map[p.slug] = p.id
+        })
+        setPlanIdMap(map)
+      }
+    }
+    fetchPlans()
+  }, [supabase])
+
   // Detect changes
   const originalPlan = (showroom.subscription_plan as PlanKey) || 'pro'
   const originalTrialDate = showroom.trial_ends_at
@@ -215,6 +237,7 @@ export function SubscriptionManager({ showroom }: SubscriptionManagerProps) {
       const updates: Record<string, unknown> = {
         subscription_status: status,
         subscription_plan: plan,
+        subscription_plan_id: planIdMap[plan] || null,
       }
 
       if (status === 'trial' && trialEndsAt) {
@@ -243,7 +266,7 @@ export function SubscriptionManager({ showroom }: SubscriptionManagerProps) {
       setSaving(false)
       setConfirmDialog({ open: false, action: null, title: '', description: '' })
     }
-  }, [status, plan, trialEndsAt, showroom.id, showroom.name, supabase, router])
+  }, [status, plan, planIdMap, trialEndsAt, showroom.id, showroom.name, supabase, router])
 
   // Quick action: Extend Trial by 7 days
   const handleExtendTrial = useCallback(async () => {
@@ -289,6 +312,8 @@ export function SubscriptionManager({ showroom }: SubscriptionManagerProps) {
         .from('showrooms')
         .update({
           subscription_status: 'active',
+          subscription_plan: plan,
+          subscription_plan_id: planIdMap[plan] || null,
           trial_ends_at: null,
         })
         .eq('id', showroom.id)
@@ -309,7 +334,7 @@ export function SubscriptionManager({ showroom }: SubscriptionManagerProps) {
       setSaving(false)
       setConfirmDialog({ open: false, action: null, title: '', description: '' })
     }
-  }, [showroom.id, showroom.name, plan, supabase, router])
+  }, [showroom.id, showroom.name, plan, planIdMap, supabase, router])
 
   // Quick action: Suspend account
   const handleSuspend = useCallback(async () => {

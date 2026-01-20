@@ -498,7 +498,7 @@ export default function SettingsPage() {
         {
           method: 'POST',
           headers: {
-            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
             'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
           },
