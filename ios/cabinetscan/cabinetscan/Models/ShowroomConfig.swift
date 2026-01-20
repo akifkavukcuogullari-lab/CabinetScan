@@ -74,7 +74,7 @@ struct Addon: Codable, Identifiable {
         imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
         displayOrder = try container.decode(Int.self, forKey: .displayOrder)
         useColorCoefficient = try container.decodeIfPresent(Bool.self, forKey: .useColorCoefficient) ?? false
-        showPriceToCustomer = try container.decodeIfPresent(Bool.self, forKey: .showPriceToCustomer) ?? true
+        showPriceToCustomer = try container.decodeIfPresent(Bool.self, forKey: .showPriceToCustomer) ?? false
     }
 }
 
@@ -149,7 +149,7 @@ struct Category: Codable, Identifiable {
         iconName = try container.decodeIfPresent(String.self, forKey: .iconName)
         displayOrder = try container.decode(Int.self, forKey: .displayOrder)
         isRequired = try container.decode(Bool.self, forKey: .isRequired)
-        showPriceToCustomer = try container.decodeIfPresent(Bool.self, forKey: .showPriceToCustomer) ?? true
+        showPriceToCustomer = try container.decodeIfPresent(Bool.self, forKey: .showPriceToCustomer) ?? false
         products = try container.decode([Product].self, forKey: .products)
     }
 }

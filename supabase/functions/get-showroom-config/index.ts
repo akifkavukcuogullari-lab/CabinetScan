@@ -112,6 +112,7 @@ serve(async (req) => {
         ai_chatbot_enabled,
         ai_assistant_name,
         ai_assistant_avatar_url,
+        addon_show_price_to_customer,
         subscription_plans (
           slug,
           has_video_capture,
@@ -176,7 +177,7 @@ serve(async (req) => {
     // Fetch enabled addons for this showroom
     const { data: addons } = await supabaseAdmin
       .from('showroom_addons')
-      .select('id, question, description, unit, price_per_unit, image_url, display_order, use_color_coefficient, show_price_to_customer')
+      .select('id, question, description, unit, price_per_unit, image_url, display_order, use_color_coefficient')
       .eq('showroom_id', showroom.id)
       .eq('is_enabled', true)
       .order('display_order')
@@ -304,6 +305,7 @@ serve(async (req) => {
       // Only include categories/products if plan has product selection (Pro+)
       categories: hasProductSelection ? categoriesWithProducts : [],
       // Only include addons if plan has product selection (Pro+)
+      // show_price_to_customer is now a showroom-level setting (applies to all addons)
       addons: hasProductSelection ? (addons || []).map((a: any) => ({
         id: a.id,
         question: a.question,
@@ -313,7 +315,7 @@ serve(async (req) => {
         image_url: a.image_url,
         display_order: a.display_order,
         use_color_coefficient: a.use_color_coefficient || false,
-        show_price_to_customer: a.show_price_to_customer ?? true,
+        show_price_to_customer: showroom.addon_show_price_to_customer ?? false,
       })) : [],
       subscription: {
         status: showroom.subscription_status,
