@@ -9,11 +9,74 @@ actor ChatService {
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
 
+    // Retry configuration
+    private let maxRetries = 3
+    private let initialRetryDelay: UInt64 = 1_000_000_000 // 1 second in nanoseconds
+
     private init() {
         self.baseURL = Config.supabaseURL
         self.anonKey = Config.supabaseAnonKey
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
+    }
+
+    // MARK: - Retry Helper
+
+    /// Determines if an error is retryable
+    private func isRetryableError(_ error: Error) -> Bool {
+        if let chatError = error as? ChatError {
+            switch chatError {
+            case .timeout, .serverError:
+                return true
+            case .noConnection, .invalidURL, .invalidResponse, .invalidRequest,
+                 .projectNotFound, .conversationNotFound, .chatNotAvailable,
+                 .conversationCompleted, .apiError:
+                return false
+            }
+        }
+
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut, .networkConnectionLost, .notConnectedToInternet:
+                return true
+            default:
+                return false
+            }
+        }
+
+        return false
+    }
+
+    /// Executes an async operation with retry logic
+    private func withRetry<T>(
+        operation: String,
+        block: () async throws -> T
+    ) async throws -> T {
+        var lastError: Error?
+
+        for attempt in 1...maxRetries {
+            do {
+                return try await block()
+            } catch {
+                lastError = error
+
+                // Don't retry non-retryable errors
+                guard isRetryableError(error) else {
+                    throw error
+                }
+
+                // Don't retry on last attempt
+                if attempt < maxRetries {
+                    let delay = initialRetryDelay * UInt64(1 << (attempt - 1)) // Exponential backoff
+                    Config.logInfo("[\(operation)] Attempt \(attempt) failed, retrying in \(delay / 1_000_000_000)s...")
+                    try? await Task.sleep(nanoseconds: delay)
+                } else {
+                    Config.logError("[\(operation)] All \(maxRetries) attempts failed")
+                }
+            }
+        }
+
+        throw lastError ?? ChatError.timeout
     }
 
     // MARK: - Start Chat Conversation
@@ -24,6 +87,12 @@ actor ChatService {
     ///   - referenceNumber: The project reference number
     /// - Returns: StartChatResponse with conversation ID and greeting
     func startConversation(projectId: String, referenceNumber: String) async throws -> StartChatResponse {
+        try await withRetry(operation: "StartConversation") {
+            try await performStartConversation(projectId: projectId, referenceNumber: referenceNumber)
+        }
+    }
+
+    private func performStartConversation(projectId: String, referenceNumber: String) async throws -> StartChatResponse {
         let urlString = "\(baseURL)/functions/v1/ai-chat-start"
 
         guard let url = URL(string: urlString) else {
@@ -34,7 +103,7 @@ actor ChatService {
         request.httpMethod = "POST"
         request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30 // 30 second timeout for AI response
+        request.timeoutInterval = 60 // 60 second timeout (cold starts + OpenAI can be slow)
 
         let body: [String: String] = [
             "project_id": projectId,
@@ -72,6 +141,8 @@ actor ChatService {
                     throw ChatError.conversationCompleted
                 }
                 throw ChatError.chatNotAvailable
+            case 500...599:
+                throw ChatError.serverError(statusCode: httpResponse.statusCode)
             default:
                 throw ChatError.serverError(statusCode: httpResponse.statusCode)
             }
@@ -94,6 +165,12 @@ actor ChatService {
     ///   - message: The user's message
     /// - Returns: SendMessageResponse with AI response
     func sendMessage(conversationId: String, message: String) async throws -> SendMessageResponse {
+        try await withRetry(operation: "SendMessage") {
+            try await performSendMessage(conversationId: conversationId, message: message)
+        }
+    }
+
+    private func performSendMessage(conversationId: String, message: String) async throws -> SendMessageResponse {
         let urlString = "\(baseURL)/functions/v1/ai-chat-message"
 
         guard let url = URL(string: urlString) else {
@@ -135,6 +212,8 @@ actor ChatService {
                 throw ChatError.invalidRequest
             case 404:
                 throw ChatError.conversationNotFound
+            case 500...599:
+                throw ChatError.serverError(statusCode: httpResponse.statusCode)
             default:
                 throw ChatError.serverError(statusCode: httpResponse.statusCode)
             }
@@ -154,6 +233,13 @@ actor ChatService {
     /// Completes a conversation and generates a summary
     /// - Parameter conversationId: The conversation ID
     func completeConversation(conversationId: String) async throws {
+        // Complete conversation also uses retry for reliability
+        try await withRetry(operation: "CompleteConversation") {
+            try await performCompleteConversation(conversationId: conversationId)
+        }
+    }
+
+    private func performCompleteConversation(conversationId: String) async throws {
         let urlString = "\(baseURL)/functions/v1/ai-chat-complete"
 
         guard let url = URL(string: urlString) else {
@@ -164,7 +250,7 @@ actor ChatService {
         request.httpMethod = "POST"
         request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
+        request.timeoutInterval = 60 // 60 second timeout for AI summary generation
 
         let body: [String: String] = [
             "conversation_id": conversationId
@@ -183,12 +269,21 @@ actor ChatService {
 
             Config.logInfo("Complete conversation response status: \(httpResponse.statusCode)")
 
-            if httpResponse.statusCode != 200 {
+            if httpResponse.statusCode >= 500 {
                 throw ChatError.serverError(statusCode: httpResponse.statusCode)
+            }
+
+            if httpResponse.statusCode != 200 {
+                // Non-5xx errors are not retried but also not fatal for complete
+                Config.logError("Complete conversation failed with status: \(httpResponse.statusCode)")
             }
         } catch let error as URLError {
             Config.logError("Chat network error: \(error.localizedDescription)")
-            // Don't throw - completing is best-effort
+            if error.code == .timedOut {
+                throw ChatError.timeout
+            }
+            // For complete, we allow network errors to be retried
+            throw error
         }
     }
 }

@@ -12,6 +12,7 @@ class ChatViewModel: ObservableObject {
     @Published var conversationStarted = false
     @Published var conversationCompleted = false
     @Published var conversationAlreadyCompleted = false  // Set when trying to open a completed conversation
+    @Published var avatarImage: UIImage?  // Cached avatar image
 
     // MARK: - Private Properties
     private var conversationId: String?
@@ -26,6 +27,21 @@ class ChatViewModel: ObservableObject {
         self.referenceNumber = referenceNumber
         self.assistantName = assistantName
         self.assistantAvatarUrl = assistantAvatarUrl
+    }
+
+    // MARK: - Load Avatar
+    func loadAvatar() async {
+        guard let urlString = assistantAvatarUrl,
+              let url = URL(string: urlString) else { return }
+
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            if let image = UIImage(data: data) {
+                self.avatarImage = image
+            }
+        } catch {
+            Config.logError("Failed to load avatar: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Start Conversation

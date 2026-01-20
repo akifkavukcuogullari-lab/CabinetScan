@@ -50,6 +50,10 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
   const [showDialog, setShowDialog] = useState(false)
   const [editingAddon, setEditingAddon] = useState<ShowroomAddon | null>(null)
 
+  // Showroom-level setting for addon price visibility
+  const [addonShowPrice, setAddonShowPrice] = useState(false)
+  const [updatingShowPrice, setUpdatingShowPrice] = useState(false)
+
   // Form state
   const [addonQuestion, setAddonQuestion] = useState('')
   const [addonDescription, setAddonDescription] = useState('')
@@ -63,11 +67,12 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
 
   useEffect(() => {
     loadAddons()
+    loadShowroomSettings()
   }, [showroomId])
 
   const loadAddons = async () => {
     setLoading(true)
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('showroom_addons')
       .select('*')
       .eq('showroom_id', showroomId)
@@ -96,6 +101,35 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
       }
     }
     setLoading(false)
+  }
+
+  const loadShowroomSettings = async () => {
+    const { data } = await supabase
+      .from('showrooms')
+      .select('addon_show_price_to_customer')
+      .eq('id', showroomId)
+      .single()
+
+    if (data) {
+      setAddonShowPrice(data.addon_show_price_to_customer ?? false)
+    }
+  }
+
+  const toggleAddonShowPrice = async (checked: boolean) => {
+    setUpdatingShowPrice(true)
+    setAddonShowPrice(checked)
+
+    const { error } = await supabase
+      .from('showrooms')
+      .update({ addon_show_price_to_customer: checked })
+      .eq('id', showroomId)
+
+    if (error) {
+      console.error('Error updating addon price visibility:', error)
+      setAddonShowPrice(!checked) // Revert on error
+    }
+
+    setUpdatingShowPrice(false)
   }
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -320,6 +354,27 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
         </Button>
       </div>
 
+      {/* Show Price Toggle - applies to all addons */}
+      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border mb-4">
+        <Switch
+          id="addon-show-price"
+          checked={addonShowPrice}
+          onCheckedChange={toggleAddonShowPrice}
+          disabled={updatingShowPrice}
+        />
+        <Label htmlFor="addon-show-price" className="flex-1 cursor-pointer">
+          <span className="text-sm font-medium">Show prices in iOS app</span>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Display addon prices to customers (applies to all addons)
+          </p>
+        </Label>
+        {addonShowPrice && (
+          <Badge variant="outline" className="text-xs text-green-600 border-green-300">
+            Prices visible
+          </Badge>
+        )}
+      </div>
+
       {addons.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {addons.map((addon) => (
@@ -358,7 +413,7 @@ export function CustomAddons({ showroomId }: CustomAddonsProps) {
                     <p className="text-sm text-gray-500 line-clamp-2">{addon.description}</p>
                   )}
 
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
                     <span>Unit: {addon.unit}</span>
                     {addon.price_per_unit && (
                       <>

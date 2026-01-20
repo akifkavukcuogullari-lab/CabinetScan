@@ -18,7 +18,7 @@ struct ChatView: View {
                                 MessageBubble(
                                     message: message,
                                     assistantName: viewModel.assistantName,
-                                    assistantAvatarUrl: viewModel.assistantAvatarUrl
+                                    cachedAvatarImage: viewModel.avatarImage
                                 )
                                 .id(message.id)
                                 .transition(.asymmetric(
@@ -29,7 +29,7 @@ struct ChatView: View {
 
                             // Typing indicator
                             if viewModel.isTyping {
-                                TypingIndicator(assistantName: viewModel.assistantName)
+                                TypingIndicator(assistantName: viewModel.assistantName, cachedAvatarImage: viewModel.avatarImage)
                                     .id("typing")
                                     .transition(.scale(scale: 0.9).combined(with: .opacity))
                             }
@@ -95,6 +95,9 @@ struct ChatView: View {
                 }
             }
             .task {
+                // Load avatar image first, then start conversation
+                await viewModel.loadAvatar()
+
                 if !viewModel.conversationStarted {
                     await viewModel.startConversation()
                 }
@@ -130,13 +133,13 @@ struct ChatView: View {
 struct MessageBubble: View {
     let message: ChatMessage
     let assistantName: String
-    let assistantAvatarUrl: String?
+    let cachedAvatarImage: UIImage?
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             if message.role == .assistant {
                 // Assistant avatar
-                AssistantAvatar(name: assistantName, avatarUrl: assistantAvatarUrl)
+                AssistantAvatar(name: assistantName, cachedImage: cachedAvatarImage)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(message.content)
@@ -187,25 +190,14 @@ struct MessageBubble: View {
 
 struct AssistantAvatar: View {
     let name: String
-    let avatarUrl: String?
+    let cachedImage: UIImage?
 
     var body: some View {
         Group {
-            if let urlString = avatarUrl, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    case .failure:
-                        fallbackAvatar
-                    case .empty:
-                        ProgressView()
-                    @unknown default:
-                        fallbackAvatar
-                    }
-                }
+            if let image = cachedImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
             } else {
                 fallbackAvatar
             }
@@ -240,11 +232,12 @@ struct AssistantAvatar: View {
 
 struct TypingIndicator: View {
     let assistantName: String
+    let cachedAvatarImage: UIImage?
     @State private var animationPhase = 0
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            AssistantAvatar(name: assistantName, avatarUrl: nil)
+            AssistantAvatar(name: assistantName, cachedImage: cachedAvatarImage)
 
             HStack(spacing: 4) {
                 ForEach(0..<3, id: \.self) { index in

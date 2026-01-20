@@ -604,8 +604,8 @@ struct ScanningView: View {
                 processingStatus = "Uploading photo \(index + 1) of \(photos.count)..."
             }
 
-            // Use compressed JPEG data (1920x1440 @ 0.75 quality)
-            // Clear, sharp photos with small file sizes (~400-600KB each)
+            // Use resized + compressed JPEG data (1920px max @ 0.5 quality)
+            // Clear photos with small file sizes (~300-500KB each, down from 2MB)
             // Saves storage costs while maintaining visual quality
             let imageData = photo.rawData
 
@@ -703,7 +703,7 @@ struct ScanningView: View {
         // Extract and upload thumbnail
         var thumbnailUrl: String? = nil
         if let thumbnail = await recorder.extractThumbnail(at: 1.0) {
-            if let thumbnailData = thumbnail.jpegData(compressionQuality: 0.8) {
+            if let thumbnailData = thumbnail.jpegData(compressionQuality: 0.5) {
                 let thumbnailFilename = "video_thumb_\(timestamp)_\(randomId).jpg"
                 let thumbnailPath = "\(showroomCode.lowercased())/\(thumbnailFilename)"
                 do {

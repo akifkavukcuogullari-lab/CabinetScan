@@ -31,8 +31,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        {/* Google Analytics */}
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        {/* Google Analytics - must be in body, not head */}
         {GA_MEASUREMENT_ID && (
           <>
             <Script
@@ -51,10 +53,6 @@ export default function RootLayout({
             </Script>
           </>
         )}
-      </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

@@ -314,8 +314,8 @@ struct SelectionView: View {
                                     .padding(.horizontal)
                             }
 
-                            // Price info (if available)
-                            if let price = addon.pricePerUnit {
+                            // Price info (if available and showPriceToCustomer is enabled)
+                            if addon.showPriceToCustomer, let price = addon.pricePerUnit {
                                 Text("$\(effectiveAddonPrice(price, for: addon), specifier: "%.2f") / \(addon.unit)")
                                     .font(.subheadline)
                                     .foregroundStyle(.blue)

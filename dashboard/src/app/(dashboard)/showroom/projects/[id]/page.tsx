@@ -230,17 +230,33 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
       triggered_at: new Date().toISOString(),
     }
 
-    // Send to estimate API endpoint
-    const response = await fetch(
-      `${cabinetAiServiceUrl}/api/estimate`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(webhookPayload)
+    // Send to estimate API endpoint with timeout for Cloud Run cold starts
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 second timeout
+
+    let response: Response
+    try {
+      response = await fetch(
+        `${cabinetAiServiceUrl}/api/estimate`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(webhookPayload),
+          signal: controller.signal,
+        }
+      )
+    } catch (fetchError) {
+      clearTimeout(timeoutId)
+      console.error('Fetch error connecting to Cabinet AI service:', fetchError)
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        throw new Error('Request timed out - the quote service is taking too long to respond')
       }
-    )
+      throw new Error(`Failed to connect to quote service: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`)
+    } finally {
+      clearTimeout(timeoutId)
+    }
 
     if (!response.ok) {
       let errorMessage = 'Failed to send to estimate API'

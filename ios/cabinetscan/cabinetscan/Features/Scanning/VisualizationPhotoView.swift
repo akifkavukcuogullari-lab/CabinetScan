@@ -487,7 +487,7 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
         }
 
         // CRITICAL: Get camera data and compress to reasonable size
-        // 1920x1440 + 0.75 JPEG = clear photos at ~400-600KB each (not 3-5MB!)
+        // Resize to max 1920px + JPEG 0.5 quality = ~300-500KB each (down from 2MB)
         guard let rawData = photo.fileDataRepresentation() else {
             captureCompletion?(nil)
             captureCompletion = nil
@@ -501,9 +501,12 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
             return
         }
 
+        // Resize image to max 1920px dimension to reduce file size
+        let resizedImage = resizeImage(fullImage, maxDimension: 1920)
+
         // Compress JPEG to reduce file size while keeping it sharp and clear
-        // 0.75 quality = great balance between clarity and file size
-        guard let compressedData = fullImage.jpegData(compressionQuality: 0.75) else {
+        // 0.5 quality with 1920px max = good balance between clarity and file size (~300-500KB)
+        guard let compressedData = resizedImage.jpegData(compressionQuality: 0.5) else {
             captureCompletion?(nil)
             captureCompletion = nil
             return
@@ -518,12 +521,41 @@ private class CameraController: NSObject, ObservableObject, AVCapturePhotoCaptur
 
         let originalSizeKB = rawData.count / 1024
         let compressedSizeKB = compressedData.count / 1024
-        print("📸 [Capture] Photo compressed: \(originalSizeKB)KB → \(compressedSizeKB)KB")
+        print("📸 [Capture] Photo resized & compressed: \(originalSizeKB)KB → \(compressedSizeKB)KB (1920px max, 0.5 quality)")
 
         // Return both: compressed data for upload (clear + small) and preview for UI
         let photoData = CapturedPhotoData(previewImage: previewImage, rawData: compressedData)
         captureCompletion?(photoData)
         captureCompletion = nil
+    }
+
+    /// Resize image to fit within maxDimension while maintaining aspect ratio
+    /// This reduces file size significantly for upload while maintaining good visual quality
+    private func resizeImage(_ image: UIImage, maxDimension: CGFloat = 1920) -> UIImage {
+        let size = image.size
+
+        // Check if resize is needed
+        guard max(size.width, size.height) > maxDimension else {
+            return image
+        }
+
+        let ratio: CGFloat
+        if size.width > size.height {
+            ratio = maxDimension / size.width
+        } else {
+            ratio = maxDimension / size.height
+        }
+
+        let newSize = CGSize(width: size.width * ratio, height: size.height * ratio)
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        format.opaque = true
+
+        let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
+        return renderer.image { context in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
     }
 
     /// Force normalize image orientation by redrawing - always applies transform
