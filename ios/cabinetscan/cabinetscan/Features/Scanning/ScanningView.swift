@@ -1822,6 +1822,18 @@ struct FullScreenRoomCaptureView: UIViewControllerRepresentable {
         }
 
         // MARK: - RoomCaptureSessionDelegate
+        func captureSession(_ session: RoomCaptureSession, didStartWith configuration: RoomCaptureSession.Configuration) {
+            print("🟢 [Coordinator] captureSession didStartWith called - Session started successfully!")
+            print("🟢 [Coordinator] Configuration: \(configuration)")
+        }
+
+        func captureSession(_ session: RoomCaptureSession, didUpdate room: CapturedRoom) {
+            // Live updates during scanning - called frequently
+            if !hasReceivedFirstFrame {
+                print("🟢 [Coordinator] First didUpdate received - walls: \(room.walls.count), doors: \(room.doors.count)")
+            }
+        }
+
         func captureSession(_ session: RoomCaptureSession, didEndWith data: CapturedRoomData, error: Error?) {
             print("🎯 [Coordinator] captureSession didEndWith called!")
             print("🎯 [Coordinator] Error: \(String(describing: error))")
@@ -1889,10 +1901,29 @@ class RoomPlanViewController: UIViewController {
 
         print("🟢 [RoomPlanViewController] viewDidLoad - setting up RoomPlan")
 
+        // Log device info for debugging
+        let device = UIDevice.current
+        print("🟢 [RoomPlanViewController] Device: \(device.model), iOS \(device.systemVersion)")
+        print("🟢 [RoomPlanViewController] Device name: \(device.name)")
+
+        // Check RoomPlan support BEFORE attempting to use it
+        let isSupported = RoomCaptureSession.isSupported
+        print("🟢 [RoomPlanViewController] RoomCaptureSession.isSupported: \(isSupported)")
+
+        guard isSupported else {
+            print("❌ [RoomPlanViewController] RoomPlan NOT SUPPORTED on this device!")
+            // Show error to user
+            DispatchQueue.main.async {
+                self.showUnsupportedDeviceError()
+            }
+            return
+        }
+
         // CRITICAL: RoomPlan view - completely alone at the root
         roomCaptureView = RoomCaptureView(frame: view.bounds)
         roomCaptureView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(roomCaptureView)
+        print("🟢 [RoomPlanViewController] RoomCaptureView created and added to view")
 
         // Set up delegates
         print("🟢 [RoomPlanViewController] Setting coordinator as delegate")
@@ -1901,15 +1932,9 @@ class RoomPlanViewController: UIViewController {
         roomCaptureView.captureSession.arSession.delegate = coordinator
         print("🟢 [RoomPlanViewController] Delegate set to: \(String(describing: roomCaptureView.captureSession.delegate))")
 
-        // Start RoomPlan session
-        let config = RoomCaptureSession.Configuration()
-        print("🟢 [RoomPlanViewController] Starting RoomPlan session...")
-        roomCaptureView.captureSession.run(configuration: config)
-        coordinator?.isSessionRunning = true
-        print("🟢 [RoomPlanViewController] Session started successfully")
-
-        // NOTE: Video recording start moved to updateUIViewController
-        // because coordinator.videoRecorder is nil here (set later in update)
+        // Log ARSession state
+        let arSession = roomCaptureView.captureSession.arSession
+        print("🟢 [RoomPlanViewController] ARSession state - identifier: \(arSession.identifier)")
 
         // CRITICAL: UIKit-based controls overlay (no SwiftUI rendering)
         setupControls()
@@ -1918,6 +1943,55 @@ class RoomPlanViewController: UIViewController {
         updateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             self?.updateUI()
         }
+
+        // FIX: Delay session start to allow view hierarchy to fully set up
+        // This helps prevent race conditions on faster processors (A17 Pro / iPhone 15+)
+        // The delay gives the RoomCaptureView time to properly initialize its Metal rendering pipeline
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self = self else { return }
+            let config = RoomCaptureSession.Configuration()
+            print("🟢 [RoomPlanViewController] Starting RoomPlan session with config (after delay)...")
+            self.roomCaptureView.captureSession.run(configuration: config)
+            self.coordinator?.isSessionRunning = true
+            print("🟢 [RoomPlanViewController] Session run() called - waiting for didStartWith delegate callback")
+        }
+    }
+
+    private func showUnsupportedDeviceError() {
+        view.backgroundColor = .black
+
+        let errorLabel = UILabel()
+        errorLabel.translatesAutoresizingMaskIntoConstraints = false
+        errorLabel.text = "RoomPlan is not supported on this device.\n\nThis feature requires a device with LiDAR sensor (iPhone 12 Pro or newer Pro models)."
+        errorLabel.textColor = .white
+        errorLabel.textAlignment = .center
+        errorLabel.numberOfLines = 0
+        errorLabel.font = .systemFont(ofSize: 16)
+        view.addSubview(errorLabel)
+
+        let closeButton = UIButton(type: .system)
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        closeButton.setTitle("Close", for: .normal)
+        closeButton.setTitleColor(.white, for: .normal)
+        closeButton.backgroundColor = .systemRed
+        closeButton.layer.cornerRadius = 12
+        closeButton.addTarget(self, action: #selector(closeErrorTapped), for: .touchUpInside)
+        view.addSubview(closeButton)
+
+        NSLayoutConstraint.activate([
+            errorLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            errorLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -40),
+            errorLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 40),
+            errorLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -40),
+            closeButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            closeButton.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 30),
+            closeButton.widthAnchor.constraint(equalToConstant: 120),
+            closeButton.heightAnchor.constraint(equalToConstant: 44)
+        ])
+    }
+
+    @objc private func closeErrorTapped() {
+        coordinator?.onDone?()
     }
 
     private func setupControls() {
