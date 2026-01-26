@@ -13,7 +13,7 @@ struct ContentView: View {
                 case .customerInfo:
                     CustomerInfoView()
                 case .scanning:
-                    ScanningView()
+                    FlowRouter.scanEntryPoint()
                 case .selection:
                     SelectionView()
                 case .addons:
