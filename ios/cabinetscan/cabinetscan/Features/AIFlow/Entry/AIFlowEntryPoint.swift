@@ -15,6 +15,7 @@ import SwiftUI
 struct AIFlowEntryPoint: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var viewModel = AIFlowViewModel()
+    @StateObject private var coordinator = AIFlowCoordinator()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -36,15 +37,60 @@ struct AIFlowEntryPoint: View {
 
             case .videoCapture:
                 VideoCaptureView(
+                    sessionManager: coordinator.arSessionManager,
+                    dataManager: coordinator.captureDataManager,  // Issue #7 fix - pass shared manager
                     onBack: {
+                        coordinator.onVideoCaptureBack()
                         viewModel.backToIntro()
+                    },
+                    onComplete: { captureData, videoCapture in
+                        // Store video capture for session sharing with photo capture
+                        if let videoCapture = videoCapture {
+                            coordinator.setVideoCapture(videoCapture)
+                        }
+                        coordinator.onVideoCaptureComplete(captureData)
+                        viewModel.advanceToNextStep()
                     }
                 )
 
             case .photoCapture:
-                // Placeholder - will be implemented in Story 2.5
-                Text("Photo Capture - Coming Soon")
-                    .font(.title2)
+                // Photo capture - Story 2.5
+                if let videoCapture = coordinator.videoCapture {
+                    PhotoCaptureView(
+                        sessionManager: coordinator.arSessionManager,
+                        captureSession: videoCapture.captureSession,
+                        dataManager: coordinator.captureDataManager,  // Issue #7 fix - pass shared manager
+                        onBack: {
+                            coordinator.onPhotoCaptureBack()
+                            viewModel.currentStep = .videoCapture
+                        },
+                        onComplete: { photos in
+                            coordinator.onPhotoCaptureComplete(photos)
+                            viewModel.advanceToNextStep()
+                        }
+                    )
+                } else {
+                    // Fallback if video capture not available
+                    VStack(spacing: 20) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 60))
+                            .foregroundStyle(.orange)
+
+                        Text("Camera Error")
+                            .font(.title2.bold())
+
+                        Text("Video capture session not available")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+
+                        Button("Back to Video Capture") {
+                            coordinator.onPhotoCaptureBack()
+                            viewModel.currentStep = .videoCapture
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .padding()
+                }
 
             case .processing:
                 // Placeholder - will be implemented in Story 3.8
