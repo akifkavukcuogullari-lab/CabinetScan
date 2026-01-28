@@ -71,6 +71,9 @@ struct VideoCaptureView: View {
                 preRecordingOverlay
             } else if viewModel.recordingState == .recording {
                 recordingOverlay
+            } else if viewModel.recordingState == .stopped {
+                // Show saving overlay while finalizing recording
+                savingOverlay
             }
 
             // Max duration toast
@@ -320,6 +323,30 @@ struct VideoCaptureView: View {
                     showZoomIndicator = false
                 }
             }
+    }
+
+    // MARK: - Saving Overlay (shown while finalizing recording)
+
+    @ViewBuilder
+    private var savingOverlay: some View {
+        VStack {
+            Spacer()
+
+            VStack(spacing: 20) {
+                ProgressView()
+                    .scaleEffect(1.5)
+                    .tint(.white)
+
+                Text("Saving video...")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+            }
+            .padding(40)
+            .background(Color.black.opacity(0.7))
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+
+            Spacer()
+        }
     }
 
     // MARK: - Toast & Error Views

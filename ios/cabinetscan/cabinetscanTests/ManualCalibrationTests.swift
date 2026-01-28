@@ -364,7 +364,7 @@ final class ManualCalibrationTests: XCTestCase {
         indices.append(contentsOf: [4, 6, 5])
         indices.append(contentsOf: [4, 7, 6])
 
-        return AIMesh(vertices: vertices, indices: indices, normals: nil, colors: nil)
+        return AIMesh(vertices: vertices, indices: indices)
     }
 
     /// Creates a flat floor mesh with no ceiling for testing error cases
@@ -380,7 +380,7 @@ final class ManualCalibrationTests: XCTestCase {
 
         let indices: [UInt32] = [0, 1, 2]
 
-        return AIMesh(vertices: vertices, indices: indices, normals: nil, colors: nil)
+        return AIMesh(vertices: vertices, indices: indices)
     }
 }
 

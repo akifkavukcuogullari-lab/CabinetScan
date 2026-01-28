@@ -46,6 +46,7 @@ enum AICaptureState: Equatable {
     case recordingVideo
     case capturingPhotos
     case processing
+    case manualCalibration(ManualCalibrationInput)  // Story 3.6: Manual calibration fallback
     case complete
     case error(Error)
 
@@ -58,6 +59,8 @@ enum AICaptureState: Equatable {
              (.processing, .processing),
              (.complete, .complete):
             return true
+        case (.manualCalibration, .manualCalibration):
+            return true  // Don't compare associated values for equality
         case (.error(let lhsError), .error(let rhsError)):
             // Compare by localized description since Error doesn't conform to Equatable
             return lhsError.localizedDescription == rhsError.localizedDescription
@@ -308,5 +311,110 @@ class AIFlowCoordinator: ObservableObject, AIFlowCoordinatorProtocol {
         captureState = .recordingVideo
         // Keep the video data - user might want to retake or continue with fewer photos
         print("[AIFlowCoordinator] Photo capture cancelled - returning to video capture")
+    }
+
+    // MARK: - Manual Calibration (Story 3.6)
+
+    /// Scale calibrator for manual calibration
+    lazy var scaleCalibrator: ScaleCalibrator = {
+        return ScaleCalibrator()
+    }()
+
+    /// Current calibration result (after automatic or manual calibration)
+    @Published private(set) var calibrationResult: ScaleCalibrationResult?
+
+    /// Triggers manual calibration when automatic calibration fails.
+    ///
+    /// Called by the processing pipeline when `ScaleCalibrationResult.calibrationMethod == .failed`.
+    /// Pauses processing and presents ManualCalibrationView.
+    ///
+    /// - Parameter input: Data needed for manual calibration including fusion result and failure reason
+    func triggerManualCalibration(input: ManualCalibrationInput) {
+        captureState = .manualCalibration(input)
+        print("[AIFlowCoordinator] Triggered manual calibration - reason: \(input.failureReason)")
+    }
+
+    /// Called when manual calibration completes successfully.
+    ///
+    /// Resumes the processing pipeline with the new scale factor.
+    ///
+    /// - Parameter result: The calibration result from manual calibration
+    func onManualCalibrationComplete(_ result: ScaleCalibrationResult) {
+        calibrationResult = result
+        captureState = .processing
+        print("[AIFlowCoordinator] Manual calibration complete - scaleFactor: \(result.scaleFactor), method: \(result.calibrationMethod)")
+    }
+
+    /// Called when user cancels manual calibration.
+    ///
+    /// Returns to error state since calibration is required.
+    func onManualCalibrationCancelled() {
+        captureState = .error(AIFlowError.calibrationFailed)
+        print("[AIFlowCoordinator] Manual calibration cancelled - setting error state")
+    }
+
+    /// Creates a ManualCalibrationViewModel for the current manual calibration input.
+    ///
+    /// - Returns: ViewModel configured for manual calibration, or nil if not in manual calibration state
+    func createManualCalibrationViewModel() -> ManualCalibrationViewModel? {
+        guard case .manualCalibration(let input) = captureState else {
+            return nil
+        }
+
+        let viewModel = ManualCalibrationViewModel(input: input, calibrator: scaleCalibrator)
+
+        // Set up callbacks
+        viewModel.onCalibrationComplete = { [weak self] result in
+            self?.onManualCalibrationComplete(result)
+        }
+
+        viewModel.onCancel = { [weak self] in
+            self?.onManualCalibrationCancelled()
+        }
+
+        return viewModel
+    }
+
+    /// Checks if automatic calibration failed and manual calibration is needed.
+    ///
+    /// Called by the pipeline after automatic calibration attempt.
+    ///
+    /// - Parameters:
+    ///   - result: The automatic calibration result
+    ///   - fusionResult: The TSDF fusion result
+    ///   - capturedPhotos: Photos captured during the session
+    /// - Returns: True if manual calibration is needed and has been triggered
+    func checkCalibrationAndTriggerManualIfNeeded(
+        result: ScaleCalibrationResult,
+        fusionResult: TSDFFusionResult,
+        capturedPhotos: [AICapturedPhoto]
+    ) -> Bool {
+        // Only trigger manual calibration if automatic failed
+        guard result.calibrationMethod == .failed else {
+            calibrationResult = result
+            return false
+        }
+
+        // Get first photo URL for preview
+        let previewPhotoURL = capturedPhotos.first?.url
+
+        // Determine failure reason
+        let failureReason: String
+        if result.validationResults.passedChecks == 0 {
+            failureReason = "Could not detect countertop or ceiling for automatic calibration"
+        } else {
+            failureReason = "Calibration validation failed"
+        }
+
+        // Create input and trigger manual calibration
+        let input = ManualCalibrationInput(
+            fusionResult: fusionResult,
+            floorPlane: result.floorPlane,
+            failureReason: failureReason,
+            previewPhotoURL: previewPhotoURL
+        )
+
+        triggerManualCalibration(input: input)
+        return true
     }
 }
