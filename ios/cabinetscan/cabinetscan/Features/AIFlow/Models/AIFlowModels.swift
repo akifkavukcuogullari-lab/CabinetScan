@@ -199,13 +199,19 @@ struct AIDetectionResults {
     /// Detected doors (Story 4.9)
     var doors: [AIDetectedDoor] = []
 
+    /// Detected islands (Story 4.5)
+    var islands: [AIDetectedIsland] = []
+
+    /// Detected peninsulas (Story 4.5)
+    var peninsulas: [AIDetectedPeninsula] = []
+
     /// Overall confidence score
     var overallConfidence: AIConfidenceLevel = .low
 
     /// Processing metadata
     var processingMetadata: AIProcessingMetadata?
 
-    // MARK: - Computed Properties (Story 4.9 Task 9.2)
+    // MARK: - Computed Properties (Story 4.5 & 4.9)
 
     /// Total count of windows detected
     var totalWindowCount: Int { windows.count }
@@ -223,6 +229,22 @@ struct AIDetectionResults {
         doors.filter { door in
             door.notes.contains { $0.lowercased().contains("filler") || $0.lowercased().contains("clearance") }
         }
+    }
+
+    /// Total count of islands detected (Story 4.5)
+    var totalIslandCount: Int { islands.count }
+
+    /// Total count of peninsulas detected (Story 4.5)
+    var totalPeninsulaCount: Int { peninsulas.count }
+
+    /// Total island countertop area in square feet (Story 4.5)
+    var islandCountertopAreaSquareFeet: Float {
+        islands.reduce(0) { $0 + $1.countertopAreaSquareFeet }
+    }
+
+    /// Total peninsula countertop area in square feet (Story 4.5)
+    var peninsulaCountertopAreaSquareFeet: Float {
+        peninsulas.reduce(0) { $0 + $1.countertopAreaSquareFeet }
     }
 }
 
