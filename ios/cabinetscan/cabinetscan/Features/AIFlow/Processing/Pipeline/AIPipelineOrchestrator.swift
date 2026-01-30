@@ -81,6 +81,13 @@ final class AIPipelineOrchestrator: ObservableObject {
     private let geometricConstraints: GeometricConstraints
     private let roomDetector: RoomDetector
     private let cabinetDetector: CabinetDetector
+    private let specialCabinetDetector: SpecialCabinetDetector
+    private let applianceDetector: ApplianceDetector
+    private let islandPeninsulaDetector: IslandPeninsulaDetector
+    private let countertopDetector: CountertopDetector
+    private let openingDetector: OpeningDetector
+    private let measurementExtractor: MeasurementExtractor
+    private let confidenceScorer: ConfidenceScorer
 
     private let logger = Logger(subsystem: "com.cabinetscan", category: "AIPipelineOrchestrator")
 
@@ -118,6 +125,13 @@ final class AIPipelineOrchestrator: ObservableObject {
         self.geometricConstraints = GeometricConstraints()
         self.roomDetector = RoomDetector()
         self.cabinetDetector = CabinetDetector()
+        self.specialCabinetDetector = SpecialCabinetDetector()
+        self.applianceDetector = ApplianceDetector()
+        self.islandPeninsulaDetector = IslandPeninsulaDetector()
+        self.countertopDetector = CountertopDetector()
+        self.openingDetector = OpeningDetector()
+        self.measurementExtractor = MeasurementExtractor()
+        self.confidenceScorer = ConfidenceScorer()
     }
 
     /// Creates a pipeline orchestrator with injected dependencies (for testing).
@@ -129,7 +143,14 @@ final class AIPipelineOrchestrator: ObservableObject {
         scaleCalibrator: ScaleCalibrator,
         geometricConstraints: GeometricConstraints,
         roomDetector: RoomDetector,
-        cabinetDetector: CabinetDetector
+        cabinetDetector: CabinetDetector,
+        specialCabinetDetector: SpecialCabinetDetector,
+        applianceDetector: ApplianceDetector,
+        islandPeninsulaDetector: IslandPeninsulaDetector,
+        countertopDetector: CountertopDetector,
+        openingDetector: OpeningDetector,
+        measurementExtractor: MeasurementExtractor,
+        confidenceScorer: ConfidenceScorer
     ) {
         self.modelManager = modelManager
         self.depthEstimator = depthEstimator
@@ -139,6 +160,13 @@ final class AIPipelineOrchestrator: ObservableObject {
         self.geometricConstraints = geometricConstraints
         self.roomDetector = roomDetector
         self.cabinetDetector = cabinetDetector
+        self.specialCabinetDetector = specialCabinetDetector
+        self.applianceDetector = applianceDetector
+        self.islandPeninsulaDetector = islandPeninsulaDetector
+        self.countertopDetector = countertopDetector
+        self.openingDetector = openingDetector
+        self.measurementExtractor = measurementExtractor
+        self.confidenceScorer = confidenceScorer
     }
 
     // MARK: - Main Entry Point (Task 3.4)
@@ -210,14 +238,84 @@ final class AIPipelineOrchestrator: ObservableObject {
                 calibration: calibrationResult
             )
 
-            // Stage 10: Complete (Task 4.8)
+            // Stage 10: Appliance detection (Story 4.4)
+            let applianceResult = try await executeApplianceDetection(
+                roomStructure: roomStructure,
+                pointClouds: pointClouds,
+                calibration: calibrationResult,
+                cabinetResult: cabinetResult
+            )
+
+            // Stage 10.5: Special cabinet detection (Story 4.10)
+            // Detects stacked uppers, refrigerator cabinets, appliance housing
+            let updatedCabinetResult = try await executeSpecialCabinetDetection(
+                roomStructure: roomStructure,
+                pointClouds: pointClouds,
+                calibration: calibrationResult,
+                cabinetResult: cabinetResult,
+                applianceResult: applianceResult
+            )
+
+            // Stage 11: Island/Peninsula detection (Story 4.5)
+            let islandPeninsulaResult = try await executeIslandPeninsulaDetection(
+                roomStructure: roomStructure,
+                pointClouds: pointClouds,
+                calibration: calibrationResult,
+                cabinetResult: updatedCabinetResult,
+                applianceResult: applianceResult
+            )
+
+            // Stage 12: Countertop detection (Story 4.6)
+            let countertopResult = try await executeCountertopDetection(
+                roomStructure: roomStructure,
+                pointClouds: pointClouds,
+                calibration: calibrationResult,
+                cabinetResult: updatedCabinetResult,
+                applianceResult: applianceResult,
+                islandPeninsulaResult: islandPeninsulaResult
+            )
+
+            // Stage 13: Opening detection (Story 4.9)
+            let openingResult = try await executeOpeningDetection(
+                roomStructure: roomStructure,
+                pointClouds: pointClouds,
+                calibration: calibrationResult,
+                cabinetResult: updatedCabinetResult
+            )
+
+            // Stage 14: Measurement extraction (Story 4.7)
+            let measurementResult = try await executeMeasurementExtraction(
+                cabinetResult: updatedCabinetResult,
+                applianceResult: applianceResult,
+                islandPeninsulaResult: islandPeninsulaResult,
+                countertopResult: countertopResult,
+                openingResult: openingResult
+            )
+
+            // Stage 15: Confidence scoring (Story 4.8)
+            let confidenceScoringResult = try await executeConfidenceScoring(
+                cabinetResult: updatedCabinetResult,
+                applianceResult: applianceResult,
+                islandPeninsulaResult: islandPeninsulaResult,
+                countertopResult: countertopResult,
+                openingResult: openingResult,
+                measurementResult: measurementResult
+            )
+
+            // Stage 16: Complete (Task 4.8)
             // Issue #7 fix: Use actualFrameCount from depth estimation, not empty frames array
             let result = buildFinalResult(
                 constraintResult: constraintResult,
                 calibration: calibrationResult,
                 fusionResult: fusionResult,
                 roomStructure: roomStructure,
-                cabinetResult: cabinetResult,
+                cabinetResult: updatedCabinetResult,
+                applianceResult: applianceResult,
+                islandPeninsulaResult: islandPeninsulaResult,
+                countertopResult: countertopResult,
+                openingResult: openingResult,
+                measurementResult: measurementResult,
+                confidenceScores: confidenceScoringResult,
                 frameCount: actualFrameCount,
                 photoCount: captureData.photos.count
             )
@@ -910,7 +1008,676 @@ final class AIPipelineOrchestrator: ObservableObject {
         }
     }
 
-    // MARK: - Stage 10: Build Final Result (Task 4.8)
+    // MARK: - Stage 10: Appliance Detection (Story 4.4)
+
+    private func executeApplianceDetection(
+        roomStructure: AIRoomStructure?,
+        pointClouds: [AIPointCloud],
+        calibration: ScaleCalibrationResult,
+        cabinetResult: CabinetDetectionResult?
+    ) async throws -> ApplianceDetectionResult? {
+        currentPhase = .applianceDetection
+        progress = AIPipelinePhase.applianceDetection.startProgress
+
+        #if DEBUG
+        timeLogger.startStep(.applianceDetection)
+        #endif
+
+        logger.info("Stage 10: Detecting appliances...")
+
+        // Subscribe to appliance detector progress
+        var cancellable: AnyCancellable?
+
+        cancellable = applianceDetector.$progress
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] subProgress in
+                guard let self = self else { return }
+                self.progress = AIPipelinePhase.applianceDetection.mapSubProgress(subProgress)
+            }
+
+        defer { cancellable?.cancel() }
+
+        do {
+            try Task.checkCancellation()
+
+            // Appliance detection requires room structure and cabinets
+            guard let roomStructure = roomStructure else {
+                logger.warning("Appliance detection skipped - no room structure available")
+                warnings.append(PipelineWarning(
+                    stage: .applianceDetection,
+                    message: "Appliance detection skipped - room not detected",
+                    severity: .caution
+                ))
+                return nil
+            }
+
+            let calibratedCloud = createCalibratedPointCloud(from: pointClouds, calibration: calibration)
+
+            let applianceResult = try await applianceDetector.detect(
+                roomStructure: roomStructure,
+                pointCloud: calibratedCloud,
+                cabinets: cabinetResult ?? CabinetDetectionResult(cabinets: [], wallCoverageValidation: [], processingTimeMs: 0, warnings: []),
+                islands: [] // Islands detected in next stage
+            )
+
+            progress = AIPipelinePhase.applianceDetection.endProgress
+
+            #if DEBUG
+            timeLogger.endStep(.applianceDetection)
+            timeLogger.logMemory(at: .applianceDetection)
+            #endif
+
+            logger.info("Appliance detection complete: \(applianceResult.appliances.count) appliances")
+
+            // Add any warnings from appliance detection
+            for warning in applianceResult.warnings {
+                warnings.append(PipelineWarning(
+                    stage: .applianceDetection,
+                    message: warning,
+                    severity: .info
+                ))
+            }
+
+            return applianceResult
+
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as ApplianceDetectionError {
+            // Appliance detection failure is non-fatal
+            logger.warning("Appliance detection failed (non-fatal): \(error.localizedDescription)")
+            warnings.append(PipelineWarning(
+                stage: .applianceDetection,
+                message: "Appliance detection failed - manual entry may be required",
+                severity: .caution
+            ))
+            return nil
+        } catch {
+            logger.warning("Appliance detection failed with unexpected error: \(error.localizedDescription)")
+            warnings.append(PipelineWarning(
+                stage: .applianceDetection,
+                message: "Appliance detection failed - manual entry may be required",
+                severity: .caution
+            ))
+            return nil
+        }
+    }
+
+    // MARK: - Stage 10.5: Special Cabinet Detection (Story 4.10)
+
+    private func executeSpecialCabinetDetection(
+        roomStructure: AIRoomStructure?,
+        pointClouds: [AIPointCloud],
+        calibration: ScaleCalibrationResult,
+        cabinetResult: CabinetDetectionResult?,
+        applianceResult: ApplianceDetectionResult?
+    ) async throws -> CabinetDetectionResult? {
+        // Special cabinet detection requires cabinet results
+        guard let cabinetResult = cabinetResult else {
+            logger.info("Special cabinet detection skipped - no cabinet result")
+            return nil
+        }
+
+        guard let roomStructure = roomStructure else {
+            logger.warning("Special cabinet detection skipped - no room structure")
+            return cabinetResult
+        }
+
+        if applianceResult == nil {
+            logger.info("Special cabinet detection - no appliance result (proceeding without appliance cabinets)")
+        }
+
+        logger.info("Stage 10.5: Detecting special cabinets (stacked, refrigerator upper, appliance housing)...")
+
+        do {
+            try Task.checkCancellation()
+
+            let calibratedCloud = createCalibratedPointCloud(from: pointClouds, calibration: calibration)
+
+            let specialResult = await specialCabinetDetector.detect(
+                cabinets: cabinetResult.cabinets,
+                appliances: applianceResult ?? ApplianceDetectionResult(
+                    appliances: [],
+                    processingTimeMs: 0,
+                    warnings: []
+                ),
+                roomStructure: roomStructure,
+                pointCloud: calibratedCloud
+            )
+
+            // Create updated cabinet detection result with special cabinets
+            let updatedResult = CabinetDetectionResult(
+                cabinets: specialResult.cabinets,
+                wallCoverageValidation: cabinetResult.wallCoverageValidation,
+                processingTimeMs: cabinetResult.processingTimeMs + specialResult.processingTimeMs,
+                warnings: cabinetResult.warnings + specialResult.warnings
+            )
+
+            logger.info("Special cabinet detection complete: \(specialResult.stackedCount) stacked, \(specialResult.refrigeratorUpperCount) fridge upper, \(specialResult.microwaveHousingCount) microwave housing, \(specialResult.ovenHousingCount) oven housing")
+
+            // Add warnings for empty spaces
+            for emptySpace in specialResult.emptySpacesAboveRefrigerator {
+                warnings.append(PipelineWarning(
+                    stage: .cabinetDetection,
+                    message: "Empty space above \(emptySpace.applianceType) - upsell opportunity",
+                    severity: .info
+                ))
+            }
+
+            // Add any warnings from special detection
+            for warning in specialResult.warnings {
+                warnings.append(PipelineWarning(
+                    stage: .cabinetDetection,
+                    message: warning,
+                    severity: .info
+                ))
+            }
+
+            return updatedResult
+
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            logger.warning("Special cabinet detection failed (non-fatal): \(error.localizedDescription)")
+            warnings.append(PipelineWarning(
+                stage: .cabinetDetection,
+                message: "Special cabinet detection failed - stacked/appliance cabinets may not be flagged",
+                severity: .caution
+            ))
+            return cabinetResult
+        }
+    }
+
+    // MARK: - Stage 11: Island/Peninsula Detection (Story 4.5)
+
+    private func executeIslandPeninsulaDetection(
+        roomStructure: AIRoomStructure?,
+        pointClouds: [AIPointCloud],
+        calibration: ScaleCalibrationResult,
+        cabinetResult: CabinetDetectionResult?,
+        applianceResult: ApplianceDetectionResult?
+    ) async throws -> IslandPeninsulaDetectionResult? {
+        currentPhase = .islandPeninsulaDetection
+        progress = AIPipelinePhase.islandPeninsulaDetection.startProgress
+
+        #if DEBUG
+        timeLogger.startStep(.islandPeninsulaDetection)
+        #endif
+
+        logger.info("Stage 11: Detecting islands and peninsulas...")
+
+        // Subscribe to island/peninsula detector progress
+        var cancellable: AnyCancellable?
+
+        cancellable = islandPeninsulaDetector.$progress
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] subProgress in
+                guard let self = self else { return }
+                self.progress = AIPipelinePhase.islandPeninsulaDetection.mapSubProgress(subProgress)
+            }
+
+        defer { cancellable?.cancel() }
+
+        do {
+            try Task.checkCancellation()
+
+            // Island detection requires room structure
+            guard let roomStructure = roomStructure else {
+                logger.warning("Island/peninsula detection skipped - no room structure available")
+                warnings.append(PipelineWarning(
+                    stage: .islandPeninsulaDetection,
+                    message: "Island detection skipped - room not detected",
+                    severity: .caution
+                ))
+                return nil
+            }
+
+            let calibratedCloud = createCalibratedPointCloud(from: pointClouds, calibration: calibration)
+
+            let islandResult = try await islandPeninsulaDetector.detect(
+                roomStructure: roomStructure,
+                pointCloud: calibratedCloud,
+                cabinets: cabinetResult ?? CabinetDetectionResult(cabinets: [], wallCoverageValidation: [], processingTimeMs: 0, warnings: []),
+                appliances: applianceResult ?? ApplianceDetectionResult(appliances: [], processingTimeMs: 0, warnings: [])
+            )
+
+            progress = AIPipelinePhase.islandPeninsulaDetection.endProgress
+
+            #if DEBUG
+            timeLogger.endStep(.islandPeninsulaDetection)
+            timeLogger.logMemory(at: .islandPeninsulaDetection)
+            #endif
+
+            logger.info("Island/peninsula detection complete: \(islandResult.islands.count) islands, \(islandResult.peninsulas.count) peninsulas")
+
+            // Add any warnings from island detection
+            for warning in islandResult.warnings {
+                warnings.append(PipelineWarning(
+                    stage: .islandPeninsulaDetection,
+                    message: warning,
+                    severity: .info
+                ))
+            }
+
+            return islandResult
+
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as IslandPeninsulaDetectionError {
+            // Island detection failure is non-fatal
+            logger.warning("Island/peninsula detection failed (non-fatal): \(error.localizedDescription)")
+            warnings.append(PipelineWarning(
+                stage: .islandPeninsulaDetection,
+                message: "Island detection failed - manual entry may be required",
+                severity: .caution
+            ))
+            return nil
+        } catch {
+            logger.warning("Island/peninsula detection failed with unexpected error: \(error.localizedDescription)")
+            warnings.append(PipelineWarning(
+                stage: .islandPeninsulaDetection,
+                message: "Island detection failed - manual entry may be required",
+                severity: .caution
+            ))
+            return nil
+        }
+    }
+
+    // MARK: - Stage 12: Countertop Detection (Story 4.6)
+
+    private func executeCountertopDetection(
+        roomStructure: AIRoomStructure?,
+        pointClouds: [AIPointCloud],
+        calibration: ScaleCalibrationResult,
+        cabinetResult: CabinetDetectionResult?,
+        applianceResult: ApplianceDetectionResult?,
+        islandPeninsulaResult: IslandPeninsulaDetectionResult?
+    ) async throws -> CountertopDetectorResult? {
+        currentPhase = .countertopDetection
+        progress = AIPipelinePhase.countertopDetection.startProgress
+
+        #if DEBUG
+        timeLogger.startStep(.countertopDetection)
+        #endif
+
+        logger.info("Stage 12: Detecting countertops...")
+
+        // Subscribe to countertop detector progress
+        var cancellable: AnyCancellable?
+
+        cancellable = countertopDetector.$progress
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] subProgress in
+                guard let self = self else { return }
+                self.progress = AIPipelinePhase.countertopDetection.mapSubProgress(subProgress)
+            }
+
+        defer { cancellable?.cancel() }
+
+        do {
+            try Task.checkCancellation()
+
+            // Countertop detection requires room structure and cabinets
+            guard let roomStructure = roomStructure else {
+                logger.warning("Countertop detection skipped - no room structure available")
+                warnings.append(PipelineWarning(
+                    stage: .countertopDetection,
+                    message: "Countertop calculation skipped - room not detected",
+                    severity: .caution
+                ))
+                return nil
+            }
+
+            guard let cabinetResult = cabinetResult else {
+                logger.warning("Countertop detection skipped - no cabinets detected")
+                warnings.append(PipelineWarning(
+                    stage: .countertopDetection,
+                    message: "Countertop calculation skipped - no cabinets detected",
+                    severity: .caution
+                ))
+                return nil
+            }
+
+            let calibratedCloud = createCalibratedPointCloud(from: pointClouds, calibration: calibration)
+
+            let countertopResult = try await countertopDetector.detect(
+                roomStructure: roomStructure,
+                pointCloud: calibratedCloud,
+                cabinets: cabinetResult,
+                appliances: applianceResult ?? ApplianceDetectionResult(appliances: [], processingTimeMs: 0, warnings: []),
+                islandPeninsulaResult: islandPeninsulaResult ?? IslandPeninsulaDetectionResult.empty
+            )
+
+            progress = AIPipelinePhase.countertopDetection.endProgress
+
+            #if DEBUG
+            timeLogger.endStep(.countertopDetection)
+            timeLogger.logMemory(at: .countertopDetection)
+            #endif
+
+            logger.info("Countertop detection complete: \(countertopResult.wallCountertops.count) wall countertops, total \(String(format: "%.1f", countertopResult.countertopSummary.totalSquareFeet)) sq ft")
+
+            // Add any warnings from countertop detection
+            for warning in countertopResult.warnings {
+                warnings.append(PipelineWarning(
+                    stage: .countertopDetection,
+                    message: warning,
+                    severity: .info
+                ))
+            }
+
+            // Add prominent warning if confidence is low (AC9)
+            if countertopResult.overallConfidence == .low {
+                warnings.append(PipelineWarning(
+                    stage: .countertopDetection,
+                    message: "Countertop measurements have low confidence - field verification strongly recommended",
+                    severity: .caution
+                ))
+            }
+
+            return countertopResult
+
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as CountertopDetectionError {
+            // Countertop detection failure is non-fatal
+            logger.warning("Countertop detection failed (non-fatal): \(error.localizedDescription)")
+            warnings.append(PipelineWarning(
+                stage: .countertopDetection,
+                message: "Countertop calculation failed - manual entry may be required",
+                severity: .caution
+            ))
+            return nil
+        } catch {
+            logger.warning("Countertop detection failed with unexpected error: \(error.localizedDescription)")
+            warnings.append(PipelineWarning(
+                stage: .countertopDetection,
+                message: "Countertop calculation failed - manual entry may be required",
+                severity: .caution
+            ))
+            return nil
+        }
+    }
+
+    // MARK: - Stage 13: Opening Detection (Story 4.9)
+
+    private func executeOpeningDetection(
+        roomStructure: AIRoomStructure?,
+        pointClouds: [AIPointCloud],
+        calibration: ScaleCalibrationResult,
+        cabinetResult: CabinetDetectionResult?
+    ) async throws -> OpeningDetectionResult? {
+        currentPhase = .openingDetection
+        progress = AIPipelinePhase.openingDetection.startProgress
+
+        #if DEBUG
+        timeLogger.startStep(.openingDetection)
+        #endif
+
+        logger.info("Stage 13: Detecting windows and doors...")
+
+        // Subscribe to opening detector progress
+        var cancellable: AnyCancellable?
+
+        cancellable = openingDetector.$progress
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] subProgress in
+                guard let self = self else { return }
+                self.progress = AIPipelinePhase.openingDetection.mapSubProgress(subProgress)
+            }
+
+        defer { cancellable?.cancel() }
+
+        do {
+            try Task.checkCancellation()
+
+            // Opening detection requires room structure
+            guard let roomStructure = roomStructure else {
+                logger.warning("Opening detection skipped - no room structure available")
+                warnings.append(PipelineWarning(
+                    stage: .openingDetection,
+                    message: "Opening detection skipped - room not detected",
+                    severity: .caution
+                ))
+                return nil
+            }
+
+            let calibratedCloud = createCalibratedPointCloud(from: pointClouds, calibration: calibration)
+
+            let openingResult = try await openingDetector.detect(
+                roomStructure: roomStructure,
+                pointCloud: calibratedCloud,
+                cabinets: cabinetResult?.cabinets ?? []
+            )
+
+            progress = AIPipelinePhase.openingDetection.endProgress
+
+            #if DEBUG
+            timeLogger.endStep(.openingDetection)
+            timeLogger.logMemory(at: .openingDetection)
+            #endif
+
+            logger.info("Opening detection complete: \(openingResult.windows.count) windows, \(openingResult.doors.count) doors")
+
+            // Add any warnings from opening detection
+            for warning in openingResult.warnings {
+                warnings.append(PipelineWarning(
+                    stage: .openingDetection,
+                    message: warning,
+                    severity: .info
+                ))
+            }
+
+            // Add warning for doors with clearance issues
+            if !openingResult.doorsWithClearanceIssues.isEmpty {
+                warnings.append(PipelineWarning(
+                    stage: .openingDetection,
+                    message: "\(openingResult.doorsWithClearanceIssues.count) door(s) may need fillers for adjacent cabinets",
+                    severity: .info
+                ))
+            }
+
+            return openingResult
+
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as OpeningDetectionError {
+            // Opening detection failure is non-fatal
+            logger.warning("Opening detection failed (non-fatal): \(error.localizedDescription)")
+            warnings.append(PipelineWarning(
+                stage: .openingDetection,
+                message: error.userFriendlyMessage,
+                severity: .caution
+            ))
+            return nil
+        } catch {
+            logger.warning("Opening detection failed with unexpected error: \(error.localizedDescription)")
+            warnings.append(PipelineWarning(
+                stage: .openingDetection,
+                message: "Opening detection failed - manual entry may be required",
+                severity: .caution
+            ))
+            return nil
+        }
+    }
+
+    // MARK: - Stage 14: Measurement Extraction (Story 4.7)
+
+    private func executeMeasurementExtraction(
+        cabinetResult: CabinetDetectionResult?,
+        applianceResult: ApplianceDetectionResult?,
+        islandPeninsulaResult: IslandPeninsulaDetectionResult?,
+        countertopResult: CountertopDetectorResult?,
+        openingResult: OpeningDetectionResult?
+    ) async throws -> MeasurementExtractionResult? {
+        currentPhase = .measurementExtraction
+        progress = AIPipelinePhase.measurementExtraction.startProgress
+
+        #if DEBUG
+        timeLogger.startStep(.measurementExtraction)
+        #endif
+
+        logger.info("Stage 13: Extracting measurements...")
+
+        // Subscribe to measurement extractor progress
+        var cancellable: AnyCancellable?
+
+        cancellable = measurementExtractor.$progress
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] subProgress in
+                guard let self = self else { return }
+                self.progress = AIPipelinePhase.measurementExtraction.mapSubProgress(subProgress)
+            }
+
+        defer { cancellable?.cancel() }
+
+        do {
+            try Task.checkCancellation()
+
+            let measurementResult = try await measurementExtractor.extract(
+                cabinetResult: cabinetResult,
+                applianceResult: applianceResult,
+                islandPeninsulaResult: islandPeninsulaResult,
+                countertopResult: countertopResult
+            )
+
+            progress = AIPipelinePhase.measurementExtraction.endProgress
+
+            #if DEBUG
+            timeLogger.endStep(.measurementExtraction)
+            timeLogger.logMemory(at: .measurementExtraction)
+            #endif
+
+            logger.info("Measurement extraction complete: \(measurementResult.allMeasurements.count) measurements, \(measurementResult.customSizeCount) custom sizes")
+
+            // Add any warnings from measurement extraction
+            for warning in measurementResult.warnings {
+                warnings.append(PipelineWarning(
+                    stage: .measurementExtraction,
+                    message: warning,
+                    severity: .info
+                ))
+            }
+
+            // Add discrepancy warnings
+            if measurementResult.hasDiscrepancies {
+                warnings.append(PipelineWarning(
+                    stage: .measurementExtraction,
+                    message: "Linear footage totals have discrepancies - review recommended",
+                    severity: .caution
+                ))
+            }
+
+            return measurementResult
+
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as MeasurementExtractionError {
+            // Measurement extraction failure is non-fatal
+            logger.warning("Measurement extraction failed (non-fatal): \(error.localizedDescription)")
+            warnings.append(PipelineWarning(
+                stage: .measurementExtraction,
+                message: "Measurement extraction failed - manual entry may be required",
+                severity: .caution
+            ))
+            return nil
+        } catch {
+            logger.warning("Measurement extraction failed with unexpected error: \(error.localizedDescription)")
+            warnings.append(PipelineWarning(
+                stage: .measurementExtraction,
+                message: "Measurement extraction failed - manual entry may be required",
+                severity: .caution
+            ))
+            return nil
+        }
+    }
+
+    // MARK: - Stage 15: Confidence Scoring (Story 4.8)
+
+    /// Calculates confidence scores for all detected objects.
+    private func executeConfidenceScoring(
+        cabinetResult: CabinetDetectionResult?,
+        applianceResult: ApplianceDetectionResult?,
+        islandPeninsulaResult: IslandPeninsulaDetectionResult?,
+        countertopResult: CountertopDetectorResult?,
+        openingResult: OpeningDetectionResult?,
+        measurementResult: MeasurementExtractionResult?
+    ) async throws -> ConfidenceScoringResult? {
+        currentPhase = .confidenceScoring
+        progress = AIPipelinePhase.confidenceScoring.startProgress
+
+        #if DEBUG
+        timeLogger.startStep(.confidenceScoring)
+        #endif
+
+        logger.info("Stage 15: Calculating confidence scores...")
+
+        // Subscribe to confidence scorer progress
+        var cancellable: AnyCancellable?
+
+        cancellable = confidenceScorer.$progress
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] subProgress in
+                guard let self = self else { return }
+                self.progress = AIPipelinePhase.confidenceScoring.mapSubProgress(subProgress)
+            }
+
+        defer { cancellable?.cancel() }
+
+        do {
+            try Task.checkCancellation()
+
+            let scoringResult = try await confidenceScorer.calculateConfidence(
+                cabinetResult: cabinetResult,
+                applianceResult: applianceResult,
+                islandPeninsulaResult: islandPeninsulaResult,
+                countertopResult: countertopResult,
+                openingResult: openingResult,
+                measurementResult: measurementResult
+            )
+
+            progress = AIPipelinePhase.confidenceScoring.endProgress
+
+            #if DEBUG
+            timeLogger.endStep(.confidenceScoring)
+            timeLogger.logMemory(at: .confidenceScoring)
+            #endif
+
+            logger.info("Confidence scoring complete: \(scoringResult.objectScores.count) objects scored, overall \(String(format: "%.0f", scoringResult.overallScore * 100))% (\(scoringResult.overallLevel.rawValue))")
+
+            // Add any warnings from confidence scoring
+            for warning in scoringResult.warnings {
+                warnings.append(PipelineWarning(
+                    stage: .confidenceScoring,
+                    message: warning,
+                    severity: scoringResult.itemsNeedingVerification > 0 ? .caution : .info
+                ))
+            }
+
+            return scoringResult
+
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as ConfidenceScoringError {
+            // Confidence scoring failure is non-fatal
+            logger.warning("Confidence scoring failed (non-fatal): \(error.localizedDescription)")
+            warnings.append(PipelineWarning(
+                stage: .confidenceScoring,
+                message: "Confidence scoring failed - results may need manual review",
+                severity: .caution
+            ))
+            return nil
+        } catch {
+            logger.warning("Confidence scoring failed with unexpected error: \(error.localizedDescription)")
+            warnings.append(PipelineWarning(
+                stage: .confidenceScoring,
+                message: "Confidence scoring failed - results may need manual review",
+                severity: .caution
+            ))
+            return nil
+        }
+    }
+
+    // MARK: - Stage 16: Build Final Result (Task 4.8)
 
     private func buildFinalResult(
         constraintResult: GeometricConstraintsResult,
@@ -918,6 +1685,12 @@ final class AIPipelineOrchestrator: ObservableObject {
         fusionResult: TSDFFusionResult,
         roomStructure: AIRoomStructure?,
         cabinetResult: CabinetDetectionResult?,
+        applianceResult: ApplianceDetectionResult?,
+        islandPeninsulaResult: IslandPeninsulaDetectionResult?,
+        countertopResult: CountertopDetectorResult?,
+        openingResult: OpeningDetectionResult?,
+        measurementResult: MeasurementExtractionResult?,
+        confidenceScores: ConfidenceScoringResult?,
         frameCount: Int,
         photoCount: Int
     ) -> AIPipelineResult {
@@ -934,6 +1707,12 @@ final class AIPipelineOrchestrator: ObservableObject {
             calibration: calibration,
             roomStructure: roomStructure,
             detectedCabinets: cabinetResult,
+            detectedAppliances: applianceResult,
+            detectedIslandsPeninsulas: islandPeninsulaResult,
+            detectedCountertops: countertopResult,
+            detectedOpenings: openingResult,
+            extractedMeasurements: measurementResult,
+            confidenceScores: confidenceScores,
             processingTimeMs: processingTime,
             frameCount: frameCount,
             photoCount: photoCount,
@@ -1045,6 +1824,16 @@ final class AIPipelineOrchestrator: ObservableObject {
             return .roomDetectionFailed(reason: roomError.localizedDescription ?? "Unknown error")
         case let cabinetError as CabinetDetectionError:
             return .cabinetDetectionFailed(reason: cabinetError.localizedDescription ?? "Unknown error")
+        case let applianceError as ApplianceDetectionError:
+            return .applianceDetectionFailed(reason: applianceError.localizedDescription ?? "Unknown error")
+        case let islandError as IslandPeninsulaDetectionError:
+            return .islandPeninsulaDetectionFailed(reason: islandError.localizedDescription)
+        case let countertopError as CountertopDetectionError:
+            return .countertopDetectionFailed(reason: countertopError.localizedDescription ?? "Unknown error")
+        case let openingError as OpeningDetectionError:
+            return .openingDetectionFailed(reason: openingError.localizedDescription ?? "Unknown error")
+        case let measurementError as MeasurementExtractionError:
+            return .measurementExtractionFailed(reason: measurementError.localizedDescription ?? "Unknown error")
         default:
             // Map based on current phase
             switch currentPhase {
@@ -1066,6 +1855,16 @@ final class AIPipelineOrchestrator: ObservableObject {
                 return .roomDetectionFailed(reason: error.localizedDescription)
             case .cabinetDetection:
                 return .cabinetDetectionFailed(reason: error.localizedDescription)
+            case .applianceDetection:
+                return .applianceDetectionFailed(reason: error.localizedDescription)
+            case .islandPeninsulaDetection:
+                return .islandPeninsulaDetectionFailed(reason: error.localizedDescription)
+            case .countertopDetection:
+                return .countertopDetectionFailed(reason: error.localizedDescription)
+            case .openingDetection:
+                return .openingDetectionFailed(reason: error.localizedDescription)
+            case .measurementExtraction:
+                return .measurementExtractionFailed(reason: error.localizedDescription)
             default:
                 return .fusionFailed(reason: error.localizedDescription)
             }

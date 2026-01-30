@@ -193,14 +193,37 @@ struct AIDetectionResults {
     /// Detected countertops
     var countertops: [AIDetectedCountertop] = []
 
-    /// Detected openings (doors, windows)
-    var openings: [AIDetectedOpening] = []
+    /// Detected windows (Story 4.9)
+    var windows: [AIDetectedWindow] = []
+
+    /// Detected doors (Story 4.9)
+    var doors: [AIDetectedDoor] = []
 
     /// Overall confidence score
     var overallConfidence: AIConfidenceLevel = .low
 
     /// Processing metadata
     var processingMetadata: AIProcessingMetadata?
+
+    // MARK: - Computed Properties (Story 4.9 Task 9.2)
+
+    /// Total count of windows detected
+    var totalWindowCount: Int { windows.count }
+
+    /// Total count of doors detected
+    var totalDoorCount: Int { doors.count }
+
+    /// Windows above countertop level (sink windows)
+    var windowsAboveCountertop: [AIDetectedWindow] {
+        windows.filter { $0.sillHeightInches >= 36.0 }
+    }
+
+    /// Doors that may need filler panels (based on notes)
+    var doorsWithClearanceIssues: [AIDetectedDoor] {
+        doors.filter { door in
+            door.notes.contains { $0.lowercased().contains("filler") || $0.lowercased().contains("clearance") }
+        }
+    }
 }
 
 // MARK: - Detected Objects (Placeholders)
@@ -225,38 +248,11 @@ struct AIPlane {
     var distance: Float
 }
 
-/// Placeholder for detected cabinet
-struct AIDetectedCabinet {
-    // Will be fully defined in Epic 4
-    var type: AICabinetType = .base
-    var bounds: AIBoundingBox = AIBoundingBox()
-    var confidence: AIConfidenceLevel = .low
-}
+// Note: AIDetectedCabinet and AICabinetType are defined in
+// Features/AIFlow/Detection/AIDetectedCabinet.swift (Story 4.2/4.3)
 
-enum AICabinetType {
-    case base
-    case upper
-    case tall
-    case corner
-}
-
-/// Placeholder for detected appliance
-struct AIDetectedAppliance {
-    // Will be fully defined in Epic 4
-    var type: AIApplianceType = .other
-    var position: SIMD3<Float> = .zero
-    var confidence: AIConfidenceLevel = .low
-}
-
-enum AIApplianceType {
-    case refrigerator
-    case range
-    case dishwasher
-    case microwave
-    case hood
-    case sink
-    case other
-}
+// Note: AIDetectedAppliance, AIApplianceType, AIApplianceSubType are defined in
+// Features/AIFlow/Detection/ApplianceDetector.swift (Story 4.4)
 
 /// Placeholder for detected countertop
 struct AIDetectedCountertop {
@@ -266,17 +262,161 @@ struct AIDetectedCountertop {
     var confidence: AIConfidenceLevel = .low
 }
 
-/// Placeholder for detected opening (door/window)
+// MARK: - Opening Type
+
+/// Type of wall opening.
+enum AIOpeningType: String, Codable {
+    case window
+    case door
+    case doorway     // No door, just opening
+    case slidingDoor
+    case frenchDoor
+}
+
+// MARK: - Door Swing Direction
+
+/// Direction a door swings open.
+enum DoorSwingDirection: String, Codable {
+    case left
+    case right
+    case unknown
+}
+
+// MARK: - Detected Opening Protocol (ADR-2)
+
+/// Protocol for shared properties between windows and doors.
+/// Provides type safety while sharing common interface.
+protocol DetectedOpeningProtocol: Identifiable, Equatable, Codable {
+    var id: UUID { get }
+    var type: AIOpeningType { get }
+    var wallId: UUID { get }
+    var positionOnWallInches: Float { get }
+    var heightFromFloorInches: Float { get }
+    var boundingBox: AIBoundingBox3D { get }
+    var rawDimensions: SIMD3<Float> { get }
+    var snappedDimensions: SIMD3<Float> { get }
+    var confidence: AIConfidenceLevel { get }
+    var isStandardSize: Bool { get }
+    var notes: [String] { get }
+    var widthInches: Float { get }
+    var heightInches: Float { get }
+}
+
+// MARK: - AIDetectedWindow
+
+/// A detected window with dimensions and cabinet placement guidance.
+///
+/// Per Story 4.9 AC3, AC5: Windows are detected with ±1" accuracy,
+/// distance from countertop is measured, and upper cabinet placement
+/// options are calculated.
+struct AIDetectedWindow: DetectedOpeningProtocol {
+    // MARK: - Protocol Properties
+
+    let id: UUID
+    let wallId: UUID
+    let positionOnWallInches: Float
+    let heightFromFloorInches: Float
+    let boundingBox: AIBoundingBox3D
+    let rawDimensions: SIMD3<Float>
+    let snappedDimensions: SIMD3<Float>
+    let confidence: AIConfidenceLevel
+    let isStandardSize: Bool
+    let notes: [String]
+
+    // MARK: - Window-Specific Properties
+
+    /// Sill height from floor in inches
+    let sillHeightInches: Float
+
+    /// Distance from countertop to window sill (nil if not above countertop)
+    let distanceFromCountertopInches: Float?
+
+    /// Whether window has visible frame
+    let hasFrame: Bool
+
+    /// Available height for upper cabinets above window (ADR-4)
+    /// Calculated as: ceilingHeight - windowTop - 18" min clearance
+    let availableUpperCabinetHeight: Float?
+
+    /// Recommendation for upper cabinet placement (ADR-4)
+    /// e.g., "Standard 30\" upper cabinets possible", "18\" upper cabinets possible", "No upper cabinets above window"
+    let upperCabinetRecommendation: String?
+
+    // MARK: - Protocol Computed Properties
+
+    var type: AIOpeningType { .window }
+    var widthInches: Float { snappedDimensions.x }
+    var heightInches: Float { snappedDimensions.y }
+
+    // MARK: - Codable
+
+    enum CodingKeys: String, CodingKey {
+        case id, wallId, positionOnWallInches, heightFromFloorInches
+        case boundingBox, rawDimensions, snappedDimensions
+        case confidence, isStandardSize, notes
+        case sillHeightInches, distanceFromCountertopInches, hasFrame
+        case availableUpperCabinetHeight, upperCabinetRecommendation
+    }
+}
+
+// MARK: - AIDetectedDoor
+
+/// A detected door with dimensions and swing direction.
+///
+/// Per Story 4.9 AC2, AC4, AC6: Doors are detected with standard
+/// width captured (32", 36"), swing direction noted if detectable,
+/// and clearance to adjacent cabinets measured for filler calculations.
+struct AIDetectedDoor: DetectedOpeningProtocol {
+    // MARK: - Protocol Properties
+
+    let id: UUID
+    let type: AIOpeningType  // .door, .slidingDoor, .frenchDoor, .doorway
+    let wallId: UUID
+    let positionOnWallInches: Float
+    let heightFromFloorInches: Float
+    let boundingBox: AIBoundingBox3D
+    let rawDimensions: SIMD3<Float>
+    let snappedDimensions: SIMD3<Float>
+    let confidence: AIConfidenceLevel
+    let isStandardSize: Bool
+    let notes: [String]
+
+    // MARK: - Door-Specific Properties
+
+    /// Swing direction (left, right, or unknown)
+    /// Best-effort detection, defaults to .unknown
+    let swingDirection: DoorSwingDirection?
+
+    /// Whether this is a full-height door (>84")
+    let isFullHeight: Bool
+
+    /// Clearance to adjacent cabinet (nil if no adjacent cabinet)
+    /// Used for filler/spacer calculations
+    let clearanceToAdjacentCabinet: Float?
+
+    // MARK: - Protocol Computed Properties
+
+    var widthInches: Float { snappedDimensions.x }
+    var heightInches: Float { snappedDimensions.y }
+
+    // MARK: - Codable
+
+    enum CodingKeys: String, CodingKey {
+        case id, type, wallId, positionOnWallInches, heightFromFloorInches
+        case boundingBox, rawDimensions, snappedDimensions
+        case confidence, isStandardSize, notes
+        case swingDirection, isFullHeight, clearanceToAdjacentCabinet
+    }
+}
+
+// MARK: - Legacy Placeholder (deprecated)
+
+/// Placeholder for detected opening (door/window) - deprecated, use AIDetectedWindow or AIDetectedDoor
+@available(*, deprecated, message: "Use AIDetectedWindow or AIDetectedDoor instead")
 struct AIDetectedOpening {
-    // Will be fully defined in Epic 4
     var type: AIOpeningType = .door
     var bounds: AIBoundingBox = AIBoundingBox()
     var confidence: AIConfidenceLevel = .low
-}
-
-enum AIOpeningType {
-    case door
-    case window
 }
 
 // MARK: - Supporting Types
@@ -292,7 +432,7 @@ struct AIBoundingBox {
 }
 
 /// Confidence levels for measurements and detections
-enum AIConfidenceLevel: Comparable {
+enum AIConfidenceLevel: String, Comparable, Codable {
     case low      // < 60%
     case medium   // 60-79%
     case high     // >= 80%
@@ -303,6 +443,19 @@ enum AIConfidenceLevel: Comparable {
         case .medium: return 0.6
         case .high: return 0.8
         }
+    }
+
+    // Comparable conformance
+    private var sortOrder: Int {
+        switch self {
+        case .low: return 0
+        case .medium: return 1
+        case .high: return 2
+        }
+    }
+
+    static func < (lhs: AIConfidenceLevel, rhs: AIConfidenceLevel) -> Bool {
+        lhs.sortOrder < rhs.sortOrder
     }
 }
 
