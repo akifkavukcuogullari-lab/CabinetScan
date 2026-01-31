@@ -45,6 +45,9 @@ struct ProcessingView: View {
     /// Callback when manual calibration is needed (AC7)
     let onNeedManualCalibration: ((ManualCalibrationInput) -> Void)?
 
+    /// Coordinator for timeout data preservation (Story 6.8)
+    weak var coordinator: AIFlowCoordinator?
+
     // MARK: - State
 
     /// Whether cancel button is visible (shown after 5 seconds)
@@ -64,6 +67,17 @@ struct ProcessingView: View {
 
     /// Reduce Motion environment (Story 6.5)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // MARK: - Timeout State (Story 6.8 Task 5)
+
+    /// Timeout manager for 60s/90s warnings
+    @StateObject private var timeoutManager = ProcessingTimeoutManager()
+
+    /// Whether to show timeout warning sheet (Task 5.2)
+    @State private var showTimeoutWarningSheet = false
+
+    /// Current timeout warning level (Task 5.3)
+    @State private var timeoutWarningLevel: TimeoutWarningLevel?
 
     // MARK: - Constants
 
@@ -113,13 +127,25 @@ struct ProcessingView: View {
         }
         .onAppear {
             startCancelButtonTimer()
+            // Story 6.8 Task 5.4: Start timeout monitoring
+            timeoutManager.startMonitoring()
         }
         .onDisappear {
             cancelButtonTimer?.invalidate()
+            // Story 6.8: Stop timeout monitoring
+            timeoutManager.stopMonitoring()
         }
         // Issue #3 fix: Monitor state changes to call onComplete when processing finishes
         .onChange(of: orchestrator.state) { _, newState in
             if case .completed = newState {
+                // Story 6.8 Edge case #2: Auto-dismiss timeout sheet if processing completes
+                if showTimeoutWarningSheet {
+                    showTimeoutWarningSheet = false
+                    timeoutWarningLevel = nil
+                }
+                // Stop timeout monitoring on completion
+                timeoutManager.stopMonitoring()
+
                 // Story 6.5: Announce completion for VoiceOver
                 announceForVoiceOver("Processing complete")
                 // Brief delay to show the complete UI, then notify coordinator
@@ -129,9 +155,13 @@ struct ProcessingView: View {
                     }
                 }
             } else if case .failed(let error) = newState {
+                // Story 6.8: Stop timeout monitoring on failure
+                timeoutManager.stopMonitoring()
                 // Story 6.5: Announce error for VoiceOver
                 announceForVoiceOver("Processing failed. \(error.userFriendlyMessage)")
             } else if case .cancelled = newState {
+                // Story 6.8: Stop timeout monitoring on cancellation
+                timeoutManager.stopMonitoring()
                 // Story 6.5: Announce cancellation for VoiceOver
                 announceForVoiceOver("Processing cancelled")
             }
@@ -145,6 +175,22 @@ struct ProcessingView: View {
             if newPhase != oldPhase {
                 lastAnnouncedPhase = newPhase
                 announceForVoiceOver(newPhase.accessibilityDescription)
+            }
+        }
+        // Story 6.8 Task 5.4: Monitor timeout state changes
+        .onChange(of: timeoutManager.timeoutState) { _, newState in
+            handleTimeoutStateChange(newState)
+        }
+        // Story 6.8 Task 5.5: Timeout warning sheet (ADR-5: sheet overlay)
+        .sheet(isPresented: $showTimeoutWarningSheet) {
+            if let level = timeoutWarningLevel {
+                TimeoutWarningSheet(
+                    level: level,
+                    onContinueWaiting: handleContinueWaiting,
+                    onRetry: handleTimeoutRetry,
+                    onCancel: handleTimeoutCancel
+                )
+                .presentationDetents([.medium])
             }
         }
         .confirmationDialog(
@@ -475,6 +521,81 @@ struct ProcessingView: View {
         }
     }
 
+    // MARK: - Timeout Handlers (Story 6.8 Task 5)
+
+    /// Handle timeout state changes (Task 5.4)
+    private func handleTimeoutStateChange(_ state: TimeoutState) {
+        switch state {
+        case .normal:
+            // Don't auto-close sheet - user action required
+            break
+
+        case .warning:
+            // Task 5.5: Show 60s warning sheet
+            if !showTimeoutWarningSheet {
+                timeoutWarningLevel = .warning
+                showTimeoutWarningSheet = true
+                // Story 6.5: Announce for VoiceOver
+                announceForVoiceOver("Processing taking longer than expected")
+            }
+
+        case .critical:
+            // Task 5.5: Update to critical warning
+            // Edge case #1: Show critical even if warning was dismissed
+            timeoutWarningLevel = .critical
+            if !showTimeoutWarningSheet {
+                showTimeoutWarningSheet = true
+            }
+            // Story 6.5: Announce for VoiceOver
+            announceForVoiceOver("Processing may have encountered an issue")
+        }
+    }
+
+    /// Handle "Continue Waiting" action (Task 5.8)
+    private func handleContinueWaiting() {
+        showTimeoutWarningSheet = false
+        timeoutWarningLevel = nil
+        timeoutManager.resetTimers()
+    }
+
+    /// Handle "Retry" action (Task 5.7)
+    ///
+    /// **Per Story 6.8 AC3:**
+    /// Processing restarts from last checkpoint without re-capturing.
+    private func handleTimeoutRetry() {
+        showTimeoutWarningSheet = false
+        timeoutWarningLevel = nil
+
+        // Use coordinator for retry with checkpoint if available
+        if let coordinator = coordinator {
+            coordinator.setPipelineOrchestrator(orchestrator)
+            _ = coordinator.onTimeoutRetry()
+        } else {
+            // Fallback to basic retry callback
+            onRetry()
+        }
+    }
+
+    /// Handle "Cancel" from timeout sheet (Task 5.6)
+    ///
+    /// **Per Story 6.8 AC4:**
+    /// Captured data is saved for potential later use.
+    ///
+    /// **Per Dev Notes Edge Case #3:**
+    /// Wait for any pending checkpoint save before cancelling.
+    private func handleTimeoutCancel() {
+        showTimeoutWarningSheet = false
+        timeoutWarningLevel = nil
+
+        // Save data for later recovery before cancelling
+        if let coordinator = coordinator {
+            coordinator.onTimeoutCancel(checkpoint: orchestrator.lastCheckpoint)
+        }
+
+        orchestrator.cancel()
+        onCancel()
+    }
+
     // MARK: - Accessibility Helpers (Story 6.5)
 
     /// Announce message for VoiceOver users
@@ -551,14 +672,16 @@ private struct SpinnerView: View {
 #if DEBUG
 struct ProcessingView_Previews: PreviewProvider {
     static var previews: some View {
-        ProcessingView(
+        let coordinator = AIFlowCoordinator()
+        return ProcessingView(
             orchestrator: AIPipelineOrchestrator(),
             showroomLogoURL: nil,
             onComplete: { _ in },
             onCancel: { },
             onRetry: { },
             onStartOver: { },
-            onNeedManualCalibration: nil
+            onNeedManualCalibration: nil,
+            coordinator: coordinator
         )
     }
 }

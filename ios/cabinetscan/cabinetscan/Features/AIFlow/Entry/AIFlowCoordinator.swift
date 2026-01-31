@@ -417,4 +417,180 @@ class AIFlowCoordinator: ObservableObject, AIFlowCoordinatorProtocol {
         triggerManualCalibration(input: input)
         return true
     }
+
+    // MARK: - Output Adapter (Story 5.6)
+
+    /// Output adapter for converting pipeline results to MeasurementData
+    private lazy var outputAdapter = AIOutputAdapter()
+
+    /// Validation warnings from the output adapter
+    @Published private(set) var outputWarnings: [String] = []
+
+    /// Adapts pipeline result and stores in AppState.
+    ///
+    /// Called when processing completes successfully. This method:
+    /// 1. Converts pipeline result to MeasurementData via AIOutputAdapter
+    /// 2. Stores validation warnings for potential display
+    /// 3. Updates AppState with the adapted measurement data
+    /// 4. Transitions to complete state
+    ///
+    /// - Parameters:
+    ///   - pipelineResult: Completed pipeline result from Epic 3/4
+    ///   - appState: AppState to store measurement data for downstream screens
+    /// - Throws: AIOutputError if adaptation fails
+    func adaptAndStoreOutput(
+        pipelineResult: AIPipelineResult,
+        appState: AppState
+    ) async throws {
+        print("[AIFlowCoordinator] Starting output adaptation")
+
+        do {
+            let result = try await outputAdapter.adapt(
+                pipelineResult: pipelineResult,
+                captureSession: captureSessionData
+            )
+
+            // Store warnings for potential display (e.g., low confidence)
+            outputWarnings = result.warnings
+
+            if !result.warnings.isEmpty {
+                print("[AIFlowCoordinator] Output warnings: \(result.warnings)")
+            }
+
+            // Update AppState with adapted measurement data
+            appState.setMeasurementData(result.measurementData)
+
+            // Transition to complete state
+            captureState = .complete
+
+            print("[AIFlowCoordinator] Output adaptation complete - transitioning to complete state")
+        } catch {
+            print("[AIFlowCoordinator] Output adaptation failed: \(error.localizedDescription)")
+            captureState = .error(error)
+            throw error
+        }
+    }
+
+    /// Called when processing completes successfully.
+    ///
+    /// Convenience method that wraps adaptAndStoreOutput for simpler callsites.
+    ///
+    /// - Parameters:
+    ///   - pipelineResult: Completed pipeline result
+    ///   - appState: AppState for storing measurement data
+    func onProcessingComplete(
+        pipelineResult: AIPipelineResult,
+        appState: AppState
+    ) async {
+        do {
+            try await adaptAndStoreOutput(pipelineResult: pipelineResult, appState: appState)
+        } catch {
+            // Error state already set in adaptAndStoreOutput
+            print("[AIFlowCoordinator] onProcessingComplete failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Clears output warnings (e.g., after user acknowledges them)
+    func clearOutputWarnings() {
+        outputWarnings = []
+    }
+
+    // MARK: - Timeout Handling (Story 6.8)
+
+    /// Pipeline orchestrator for timeout retry operations
+    private var pipelineOrchestrator: AIPipelineOrchestrator?
+
+    /// Sets the pipeline orchestrator for timeout retry operations.
+    ///
+    /// Called by ProcessingView or the view that owns the orchestrator.
+    ///
+    /// - Parameter orchestrator: The pipeline orchestrator instance
+    func setPipelineOrchestrator(_ orchestrator: AIPipelineOrchestrator) {
+        self.pipelineOrchestrator = orchestrator
+    }
+
+    /// Called when user cancels from timeout warning sheet.
+    ///
+    /// **Per Story 6.8 AC4:**
+    /// When user selects "Cancel", captured data is saved for potential later use.
+    ///
+    /// - Parameter checkpoint: Current pipeline checkpoint (if available)
+    func onTimeoutCancel(checkpoint: PipelineCheckpoint?) {
+        guard let sessionData = captureSessionData else {
+            print("[AIFlowCoordinator] Timeout cancel - no session data to preserve")
+            captureState = .idle
+            return
+        }
+
+        // Save session data for later recovery
+        do {
+            _ = try captureDataManager.saveSessionForLater(
+                videoDuration: sessionData.metadata?.videoDuration ?? 0,
+                photoCount: sessionData.photos.count,
+                checkpoint: checkpoint,
+                qualityMetrics: sessionData.qualityMetrics
+            )
+            print("[AIFlowCoordinator] Timeout cancel - session saved for later recovery")
+        } catch {
+            print("[AIFlowCoordinator] Failed to save session for later: \(error)")
+        }
+
+        // Return to idle state
+        captureState = .idle
+        processingProgress = 0.0
+    }
+
+    /// Called when user selects retry from timeout warning sheet.
+    ///
+    /// **Per Story 6.8 AC3:**
+    /// Processing restarts from last checkpoint without re-capturing.
+    ///
+    /// - Returns: Task that performs the retry operation
+    @discardableResult
+    func onTimeoutRetry() -> Task<AIPipelineResult?, Error>? {
+        guard let orchestrator = pipelineOrchestrator,
+              let sessionData = captureSessionData else {
+            print("[AIFlowCoordinator] Timeout retry - missing orchestrator or session data")
+            return nil
+        }
+
+        print("[AIFlowCoordinator] Starting timeout retry from checkpoint")
+
+        return Task {
+            do {
+                let result = try await orchestrator.retry(captureData: sessionData)
+                return result
+            } catch {
+                print("[AIFlowCoordinator] Timeout retry failed: \(error)")
+                throw error
+            }
+        }
+    }
+
+    /// Checks for timeout-cancelled sessions that can be resumed.
+    ///
+    /// **Per Story 6.8 Task 6.5:**
+    /// Discovers sessions that were cancelled due to timeout.
+    ///
+    /// - Returns: Array of session IDs that can be resumed
+    func findTimeoutCancelledSessions() -> [String] {
+        return captureDataManager.findTimeoutCancelledSessions()
+    }
+
+    /// Resumes a timeout-cancelled session from its checkpoint.
+    ///
+    /// - Parameter sessionId: The session ID to resume
+    /// - Returns: True if session was found and can be resumed
+    func resumeTimeoutCancelledSession(sessionId: String) -> Bool {
+        guard let checkpoint = captureDataManager.getTimeoutCheckpoint(for: sessionId),
+              let recoveredData = captureDataManager.recoverSession(sessionId: sessionId) else {
+            print("[AIFlowCoordinator] Cannot resume timeout session: \(sessionId)")
+            return false
+        }
+
+        captureSessionData = recoveredData
+        captureState = .processing
+        print("[AIFlowCoordinator] Resumed timeout session: \(sessionId) from checkpoint: \(checkpoint.description)")
+        return true
+    }
 }

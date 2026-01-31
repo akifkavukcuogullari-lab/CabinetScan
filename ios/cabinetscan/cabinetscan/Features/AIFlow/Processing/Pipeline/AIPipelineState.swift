@@ -107,9 +107,15 @@ enum AIPipelineState: Equatable {
 /// | TSDF Fusion | 65-80% | "Combining views..." |
 /// | Scale Calibration | 80-88% | "Measuring dimensions..." |
 /// | Geometric Constraints | 88-94% | "Refining walls..." |
-/// | Room Detection | 94-96% | "Detecting room..." |
-/// | Cabinet Detection | 96-99% | "Finding cabinets..." |
-/// | Complete | 99-100% | "Finalizing..." |
+/// | Room Detection | 94-95% | "Detecting room..." |
+/// | Cabinet Detection | 95-96% | "Finding cabinets..." |
+/// | Appliance Detection | 96-97% | "Finding appliances..." |
+/// | Island/Peninsula Detection | 97-98% | "Finding islands..." |
+/// | Countertop Detection | 98-98.3% | "Calculating countertops..." |
+/// | Opening Detection | 98.3-98.6% | "Detecting openings..." |
+/// | Measurement Extraction | 98.6-99% | "Extracting measurements..." |
+/// | Confidence Scoring | 99-99.5% | "Scoring accuracy..." |
+/// | Complete | 99.5-100% | "Finalizing..." |
 enum AIPipelinePhase: String, CaseIterable {
     case idle = "Idle"
     case modelLoading = "Model Loading"
@@ -121,6 +127,12 @@ enum AIPipelinePhase: String, CaseIterable {
     case geometricConstraints = "Geometric Constraints"
     case roomDetection = "Room Detection"
     case cabinetDetection = "Cabinet Detection"
+    case applianceDetection = "Appliance Detection"
+    case islandPeninsulaDetection = "Island/Peninsula Detection"
+    case countertopDetection = "Countertop Detection"
+    case openingDetection = "Opening Detection"
+    case measurementExtraction = "Measurement Extraction"
+    case confidenceScoring = "Confidence Scoring"
     case complete = "Complete"
 
     // MARK: - Progress Range
@@ -137,8 +149,14 @@ enum AIPipelinePhase: String, CaseIterable {
         case .scaleCalibration: return 0.80
         case .geometricConstraints: return 0.88
         case .roomDetection: return 0.94
-        case .cabinetDetection: return 0.96
-        case .complete: return 0.99
+        case .cabinetDetection: return 0.95
+        case .applianceDetection: return 0.96
+        case .islandPeninsulaDetection: return 0.97
+        case .countertopDetection: return 0.98
+        case .openingDetection: return 0.983
+        case .measurementExtraction: return 0.986
+        case .confidenceScoring: return 0.99
+        case .complete: return 0.995
         }
     }
 
@@ -153,8 +171,14 @@ enum AIPipelinePhase: String, CaseIterable {
         case .tsdfFusion: return 0.80
         case .scaleCalibration: return 0.88
         case .geometricConstraints: return 0.94
-        case .roomDetection: return 0.96
-        case .cabinetDetection: return 0.99
+        case .roomDetection: return 0.95
+        case .cabinetDetection: return 0.96
+        case .applianceDetection: return 0.97
+        case .islandPeninsulaDetection: return 0.98
+        case .countertopDetection: return 0.983
+        case .openingDetection: return 0.986
+        case .measurementExtraction: return 0.99
+        case .confidenceScoring: return 0.995
         case .complete: return 1.0
         }
     }
@@ -180,7 +204,37 @@ enum AIPipelinePhase: String, CaseIterable {
         case .geometricConstraints: return "Refining walls..."
         case .roomDetection: return "Detecting room..."
         case .cabinetDetection: return "Finding cabinets..."
+        case .applianceDetection: return "Finding appliances..."
+        case .islandPeninsulaDetection: return "Detecting islands..."
+        case .countertopDetection: return "Calculating countertops..."
+        case .openingDetection: return "Detecting openings..."
+        case .measurementExtraction: return "Extracting measurements..."
+        case .confidenceScoring: return "Scoring accuracy..."
         case .complete: return "Almost done..."
+        }
+    }
+
+    /// VoiceOver accessibility description for stage transitions (Story 6.5).
+    /// More descriptive than displayText for audio announcement.
+    var accessibilityDescription: String {
+        switch self {
+        case .idle: return "Ready to process"
+        case .modelLoading: return "Preparing AI model"
+        case .frameExtraction: return "Now processing video frames"
+        case .depthEstimation: return "Now analyzing depth information"
+        case .pointCloudGeneration: return "Now building 3D model"
+        case .tsdfFusion: return "Now combining multiple views"
+        case .scaleCalibration: return "Now measuring dimensions"
+        case .geometricConstraints: return "Now refining wall positions"
+        case .roomDetection: return "Now detecting room structure"
+        case .cabinetDetection: return "Now finding cabinets"
+        case .applianceDetection: return "Now finding appliances"
+        case .islandPeninsulaDetection: return "Now detecting islands and peninsulas"
+        case .countertopDetection: return "Now calculating countertops"
+        case .openingDetection: return "Now detecting windows and doors"
+        case .measurementExtraction: return "Now extracting measurements"
+        case .confidenceScoring: return "Now scoring accuracy"
+        case .complete: return "Processing almost complete"
         }
     }
 
@@ -217,6 +271,12 @@ enum AIPipelineError: LocalizedError, Equatable {
     case constraintsFailed(reason: String)
     case roomDetectionFailed(reason: String)
     case cabinetDetectionFailed(reason: String)
+    case applianceDetectionFailed(reason: String)
+    case islandPeninsulaDetectionFailed(reason: String)
+    case countertopDetectionFailed(reason: String)
+    case openingDetectionFailed(reason: String)
+    case measurementExtractionFailed(reason: String)
+    case confidenceScoringFailed(reason: String)
     case cancelled
     case memoryLimitExceeded
 
@@ -244,6 +304,18 @@ enum AIPipelineError: LocalizedError, Equatable {
             return "Couldn't detect room structure. Ensure walls are visible."
         case .cabinetDetectionFailed:
             return "Couldn't detect cabinets. Ensure cabinets are visible in scan."
+        case .applianceDetectionFailed:
+            return "Couldn't detect appliances. You can add them manually."
+        case .islandPeninsulaDetectionFailed:
+            return "Couldn't detect islands. You can add them manually."
+        case .countertopDetectionFailed:
+            return "Couldn't calculate countertop totals. You can review manually."
+        case .openingDetectionFailed:
+            return "Couldn't detect windows and doors. You can add them manually."
+        case .measurementExtractionFailed:
+            return "Couldn't extract measurements. You can enter them manually."
+        case .confidenceScoringFailed:
+            return "Couldn't calculate confidence scores. Results may need manual review."
         case .cancelled:
             return "Processing was cancelled."
         case .memoryLimitExceeded:
@@ -273,6 +345,18 @@ enum AIPipelineError: LocalizedError, Equatable {
             return "Room detection failed: \(reason)"
         case .cabinetDetectionFailed(let reason):
             return "Cabinet detection failed: \(reason)"
+        case .applianceDetectionFailed(let reason):
+            return "Appliance detection failed: \(reason)"
+        case .islandPeninsulaDetectionFailed(let reason):
+            return "Island/peninsula detection failed: \(reason)"
+        case .countertopDetectionFailed(let reason):
+            return "Countertop detection failed: \(reason)"
+        case .openingDetectionFailed(let reason):
+            return "Opening detection failed: \(reason)"
+        case .measurementExtractionFailed(let reason):
+            return "Measurement extraction failed: \(reason)"
+        case .confidenceScoringFailed(let reason):
+            return "Confidence scoring failed: \(reason)"
         case .cancelled:
             return "Pipeline was cancelled"
         case .memoryLimitExceeded:
@@ -292,7 +376,13 @@ enum AIPipelineError: LocalizedError, Equatable {
              (.calibrationFailed(let a), .calibrationFailed(let b)),
              (.constraintsFailed(let a), .constraintsFailed(let b)),
              (.roomDetectionFailed(let a), .roomDetectionFailed(let b)),
-             (.cabinetDetectionFailed(let a), .cabinetDetectionFailed(let b)):
+             (.cabinetDetectionFailed(let a), .cabinetDetectionFailed(let b)),
+             (.applianceDetectionFailed(let a), .applianceDetectionFailed(let b)),
+             (.islandPeninsulaDetectionFailed(let a), .islandPeninsulaDetectionFailed(let b)),
+             (.countertopDetectionFailed(let a), .countertopDetectionFailed(let b)),
+             (.openingDetectionFailed(let a), .openingDetectionFailed(let b)),
+             (.measurementExtractionFailed(let a), .measurementExtractionFailed(let b)),
+             (.confidenceScoringFailed(let a), .confidenceScoringFailed(let b)):
             return a == b
         case (.cancelled, .cancelled),
              (.memoryLimitExceeded, .memoryLimitExceeded):
@@ -330,6 +420,12 @@ enum AIPipelineError: LocalizedError, Equatable {
         case .constraintsFailed: return .geometricConstraints
         case .roomDetectionFailed: return .roomDetection
         case .cabinetDetectionFailed: return .cabinetDetection
+        case .applianceDetectionFailed: return .applianceDetection
+        case .islandPeninsulaDetectionFailed: return .islandPeninsulaDetection
+        case .countertopDetectionFailed: return .countertopDetection
+        case .openingDetectionFailed: return .openingDetection
+        case .measurementExtractionFailed: return .measurementExtraction
+        case .confidenceScoringFailed: return .confidenceScoring
         case .cancelled, .memoryLimitExceeded: return .idle
         }
     }
@@ -363,6 +459,30 @@ struct AIPipelineResult {
     /// Contains all base, upper, and tall cabinets with dimensions
     let detectedCabinets: CabinetDetectionResult?
 
+    /// Detected appliances (Story 4.4)
+    /// Contains all detected kitchen appliances with dimensions
+    let detectedAppliances: ApplianceDetectionResult?
+
+    /// Detected islands and peninsulas (Story 4.5)
+    /// Contains all detected islands and peninsulas with countertop data
+    let detectedIslandsPeninsulas: IslandPeninsulaDetectionResult?
+
+    /// Detected countertops (Story 4.6)
+    /// Contains wall countertops and aggregated summary for quotes
+    let detectedCountertops: CountertopDetectorResult?
+
+    /// Detected openings (Story 4.9)
+    /// Contains windows and doors with dimensions for floor plan and clearance calculations
+    let detectedOpenings: OpeningDetectionResult?
+
+    /// Extracted measurements (Story 4.7)
+    /// Contains all measurements with raw/snapped values for quotes
+    let extractedMeasurements: MeasurementExtractionResult?
+
+    /// Confidence scores (Story 4.8)
+    /// Contains per-object and overall confidence scores for quote reliability
+    let confidenceScores: ConfidenceScoringResult?
+
     // MARK: - Metadata
 
     /// Total processing time in milliseconds
@@ -388,10 +508,39 @@ struct AIPipelineResult {
     /// Warnings surfaced during processing (displayed in UI if non-empty)
     let warnings: [PipelineWarning]
 
-    // MARK: - Debug Outputs
+    // MARK: - Coverage Metrics (Story 6.2)
+
+    /// Coverage percentage from capture phase (0.0 to 1.0).
+    /// Calculated from AICaptureGuidance zones:
+    /// - 1.0 = all 4 zones captured (full coverage)
+    /// - 0.75 = 3 zones captured
+    /// - 0.50 = 2 zones captured
+    /// - 0.25 = 1 zone captured
+    /// - 0.0 = no zones captured (should not happen in practice)
+    let coveragePercentage: Float?
+
+    /// Set of zones that were NOT captured during the session.
+    /// Used by floor plan renderer to show hatched/faded unscanned areas.
+    /// Empty set means full coverage.
+    let uncapturedZones: Set<AICaptureZone>?
 
     /// Original mesh before constraints (DEBUG only)
     let originalMesh: AIMesh?
+
+    // MARK: - Computed Properties (Story 6.1)
+
+    /// Whether this is an empty kitchen (no cabinets detected).
+    /// Used for empty kitchen handling - room dimensions only scenario.
+    ///
+    /// Returns `nil` if cabinet detection was not run (unknown state).
+    /// Returns `true` if detection ran and found no cabinets.
+    /// Returns `false` if detection ran and found cabinets.
+    var isEmptyKitchen: Bool? {
+        guard let cabinets = detectedCabinets else {
+            return nil  // Detection not run - unknown state
+        }
+        return cabinets.isEmpty
+    }
 }
 
 // MARK: - Coverage Quality
@@ -450,4 +599,98 @@ enum WarningSeverity {
 
     /// Caution warning (e.g., "Result may be incomplete")
     case caution
+}
+
+// MARK: - Pipeline Checkpoint (Story 6.8)
+
+/// Checkpoint saved during pipeline processing for retry capability.
+///
+/// **Per Story 6.8 ADR-1 (Checkpoint Granularity):**
+/// Checkpoints are saved after 4 major stages:
+/// - Depth estimation (50%)
+/// - TSDF fusion (80%)
+/// - Scale calibration (88%)
+/// - Detection complete (98%)
+///
+/// **Per Story 6.8 ADR-2 (Checkpoint Storage):**
+/// - In-memory during active processing (fast retry)
+/// - Only serialized to disk on "Cancel" for "save for later"
+struct PipelineCheckpoint: Codable {
+
+    // MARK: - State Info
+
+    /// Phase where checkpoint was created
+    let phase: AIPipelinePhase
+
+    /// Progress value at checkpoint (0.0 to 1.0)
+    let progress: Double
+
+    /// Timestamp when checkpoint was created
+    let timestamp: Date
+
+    // MARK: - Intermediate Results
+
+    /// Depth frames (after depth estimation)
+    let depthFrameCount: Int?
+
+    /// Whether point clouds have been generated
+    let hasPointClouds: Bool
+
+    /// Whether TSDF fusion is complete
+    let hasFusionResult: Bool
+
+    /// Whether scale calibration is complete
+    let hasCalibrationResult: Bool
+
+    /// Whether detection stages are complete
+    let hasDetectionResults: Bool
+
+    // MARK: - Computed Properties
+
+    /// Next phase to resume from after this checkpoint
+    var nextPhase: AIPipelinePhase {
+        switch phase {
+        case .depthEstimation:
+            return .pointCloudGeneration
+        case .tsdfFusion:
+            return .scaleCalibration
+        case .scaleCalibration:
+            return .geometricConstraints
+        case .geometricConstraints:
+            return .roomDetection
+        case .roomDetection:
+            return .cabinetDetection
+        case .cabinetDetection:
+            return .applianceDetection
+        case .applianceDetection:
+            return .islandPeninsulaDetection
+        case .islandPeninsulaDetection:
+            return .countertopDetection
+        case .countertopDetection:
+            return .openingDetection
+        case .openingDetection:
+            return .measurementExtraction
+        case .measurementExtraction:
+            return .confidenceScoring
+        case .confidenceScoring:
+            return .complete
+        case .complete:
+            return .complete  // Already at end
+        default:
+            // For early phases (idle, modelLoading, frameExtraction, pointCloudGeneration),
+            // restart from beginning since we don't checkpoint these
+            return .modelLoading
+        }
+    }
+
+    /// Human-readable description of checkpoint
+    var description: String {
+        "Checkpoint at \(phase.displayText) (\(Int(progress * 100))%)"
+    }
+}
+
+// MARK: - AIPipelinePhase Codable
+
+extension AIPipelinePhase: Codable {
+    // Default Codable implementation uses rawValue
 }
