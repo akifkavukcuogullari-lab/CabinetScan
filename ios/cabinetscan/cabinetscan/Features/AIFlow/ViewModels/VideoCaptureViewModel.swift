@@ -309,11 +309,41 @@ class VideoCaptureViewModel: ObservableObject {
 
         // Update state
         recordingState = .stopped
+        print("[VideoCaptureViewModel] Recording stopped, starting finalization...")
+
+        // Start watchdog timer - if still in .stopped state after 60s, force error
+        startSaveWatchdog()
 
         // Stop video recording asynchronously
         Task {
             await finalizeRecording()
         }
+    }
+
+    /// Watchdog timer to prevent infinite loading - fires after 60 seconds
+    private var watchdogTask: Task<Void, Never>?
+
+    private func startSaveWatchdog() {
+        watchdogTask?.cancel()
+        watchdogTask = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: 60_000_000_000) // 60 seconds
+                // If we're still in .stopped state, something went wrong
+                if self.recordingState == .stopped && !self.isRecordingFinalized {
+                    print("[VideoCaptureViewModel] WATCHDOG: Save timeout after 60s, forcing error state")
+                    self.errorMessage = "Video save timed out. Please try again."
+                    self.recordingState = .idle
+                }
+            } catch {
+                // Task was cancelled (normal completion path)
+                print("[VideoCaptureViewModel] WATCHDOG: Cancelled (normal)")
+            }
+        }
+    }
+
+    private func cancelWatchdog() {
+        watchdogTask?.cancel()
+        watchdogTask = nil
     }
 
     /// Cancel recording and clean up
@@ -541,6 +571,9 @@ class VideoCaptureViewModel: ObservableObject {
                 )
             )
 
+            // Cancel watchdog since we succeeded
+            cancelWatchdog()
+
             // Signal that recording is finalized and ready for navigation
             isRecordingFinalized = true
 
@@ -548,9 +581,12 @@ class VideoCaptureViewModel: ObservableObject {
             print("[VideoCaptureViewModel] Recording finalized successfully - video: \(persistedVideoURL.lastPathComponent), poses: \(poseCount)")
         } catch {
             print("[VideoCaptureViewModel] ERROR in finalizeRecording: \(error)")
+            // Cancel watchdog
+            cancelWatchdog()
             // Direct property access since we're @MainActor
             errorMessage = "Failed to save recording: \(error.localizedDescription)"
             recordingState = .idle
+            print("[VideoCaptureViewModel] State reset to idle, errorMessage set")
         }
     }
 

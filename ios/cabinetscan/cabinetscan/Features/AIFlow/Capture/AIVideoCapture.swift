@@ -291,10 +291,26 @@ class AIVideoCapture: NSObject {
     /// Includes timeout protection to prevent infinite hang if delegate is not called
     func stopRecording() async throws -> URL {
         print("[AIVideoCapture] stopRecording() called, isRecording=\(isRecording)")
+        print("[AIVideoCapture] movieOutput.isRecording=\(movieOutput.isRecording)")
+        print("[AIVideoCapture] captureSession.isRunning=\(captureSession.isRunning)")
+        print("[AIVideoCapture] outputURL=\(outputURL?.lastPathComponent ?? "nil")")
 
         guard isRecording else {
             print("[AIVideoCapture] ERROR: Not recording, throwing noActiveRecording")
             throw AIVideoCaptureError.noActiveRecording
+        }
+
+        // Check if AVFoundation thinks we're recording
+        guard movieOutput.isRecording else {
+            print("[AIVideoCapture] WARNING: movieOutput.isRecording is false!")
+            print("[AIVideoCapture] Recording may not have started properly")
+            // Return the output URL if we have one, otherwise throw
+            if let url = outputURL, FileManager.default.fileExists(atPath: url.path) {
+                print("[AIVideoCapture] Found existing file at outputURL, returning it")
+                isRecording = false
+                return url
+            }
+            throw AIVideoCaptureError.recordingFailed("Recording was not active in AVFoundation")
         }
 
         // Use a timeout to prevent infinite hang if delegate callback never fires
