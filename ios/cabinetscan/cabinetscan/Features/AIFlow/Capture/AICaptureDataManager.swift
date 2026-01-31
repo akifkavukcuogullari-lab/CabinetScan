@@ -704,39 +704,52 @@ class AICaptureDataManager {
     /// - Parameter sourceURL: URL of the recorded video file
     /// - Returns: URL of the saved video in session directory
     func saveVideo(from sourceURL: URL) async throws -> URL {
+        print("[AICaptureDataManager] saveVideo() called with source: \(sourceURL.lastPathComponent)")
+
         guard let sessionDir = currentSessionDirectory,
               let sessionId = currentSessionId else {
+            print("[AICaptureDataManager] ERROR: No active session")
             throw AICaptureDataError.sessionNotStarted
         }
 
         let destinationURL = sessionDir.appendingPathComponent("video.mp4")
+        print("[AICaptureDataManager] Destination: \(destinationURL.path)")
+        print("[AICaptureDataManager] Starting save with \(Self.fileOperationTimeout)s timeout")
 
         // Wrap file operation with timeout protection (Issue #2 fix)
         return try await withTimeout(seconds: Self.fileOperationTimeout) { [weak self] in
             guard let self = self else {
+                print("[AICaptureDataManager] ERROR: self is nil in timeout block")
                 throw AICaptureDataError.sessionNotStarted
             }
 
+            print("[AICaptureDataManager] Starting file copy operation...")
             return try await withCheckedThrowingContinuation { continuation in
                 self.fileQueue.async {
+                    print("[AICaptureDataManager] File queue task started")
                     do {
                         // Remove existing file if present
                         if self.fileManager.fileExists(atPath: destinationURL.path) {
+                            print("[AICaptureDataManager] Removing existing file...")
                             try self.fileManager.removeItem(at: destinationURL)
                         }
 
                         // Copy video to session directory (move would fail across volumes)
+                        print("[AICaptureDataManager] Copying video file...")
                         try self.fileManager.copyItem(at: sourceURL, to: destinationURL)
+                        print("[AICaptureDataManager] Video file copied successfully")
 
                         // Update metadata
+                        print("[AICaptureDataManager] Updating metadata...")
                         var metadata = try self.loadMetadata(for: sessionId)
                         metadata.persistenceState = AISessionPersistenceState.videoOnly.rawValue
                         try self.saveMetadata(metadata)
+                        print("[AICaptureDataManager] Metadata updated")
 
-                        print("[AICaptureDataManager] Video saved: \(destinationURL.lastPathComponent)")
+                        print("[AICaptureDataManager] Video saved successfully, resuming continuation")
                         continuation.resume(returning: destinationURL)
                     } catch {
-                        print("[AICaptureDataManager] Failed to save video: \(error)")
+                        print("[AICaptureDataManager] ERROR: Failed to save video: \(error)")
                         continuation.resume(throwing: AICaptureDataError.videoSaveFailed(error))
                     }
                 }

@@ -290,40 +290,53 @@ class AIVideoCapture: NSObject {
     /// Stop recording and return the video URL (Task 2.5)
     /// Includes timeout protection to prevent infinite hang if delegate is not called
     func stopRecording() async throws -> URL {
+        print("[AIVideoCapture] stopRecording() called, isRecording=\(isRecording)")
+
         guard isRecording else {
+            print("[AIVideoCapture] ERROR: Not recording, throwing noActiveRecording")
             throw AIVideoCaptureError.noActiveRecording
         }
 
         // Use a timeout to prevent infinite hang if delegate callback never fires
         let timeoutSeconds: UInt64 = 30 // 30 second timeout for video finalization
+        print("[AIVideoCapture] Starting stop with \(timeoutSeconds)s timeout")
 
         return try await withThrowingTaskGroup(of: URL.self) { group in
             // Task 1: Wait for delegate callback
             group.addTask { [weak self] in
-                try await withCheckedThrowingContinuation { continuation in
+                print("[AIVideoCapture] Task 1: Starting continuation task")
+                return try await withCheckedThrowingContinuation { continuation in
                     guard let self = self else {
+                        print("[AIVideoCapture] ERROR: self is nil in continuation")
                         continuation.resume(throwing: AIVideoCaptureError.noActiveRecording)
                         return
                     }
+                    print("[AIVideoCapture] Task 1: Setting stopContinuation")
                     self.stopContinuation = continuation
                     self.sessionQueue.async { [weak self] in
+                        print("[AIVideoCapture] Task 1: Calling movieOutput.stopRecording()")
                         self?.movieOutput.stopRecording()
-                        print("[AIVideoCapture] Stop recording requested")
+                        print("[AIVideoCapture] Task 1: movieOutput.stopRecording() called, waiting for delegate")
                     }
                 }
             }
 
             // Task 2: Timeout protection
             group.addTask {
+                print("[AIVideoCapture] Task 2: Starting timeout task (\(timeoutSeconds)s)")
                 try await Task.sleep(nanoseconds: timeoutSeconds * 1_000_000_000)
+                print("[AIVideoCapture] Task 2: Timeout reached, throwing error")
                 throw AIVideoCaptureError.recordingFailed("Video finalization timed out after \(timeoutSeconds) seconds")
             }
 
             // Wait for first task to complete
+            print("[AIVideoCapture] Waiting for first task to complete...")
             guard let result = try await group.next() else {
+                print("[AIVideoCapture] ERROR: group.next() returned nil")
                 throw AIVideoCaptureError.recordingFailed("Unexpected error during video finalization")
             }
 
+            print("[AIVideoCapture] Got result, cancelling remaining tasks")
             // Cancel remaining tasks
             group.cancelAll()
             return result
@@ -393,32 +406,45 @@ extension AIVideoCapture: AVCaptureFileOutputRecordingDelegate {
     }
 
     func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        print("[AIVideoCapture] DELEGATE: didFinishRecordingTo called")
+        print("[AIVideoCapture] DELEGATE: outputFileURL=\(outputFileURL.lastPathComponent)")
+        print("[AIVideoCapture] DELEGATE: error=\(error?.localizedDescription ?? "nil")")
+        print("[AIVideoCapture] DELEGATE: stopContinuation exists=\(stopContinuation != nil)")
+
         isRecording = false
+
+        // Capture continuation before any async work to avoid race conditions
+        guard let continuation = stopContinuation else {
+            print("[AIVideoCapture] DELEGATE: WARNING - No continuation to resume!")
+            return
+        }
+        stopContinuation = nil
 
         if let error = error {
             // Check if this was a user-initiated stop (not a real error)
             // AVFoundation reports this as an error but the file is valid
             let nsError = error as NSError
+            print("[AIVideoCapture] DELEGATE: Error code=\(nsError.code), domain=\(nsError.domain)")
+
             // Check if the file exists and has valid data
             let fileExists = FileManager.default.fileExists(atPath: outputFileURL.path)
             let fileSize = (try? FileManager.default.attributesOfItem(atPath: outputFileURL.path)[.size] as? Int64) ?? 0
+            print("[AIVideoCapture] DELEGATE: fileExists=\(fileExists), fileSize=\(fileSize)")
 
             if fileExists && fileSize > 0 {
                 // File exists and has content - recording was successful
-                print("[AIVideoCapture] Recording finished successfully: \(outputFileURL.lastPathComponent)")
-                stopContinuation?.resume(returning: outputFileURL)
+                print("[AIVideoCapture] DELEGATE: Recording finished successfully despite error, resuming with URL")
+                continuation.resume(returning: outputFileURL)
             } else {
-                print("[AIVideoCapture] Recording failed with error: \(error)")
-                stopContinuation?.resume(throwing: AIVideoCaptureError.recordingFailed(error.localizedDescription))
+                print("[AIVideoCapture] DELEGATE: Recording failed, resuming with error")
+                continuation.resume(throwing: AIVideoCaptureError.recordingFailed(error.localizedDescription))
                 // Clean up failed recording
                 try? FileManager.default.removeItem(at: outputFileURL)
             }
         } else {
-            print("[AIVideoCapture] Recording finished: \(outputFileURL.lastPathComponent)")
-            stopContinuation?.resume(returning: outputFileURL)
+            print("[AIVideoCapture] DELEGATE: Recording finished successfully, resuming with URL")
+            continuation.resume(returning: outputFileURL)
         }
-
-        stopContinuation = nil
     }
 }
 

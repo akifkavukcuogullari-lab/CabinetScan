@@ -487,26 +487,45 @@ class VideoCaptureViewModel: ObservableObject {
     }
 
     /// Finalize recording and prepare capture data
+    /// Has overall timeout protection to prevent infinite hangs
     private func finalizeRecording() async {
         guard let videoCapture = videoCapture else {
+            print("[VideoCaptureViewModel] ERROR: Video capture not available")
             errorMessage = "Video capture not available"
+            recordingState = .idle
             return
         }
 
+        print("[VideoCaptureViewModel] Starting finalizeRecording...")
+
         do {
-            // Stop recording and get video URL
-            let tempVideoURL = try await videoCapture.stopRecording()
+            // Overall timeout for entire finalization process (45 seconds)
+            let result = try await withOverallTimeout(seconds: 45) {
+                // Step 1: Stop recording and get video URL
+                print("[VideoCaptureViewModel] Step 1: Stopping video recording...")
+                let tempVideoURL = try await videoCapture.stopRecording()
+                print("[VideoCaptureViewModel] Step 1 complete: Got temp URL \(tempVideoURL.lastPathComponent)")
 
-            // Export pose data from AR session
-            let poseData = sessionManager.exportPoseData()
-            exportedPoseData = poseData
+                // Step 2: Export pose data from AR session
+                print("[VideoCaptureViewModel] Step 2: Exporting pose data...")
+                let poseData = await MainActor.run { self.sessionManager.exportPoseData() }
+                let poseCount = poseData["poseCount"] as? Int ?? 0
+                print("[VideoCaptureViewModel] Step 2 complete: Exported \(poseCount) poses")
 
-            // Issue #5 fix: Save poses FIRST (smaller, faster) to minimize
-            // window for inconsistent state if app crashes between operations
-            _ = try dataManager.savePoseDataFromExport(poseData)
+                // Step 3: Save poses FIRST (smaller, faster)
+                print("[VideoCaptureViewModel] Step 3: Saving pose data...")
+                _ = try self.dataManager.savePoseDataFromExport(poseData)
+                print("[VideoCaptureViewModel] Step 3 complete: Pose data saved")
 
-            // Persist video to session directory (Story 2.6)
-            let persistedVideoURL = try await dataManager.saveVideo(from: tempVideoURL)
+                // Step 4: Persist video to session directory
+                print("[VideoCaptureViewModel] Step 4: Saving video to session directory...")
+                let persistedVideoURL = try await self.dataManager.saveVideo(from: tempVideoURL)
+                print("[VideoCaptureViewModel] Step 4 complete: Video saved to \(persistedVideoURL.lastPathComponent)")
+
+                return (persistedVideoURL, poseData)
+            }
+
+            let (persistedVideoURL, poseData) = result
 
             // Create capture session data with persisted URLs
             captureData = AICaptureSessionData(
@@ -526,14 +545,46 @@ class VideoCaptureViewModel: ObservableObject {
             isRecordingFinalized = true
 
             let poseCount = poseData["poseCount"] as? Int ?? 0
-            print("[VideoCaptureViewModel] Recording finalized and persisted - video: \(persistedVideoURL.lastPathComponent), poses: \(poseCount)")
+            print("[VideoCaptureViewModel] Recording finalized successfully - video: \(persistedVideoURL.lastPathComponent), poses: \(poseCount)")
         } catch {
-            await MainActor.run {
-                errorMessage = "Failed to save recording: \(error.localizedDescription)"
-                recordingState = .idle
-            }
-            print("[VideoCaptureViewModel] Failed to finalize recording: \(error)")
+            print("[VideoCaptureViewModel] ERROR in finalizeRecording: \(error)")
+            // Direct property access since we're @MainActor
+            errorMessage = "Failed to save recording: \(error.localizedDescription)"
+            recordingState = .idle
         }
+    }
+
+    /// Execute an async operation with timeout protection
+    private func withOverallTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw NSError(domain: "VideoCaptureViewModel", code: -1, userInfo: [
+                    NSLocalizedDescriptionKey: "Operation timed out after \(Int(seconds)) seconds"
+                ])
+            }
+
+            guard let result = try await group.next() else {
+                throw NSError(domain: "VideoCaptureViewModel", code: -2, userInfo: [
+                    NSLocalizedDescriptionKey: "Unexpected error during finalization"
+                ])
+            }
+            group.cancelAll()
+            return result
+        }
+    }
+
+    /// Cancel the finalization process (called from UI if user wants to abort)
+    func cancelFinalization() {
+        print("[VideoCaptureViewModel] User cancelled finalization")
+        videoCapture?.cancelRecording()
+        errorMessage = nil
+        recordingState = .idle
+        captureData = nil
+        isRecordingFinalized = false
     }
 
     // MARK: - Computed Properties

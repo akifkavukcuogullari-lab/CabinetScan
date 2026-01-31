@@ -381,6 +381,25 @@ struct VideoCaptureView: View {
                 Text("Saving video...")
                     .font(.headline)
                     .foregroundStyle(.white)
+
+                Text("This may take a few moments")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.7))
+
+                // Cancel button for escape hatch
+                Button {
+                    viewModel.cancelFinalization()
+                    onBack()
+                } label: {
+                    Text("Cancel")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.2))
+                        .clipShape(Capsule())
+                }
+                .padding(.top, 8)
             }
             .padding(40)
             .background(Color.black.opacity(0.7))
