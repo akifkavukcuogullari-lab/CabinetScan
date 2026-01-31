@@ -271,6 +271,20 @@ struct VideoCaptureView: View {
                 GuidanceArrows(direction: direction)
             }
 
+            // Coverage zone mini-map (top-right corner)
+            VStack {
+                HStack {
+                    Spacer()
+                    CoverageZoneContainer(
+                        capturedZones: guidanceViewModel.capturedZones,
+                        guidanceDirection: guidanceViewModel.guidanceDirection
+                    )
+                    .padding(.trailing, 16)
+                    .padding(.top, 60)
+                }
+                Spacer()
+            }
+
             VStack {
                 Spacer()
 
