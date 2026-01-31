@@ -97,6 +97,8 @@ final class AIPipelineOrchestrator: ObservableObject {
     /// Time logger for performance tracking
     #if DEBUG
     private let timeLogger = ProcessingTimeLogger()
+    /// Performance validator for end-to-end NFR validation (Story 6.9 Task 4)
+    private let performanceValidator = EndToEndPerformanceValidator()
     #endif
 
     /// Pipeline start time for ETA calculation
@@ -201,6 +203,15 @@ final class AIPipelineOrchestrator: ObservableObject {
 
         #if DEBUG
         timeLogger.reset()
+        performanceValidator.startValidation()
+
+        // Story 6.9 Task 3.5: Memory headroom validation before processing
+        let deviceProfile = DevicePerformanceProfile.forCurrentDevice()
+        let memoryCheck = deviceProfile.checkMemoryHeadroom()
+        if !memoryCheck.sufficient {
+            logger.warning("⚠️ Low memory detected before processing: \(String(format: "%.0f", memoryCheck.availableMB))MB available, \(String(format: "%.0f", memoryCheck.requiredMB))MB required")
+            // Continue but log warning - don't fail immediately as memory may be freed during processing
+        }
         #endif
 
         do {
@@ -352,6 +363,19 @@ final class AIPipelineOrchestrator: ObservableObject {
 
             #if DEBUG
             timeLogger.logSummary()
+
+            // Story 6.9 Task 4: End-to-end performance validation
+            let validationResult = performanceValidator.finishValidation(timeLogger: timeLogger)
+            if validationResult.hasFailures {
+                logger.warning("⚠️ Performance validation has failures: \(validationResult.overallStatus.rawValue)")
+                for rec in validationResult.recommendations {
+                    logger.warning("  → \(rec)")
+                }
+            } else if validationResult.overallStatus == .warn {
+                logger.info("⚠️ Performance validation has warnings")
+            } else {
+                logger.info("✅ Performance validation passed all NFRs")
+            }
             #endif
 
             logger.info("Pipeline completed successfully in \(result.processingTimeMs)ms")
@@ -2153,6 +2177,12 @@ final class AIPipelineOrchestrator: ObservableObject {
 
         #if DEBUG
         timeLogger.logSummary()
+
+        // Story 6.9 Task 4: End-to-end performance validation for retry path
+        let validationResult = performanceValidator.finishValidation(timeLogger: timeLogger)
+        if validationResult.hasFailures {
+            logger.warning("⚠️ Retry performance validation has failures: \(validationResult.overallStatus.rawValue)")
+        }
         #endif
 
         logger.info("Retry pipeline completed successfully in \(result.processingTimeMs)ms")
