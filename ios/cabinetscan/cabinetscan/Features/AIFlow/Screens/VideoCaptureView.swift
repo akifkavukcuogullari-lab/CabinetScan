@@ -34,8 +34,8 @@ struct VideoCaptureView: View {
     /// View model for capture guidance (Story 2.3)
     @StateObject private var guidanceViewModel: CaptureGuidanceViewModel
 
-    /// Grid manager for scan coverage visualization
-    @StateObject private var gridManager = ScanCoverageGridManager()
+    /// Spatial coverage tracker for room-based scan visualization
+    @StateObject private var spatialTracker = SpatialCoverageTracker()
 
     /// Whether zoom indicator is visible
     @State private var showZoomIndicator = false
@@ -129,7 +129,7 @@ struct VideoCaptureView: View {
         .onDisappear {
             viewModel.onViewDisappear()
             guidanceViewModel.stopGuidance()
-            gridManager.stopTracking()
+            spatialTracker.stopTracking()
         }
         .onChange(of: viewModel.isRecordingFinalized) { _, isFinalized in
             if isFinalized, let data = viewModel.captureData {
@@ -153,15 +153,15 @@ struct VideoCaptureView: View {
                 // Connect guidance to video capture for frame analysis
                 guidanceViewModel.setVideoCapture(viewModel.videoCapture)
                 guidanceViewModel.startGuidance()
-                // Start grid coverage tracking
-                gridManager.startTracking()
+                // Start spatial coverage tracking with AR session
+                spatialTracker.startTracking(sessionManager: viewModel.sessionManager)
                 // Accessibility: Announce recording started
                 announceForVoiceOver("Recording started")
             } else if newState != .recording && oldState == .recording {
                 guidanceViewModel.stopGuidance()
                 guidanceViewModel.setVideoCapture(nil)
-                // Stop grid coverage tracking
-                gridManager.stopTracking()
+                // Stop spatial coverage tracking
+                spatialTracker.stopTracking()
                 // Accessibility: Announce recording stopped
                 if newState == .stopped {
                     announceForVoiceOver("Recording stopped, saving video")
@@ -173,14 +173,6 @@ struct VideoCaptureView: View {
             guidanceViewModel.processElapsedTime(newTime)
             // Accessibility: Announce time periodically for VoiceOver users
             announceTimeIfNeeded(newTime)
-        }
-        .onChange(of: guidanceViewModel.capturedZones) { _, zones in
-            // Update grid coverage when zones change
-            gridManager.updateFromCapturedZones(zones)
-        }
-        .onChange(of: guidanceViewModel.guidanceDirection) { _, direction in
-            // Update active cell indicator
-            gridManager.updateActiveFromDirection(direction)
         }
     }
 
@@ -275,8 +267,8 @@ struct VideoCaptureView: View {
     @ViewBuilder
     private var recordingOverlay: some View {
         ZStack {
-            // Scan coverage grid overlay (full screen)
-            ScanCoverageGrid(gridManager: gridManager)
+            // Spatial room coverage overlay
+            SpatialCoverageScreenOverlay(tracker: spatialTracker)
 
             // Guidance arrows in center area (Story 2.3 - AC1)
             if let direction = guidanceViewModel.guidanceDirection {
