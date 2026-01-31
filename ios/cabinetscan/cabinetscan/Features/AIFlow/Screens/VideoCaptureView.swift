@@ -34,6 +34,9 @@ struct VideoCaptureView: View {
     /// View model for capture guidance (Story 2.3)
     @StateObject private var guidanceViewModel: CaptureGuidanceViewModel
 
+    /// Grid manager for scan coverage visualization
+    @StateObject private var gridManager = ScanCoverageGridManager()
+
     /// Whether zoom indicator is visible
     @State private var showZoomIndicator = false
 
@@ -126,6 +129,7 @@ struct VideoCaptureView: View {
         .onDisappear {
             viewModel.onViewDisappear()
             guidanceViewModel.stopGuidance()
+            gridManager.stopTracking()
         }
         .onChange(of: viewModel.isRecordingFinalized) { _, isFinalized in
             if isFinalized, let data = viewModel.captureData {
@@ -149,11 +153,15 @@ struct VideoCaptureView: View {
                 // Connect guidance to video capture for frame analysis
                 guidanceViewModel.setVideoCapture(viewModel.videoCapture)
                 guidanceViewModel.startGuidance()
+                // Start grid coverage tracking
+                gridManager.startTracking()
                 // Accessibility: Announce recording started
                 announceForVoiceOver("Recording started")
             } else if newState != .recording && oldState == .recording {
                 guidanceViewModel.stopGuidance()
                 guidanceViewModel.setVideoCapture(nil)
+                // Stop grid coverage tracking
+                gridManager.stopTracking()
                 // Accessibility: Announce recording stopped
                 if newState == .stopped {
                     announceForVoiceOver("Recording stopped, saving video")
@@ -165,6 +173,14 @@ struct VideoCaptureView: View {
             guidanceViewModel.processElapsedTime(newTime)
             // Accessibility: Announce time periodically for VoiceOver users
             announceTimeIfNeeded(newTime)
+        }
+        .onChange(of: guidanceViewModel.capturedZones) { _, zones in
+            // Update grid coverage when zones change
+            gridManager.updateFromCapturedZones(zones)
+        }
+        .onChange(of: guidanceViewModel.guidanceDirection) { _, direction in
+            // Update active cell indicator
+            gridManager.updateActiveFromDirection(direction)
         }
     }
 
@@ -259,30 +275,12 @@ struct VideoCaptureView: View {
     @ViewBuilder
     private var recordingOverlay: some View {
         ZStack {
-            // Corner indicators at corners (Story 2.3 - AC1)
-            CornerIndicators(
-                capturedZones: guidanceViewModel.capturedZones,
-                showTooltip: guidanceViewModel.showCornerTooltip,
-                onTooltipDismiss: { guidanceViewModel.dismissCornerTooltip() }
-            )
+            // Scan coverage grid overlay (full screen)
+            ScanCoverageGrid(gridManager: gridManager)
 
             // Guidance arrows in center area (Story 2.3 - AC1)
             if let direction = guidanceViewModel.guidanceDirection {
                 GuidanceArrows(direction: direction)
-            }
-
-            // Coverage zone mini-map (top-right corner)
-            VStack {
-                HStack {
-                    Spacer()
-                    CoverageZoneContainer(
-                        capturedZones: guidanceViewModel.capturedZones,
-                        guidanceDirection: guidanceViewModel.guidanceDirection
-                    )
-                    .padding(.trailing, 16)
-                    .padding(.top, 60)
-                }
-                Spacer()
             }
 
             VStack {
