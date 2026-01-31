@@ -47,10 +47,12 @@ final class FramePreprocessor {
     // MARK: - Constants
 
     /// Target width for model input (DepthAnything V2)
+    /// Model spec: "518 pixels wide by 392 pixels high"
     static let targetWidth = 518
 
     /// Target height for model input (DepthAnything V2)
-    static let targetHeight = 518
+    /// Model spec: "518 pixels wide by 392 pixels high"
+    static let targetHeight = 392
 
     // MARK: - Properties
 
@@ -119,20 +121,35 @@ final class FramePreprocessor {
 
     // MARK: - Image Transformations
 
-    /// Applies center-crop to make the image square.
-    /// Takes the largest centered square from the input image.
+    /// Applies center-crop to match target aspect ratio.
+    /// Takes the largest centered region from the input image that matches target aspect ratio.
     ///
     /// - Parameters:
     ///   - image: Source CIImage
     ///   - width: Source width
     ///   - height: Source height
-    /// - Returns: Center-cropped CIImage (square)
+    /// - Returns: Center-cropped CIImage matching target aspect ratio
     private func centerCrop(_ image: CIImage, width: Int, height: Int) -> CIImage {
-        let size = min(width, height)
-        let offsetX = (width - size) / 2
-        let offsetY = (height - size) / 2
+        let targetAspect = CGFloat(Self.targetWidth) / CGFloat(Self.targetHeight) // 518/392 ≈ 1.32
+        let sourceAspect = CGFloat(width) / CGFloat(height)
 
-        let cropRect = CGRect(x: offsetX, y: offsetY, width: size, height: size)
+        let cropWidth: Int
+        let cropHeight: Int
+
+        if sourceAspect > targetAspect {
+            // Source is wider - crop width
+            cropHeight = height
+            cropWidth = Int(CGFloat(height) * targetAspect)
+        } else {
+            // Source is taller - crop height
+            cropWidth = width
+            cropHeight = Int(CGFloat(width) / targetAspect)
+        }
+
+        let offsetX = (width - cropWidth) / 2
+        let offsetY = (height - cropHeight) / 2
+
+        let cropRect = CGRect(x: offsetX, y: offsetY, width: cropWidth, height: cropHeight)
         return image.cropped(to: cropRect)
     }
 

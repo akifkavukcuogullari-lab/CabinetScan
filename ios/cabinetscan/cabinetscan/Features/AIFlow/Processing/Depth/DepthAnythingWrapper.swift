@@ -17,9 +17,10 @@ final class DepthAnythingWrapper {
 
     // MARK: - Constants
 
-    /// Model input dimensions (518x518 RGB)
+    /// Model input dimensions (518x392 RGB)
+    /// Per Core ML model spec: "518 pixels wide by 392 pixels high"
     static let inputWidth = 518
-    static let inputHeight = 518
+    static let inputHeight = 392
     static let inputChannels = 3
 
     /// Model name in bundle
