@@ -10,7 +10,18 @@
 		2AE8406F2EFF87F30061E0C9 /* Config/Debug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 2AE8406E2EFF87F30061E0C9 /* Config/Debug.xcconfig */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		2A176CCD2F29536900CF4AEB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2AD9A0742EF50813005EB90A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2AD9A07B2EF50813005EB90A;
+			remoteInfo = cabinetscan;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		2A176CC92F29536900CF4AEB /* cabinetscanTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = cabinetscanTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AD9A07C2EF50813005EB90A /* cabinetscan.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = cabinetscan.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AE8406E2EFF87F30061E0C9 /* Config/Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Debug.xcconfig; sourceTree = "<group>"; };
 		2AE840702EFF88000061E0C9 /* Config/Production.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Production.xcconfig; sourceTree = "<group>"; };
@@ -27,6 +38,11 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		2A176CCA2F29536900CF4AEB /* cabinetscanTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = cabinetscanTests;
+			sourceTree = "<group>";
+		};
 		2AD9A07E2EF50813005EB90A /* cabinetscan */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -38,6 +54,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		2A176CC62F29536900CF4AEB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2AD9A0792EF50813005EB90A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -52,6 +75,7 @@
 			isa = PBXGroup;
 			children = (
 				2AD9A07E2EF50813005EB90A /* cabinetscan */,
+				2A176CCA2F29536900CF4AEB /* cabinetscanTests */,
 				2AD9A07D2EF50813005EB90A /* Products */,
 				2AE8406E2EFF87F30061E0C9 /* Config/Debug.xcconfig */,
 				2AE840702EFF88000061E0C9 /* Config/Production.xcconfig */,
@@ -62,6 +86,7 @@
 			isa = PBXGroup;
 			children = (
 				2AD9A07C2EF50813005EB90A /* cabinetscan.app */,
+				2A176CC92F29536900CF4AEB /* cabinetscanTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -69,6 +94,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		2A176CC82F29536900CF4AEB /* cabinetscanTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2A176CCF2F29536900CF4AEB /* Build configuration list for PBXNativeTarget "cabinetscanTests" */;
+			buildPhases = (
+				2A176CC52F29536900CF4AEB /* Sources */,
+				2A176CC62F29536900CF4AEB /* Frameworks */,
+				2A176CC72F29536900CF4AEB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2A176CCE2F29536900CF4AEB /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				2A176CCA2F29536900CF4AEB /* cabinetscanTests */,
+			);
+			name = cabinetscanTests;
+			packageProductDependencies = (
+			);
+			productName = cabinetscanTests;
+			productReference = 2A176CC92F29536900CF4AEB /* cabinetscanTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		2AD9A07B2EF50813005EB90A /* cabinetscan */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2AD9A0872EF50814005EB90A /* Build configuration list for PBXNativeTarget "cabinetscan" */;
@@ -101,6 +149,10 @@
 				LastSwiftUpdateCheck = 2610;
 				LastUpgradeCheck = 2610;
 				TargetAttributes = {
+					2A176CC82F29536900CF4AEB = {
+						CreatedOnToolsVersion = 26.1.1;
+						TestTargetID = 2AD9A07B2EF50813005EB90A;
+					};
 					2AD9A07B2EF50813005EB90A = {
 						CreatedOnToolsVersion = 26.1.1;
 					};
@@ -121,11 +173,19 @@
 			projectRoot = "";
 			targets = (
 				2AD9A07B2EF50813005EB90A /* cabinetscan */,
+				2A176CC82F29536900CF4AEB /* cabinetscanTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		2A176CC72F29536900CF4AEB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2AD9A07A2EF50813005EB90A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -137,6 +197,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		2A176CC52F29536900CF4AEB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2AD9A0782EF50813005EB90A /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -146,7 +213,62 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		2A176CCE2F29536900CF4AEB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2AD9A07B2EF50813005EB90A /* cabinetscan */;
+			targetProxy = 2A176CCD2F29536900CF4AEB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		2A176CD02F29536900CF4AEB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3AKYN8H497;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nextlyn.cabinetscanTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/cabinetscan.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/cabinetscan";
+			};
+			name = Debug;
+		};
+		2A176CD12F29536900CF4AEB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3AKYN8H497;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nextlyn.cabinetscanTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/cabinetscan.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/cabinetscan";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		2AD9A0852EF50814005EB90A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 2AE8406E2EFF87F30061E0C9 /* Config/Debug.xcconfig */;
@@ -368,6 +490,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		2A176CCF2F29536900CF4AEB /* Build configuration list for PBXNativeTarget "cabinetscanTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2A176CD02F29536900CF4AEB /* Debug */,
+				2A176CD12F29536900CF4AEB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		2AD9A0772EF50813005EB90A /* Build configuration list for PBXProject "cabinetscan" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

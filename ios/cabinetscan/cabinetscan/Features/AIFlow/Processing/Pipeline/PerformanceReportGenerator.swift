@@ -381,6 +381,209 @@ enum OptimizationCategory: String, Codable {
     case battery
 }
 
+// MARK: - End-to-End Report Generation (Story 6.9 Task 5)
+
+extension PerformanceReportGenerator {
+
+    /// Generates a comprehensive end-to-end performance report.
+    ///
+    /// - Parameters:
+    ///   - validationResult: PerformanceValidationResult from EndToEndPerformanceValidator
+    ///   - timeLogger: ProcessingTimeLogger with stage metrics
+    ///   - captureDuration: Total capture phase duration
+    /// - Returns: EndToEndPerformanceReport with all NFR compliance
+    func generateEndToEndReport(
+        validationResult: PerformanceValidationResult,
+        timeLogger: ProcessingTimeLogger,
+        captureDuration: TimeInterval
+    ) -> EndToEndPerformanceReport {
+        let processingMetrics = timeLogger.getMetrics()
+        let bottlenecks = timeLogger.identifyBottlenecks()
+        let memoryTrend = timeLogger.getMemoryTrendAnalysis()
+        let stageBreakdown = timeLogger.getStageBreakdown()
+
+        return EndToEndPerformanceReport(
+            timestamp: validationResult.timestamp,
+            deviceInfo: validationResult.deviceInfo,
+            deviceTier: validationResult.deviceTier,
+            captureDurationSeconds: captureDuration,
+            processingDurationMs: validationResult.totalProcessingMs,
+            totalDurationSeconds: captureDuration + Double(validationResult.totalProcessingMs) / 1000.0,
+            nfrCompliance: NFRComplianceReport(
+                nfr1DepthInference: NFRStatus(
+                    name: "NFR1: Depth Inference",
+                    target: "< \(DevicePerformanceProfile.forCurrentDevice().depthInferenceTargetMs)ms per frame",
+                    actual: "\(String(format: "%.1f", validationResult.depthInferenceAvgMs))ms",
+                    status: validationResult.depthInferenceStatus
+                ),
+                nfr2ProcessingTime: NFRStatus(
+                    name: "NFR2: Processing Time",
+                    target: "< \(DevicePerformanceProfile.forCurrentDevice().maxProcessingTimeMs)ms",
+                    actual: "\(validationResult.totalProcessingMs)ms",
+                    status: validationResult.totalProcessingStatus
+                ),
+                nfr4BatteryDrain: NFRStatus(
+                    name: "NFR4: Battery Drain",
+                    target: "< \(DevicePerformanceProfile.forCurrentDevice().maxBatteryDrainPercent)%",
+                    actual: "\(String(format: "%.1f", validationResult.batteryDrainPercent))%",
+                    status: validationResult.batteryStatus
+                ),
+                nfr13MemoryUsage: NFRStatus(
+                    name: "NFR13: Memory Usage",
+                    target: "< \(Int(DevicePerformanceProfile.forCurrentDevice().maxMemoryMB))MB",
+                    actual: "\(String(format: "%.0f", validationResult.peakMemoryMB))MB",
+                    status: validationResult.memoryStatus
+                ),
+                overallStatus: validationResult.overallStatus
+            ),
+            stageBreakdown: stageBreakdown.map { EndToEndStageMetric(
+                name: $0.name,
+                durationMs: $0.durationMs,
+                percentOfTotal: $0.percentOfTotal,
+                budgetMs: $0.budgetMs,
+                status: $0.status
+            )},
+            bottlenecks: validationResult.bottlenecks,
+            memoryTrend: memoryTrend.map { EndToEndMemoryTrend(stageName: $0.stageName, deltaMB: $0.memoryDeltaMB) },
+            recommendations: validationResult.recommendations
+        )
+    }
+
+    /// Generates a markdown-formatted report for documentation.
+    ///
+    /// - Parameter report: EndToEndPerformanceReport to format
+    /// - Returns: Markdown string suitable for documentation
+    func generateMarkdownReport(_ report: EndToEndPerformanceReport) -> String {
+        var md = """
+        # End-to-End Performance Validation Report
+
+        **Generated:** \(ISO8601DateFormatter().string(from: report.timestamp))
+        **Device:** \(report.deviceInfo.model) (\(report.deviceInfo.iOSVersion))
+        **Device Tier:** \(report.deviceTier.rawValue)
+
+        ## Summary
+
+        | Metric | Value |
+        |--------|-------|
+        | Capture Duration | \(String(format: "%.1f", report.captureDurationSeconds))s |
+        | Processing Duration | \(String(format: "%.1f", Double(report.processingDurationMs) / 1000.0))s |
+        | Total Duration | \(String(format: "%.1f", report.totalDurationSeconds))s |
+        | **Overall Status** | **\(statusEmoji(report.nfrCompliance.overallStatus)) \(report.nfrCompliance.overallStatus.rawValue.uppercased())** |
+
+        ## NFR Compliance
+
+        | NFR | Target | Actual | Status |
+        |-----|--------|--------|--------|
+        | \(report.nfrCompliance.nfr1DepthInference.name) | \(report.nfrCompliance.nfr1DepthInference.target) | \(report.nfrCompliance.nfr1DepthInference.actual) | \(statusEmoji(report.nfrCompliance.nfr1DepthInference.status)) |
+        | \(report.nfrCompliance.nfr2ProcessingTime.name) | \(report.nfrCompliance.nfr2ProcessingTime.target) | \(report.nfrCompliance.nfr2ProcessingTime.actual) | \(statusEmoji(report.nfrCompliance.nfr2ProcessingTime.status)) |
+        | \(report.nfrCompliance.nfr4BatteryDrain.name) | \(report.nfrCompliance.nfr4BatteryDrain.target) | \(report.nfrCompliance.nfr4BatteryDrain.actual) | \(statusEmoji(report.nfrCompliance.nfr4BatteryDrain.status)) |
+        | \(report.nfrCompliance.nfr13MemoryUsage.name) | \(report.nfrCompliance.nfr13MemoryUsage.target) | \(report.nfrCompliance.nfr13MemoryUsage.actual) | \(statusEmoji(report.nfrCompliance.nfr13MemoryUsage.status)) |
+
+        ## Stage Breakdown
+
+        | Stage | Duration | % of Total | Budget | Status |
+        |-------|----------|------------|--------|--------|
+
+        """
+
+        for stage in report.stageBreakdown {
+            md += "| \(stage.name) | \(stage.durationMs)ms | \(String(format: "%.1f", stage.percentOfTotal))% | \(stage.budgetMs)ms | \(statusEmoji(stage.status)) |\n"
+        }
+
+        if !report.bottlenecks.isEmpty {
+            md += """
+
+            ## Bottlenecks
+
+            | Stage | Actual | Budget | Overage |
+            |-------|--------|--------|---------|
+
+            """
+
+            for bottleneck in report.bottlenecks {
+                md += "| \(bottleneck.stageName) | \(bottleneck.actualMs)ms | \(bottleneck.budgetMs)ms | +\(String(format: "%.0f", bottleneck.overagePercent))% |\n"
+            }
+        }
+
+        if !report.recommendations.isEmpty {
+            md += """
+
+            ## Recommendations
+
+            """
+
+            for (index, rec) in report.recommendations.enumerated() {
+                md += "\(index + 1). \(rec)\n"
+            }
+        }
+
+        md += """
+
+        ---
+        *Report generated by CabinetScan AI Pipeline Performance Validator*
+        """
+
+        return md
+    }
+
+    private func statusEmoji(_ status: PassStatus) -> String {
+        switch status {
+        case .pass: return "✅"
+        case .warn: return "⚠️"
+        case .fail: return "❌"
+        }
+    }
+}
+
+// MARK: - End-to-End Report Structures (Story 6.9 Task 5)
+
+/// Comprehensive end-to-end performance report.
+struct EndToEndPerformanceReport: Codable {
+    let timestamp: Date
+    let deviceInfo: PerformanceDeviceInfo
+    let deviceTier: DeviceTier
+    let captureDurationSeconds: TimeInterval
+    let processingDurationMs: Int
+    let totalDurationSeconds: TimeInterval
+    let nfrCompliance: NFRComplianceReport
+    let stageBreakdown: [EndToEndStageMetric]
+    let bottlenecks: [BottleneckInfo]
+    let memoryTrend: [EndToEndMemoryTrend]
+    let recommendations: [String]
+}
+
+/// NFR compliance status for all tracked NFRs.
+struct NFRComplianceReport: Codable {
+    let nfr1DepthInference: NFRStatus
+    let nfr2ProcessingTime: NFRStatus
+    let nfr4BatteryDrain: NFRStatus
+    let nfr13MemoryUsage: NFRStatus
+    let overallStatus: PassStatus
+}
+
+/// Status for a single NFR.
+struct NFRStatus: Codable {
+    let name: String
+    let target: String
+    let actual: String
+    let status: PassStatus
+}
+
+/// Stage metric for end-to-end report.
+struct EndToEndStageMetric: Codable {
+    let name: String
+    let durationMs: Int
+    let percentOfTotal: Double
+    let budgetMs: Int
+    let status: PassStatus
+}
+
+/// Memory trend entry for end-to-end report.
+struct EndToEndMemoryTrend: Codable {
+    let stageName: String
+    let deltaMB: Double
+}
+
 // MARK: - PerformanceMetrics Codable Extension
 
 extension PerformanceMetrics: Codable {

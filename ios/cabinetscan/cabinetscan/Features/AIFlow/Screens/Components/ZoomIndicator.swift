@@ -23,6 +23,9 @@ struct ZoomIndicator: View {
     /// Auto-dismiss delay in nanoseconds (2 seconds)
     private static let dismissDelay: UInt64 = 2_000_000_000
 
+    /// Story 6.5: Reduce Motion accessibility preference
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Text(formattedZoom)
             .font(.subheadline.monospacedDigit().weight(.semibold))
@@ -33,7 +36,8 @@ struct ZoomIndicator: View {
             .background(Color.black.opacity(0.6))
             .clipShape(Capsule())
             .opacity(isVisible ? 1 : 0)
-            .animation(.easeInOut(duration: 0.2), value: isVisible)
+            // Story 6.5: Respect Reduce Motion preference
+            .animation(reduceMotion ? .none : .easeInOut(duration: 0.2), value: isVisible)
             .onChange(of: zoomLevel) { _, _ in
                 showAndScheduleDismiss()
             }

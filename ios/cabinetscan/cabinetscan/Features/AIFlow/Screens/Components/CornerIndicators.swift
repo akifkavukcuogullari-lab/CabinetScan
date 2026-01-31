@@ -36,6 +36,9 @@ struct CornerIndicators: View {
     /// Padding from screen edges
     private let edgePadding: CGFloat = 16
 
+    /// Story 6.5: Reduce Motion accessibility preference
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         GeometryReader { geometry in
             ZStack {
@@ -117,7 +120,8 @@ struct CornerIndicators: View {
                     )
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: isCaptured)
+        // Story 6.5: Respect Reduce Motion preference
+        .animation(reduceMotion ? .none : .easeInOut(duration: 0.3), value: isCaptured)
         .accessibilityElement()
         .accessibilityLabel("\(zone.rawValue.capitalized) area")
         .accessibilityValue(isCaptured ? "Captured" : "Not captured")

@@ -18,7 +18,7 @@ protocol ConfidenceScorerProtocol {
     /// Calculates confidence scores for all detected objects.
     ///
     /// **Pipeline Order:** This scorer runs AFTER all detection phases:
-    /// RoomDetector → CabinetDetector → ... → OpeningDetector → MeasurementExtractor → ConfidenceScorer
+    /// RoomDetector → CabinetDetector → ... → OpeningDetector → MeasurementExtractor → ReflectiveSurfaceDetector → ConfidenceScorer
     ///
     /// - Parameters:
     ///   - cabinetResult: Cabinet detection result
@@ -27,6 +27,8 @@ protocol ConfidenceScorerProtocol {
     ///   - countertopResult: Countertop detection result
     ///   - openingResult: Opening detection result (Story 4.9 ADR-3)
     ///   - measurementResult: Measurement extraction result for factor calculation
+    ///   - coveragePercentage: Coverage percentage from capture phase (0.0-1.0), nil means full coverage (Story 6.2)
+    ///   - reflectiveSurfaceImpact: Reflective surface impact (0.0-1.0), nil means no reflective issues (Story 6.4)
     /// - Returns: Confidence scoring result with per-object and overall scores
     /// - Throws: `ConfidenceScoringError` if scoring fails
     func calculateConfidence(
@@ -35,7 +37,9 @@ protocol ConfidenceScorerProtocol {
         islandPeninsulaResult: IslandPeninsulaDetectionResult?,
         countertopResult: CountertopDetectorResult?,
         openingResult: OpeningDetectionResult?,
-        measurementResult: MeasurementExtractionResult?
+        measurementResult: MeasurementExtractionResult?,
+        coveragePercentage: Float?,
+        reflectiveSurfaceImpact: Float?
     ) async throws -> ConfidenceScoringResult
 }
 
@@ -499,13 +503,26 @@ final class ConfidenceScorer: ObservableObject, ConfidenceScorerProtocol {
     // MARK: - Main Scoring (AC: All)
 
     /// Calculates confidence scores for all detected objects.
+    ///
+    /// - Parameters:
+    ///   - cabinetResult: Detected cabinets
+    ///   - applianceResult: Detected appliances
+    ///   - islandPeninsulaResult: Detected islands and peninsulas
+    ///   - countertopResult: Detected countertops
+    ///   - openingResult: Detected openings (windows/doors)
+    ///   - measurementResult: Extracted measurements
+    ///   - coveragePercentage: Coverage percentage from capture phase (0.0-1.0), nil means full coverage (Story 6.2)
+    ///   - reflectiveSurfaceImpact: Reflective surface impact (0.0-1.0), nil means no reflective issues (Story 6.4)
+    /// - Returns: Confidence scoring result with per-object scores and overall assessment
     func calculateConfidence(
         cabinetResult: CabinetDetectionResult?,
         applianceResult: ApplianceDetectionResult?,
         islandPeninsulaResult: IslandPeninsulaDetectionResult?,
         countertopResult: CountertopDetectorResult?,
         openingResult: OpeningDetectionResult?,
-        measurementResult: MeasurementExtractionResult?
+        measurementResult: MeasurementExtractionResult?,
+        coveragePercentage: Float? = nil,
+        reflectiveSurfaceImpact: Float? = nil
     ) async throws -> ConfidenceScoringResult {
         let startTime = CFAbsoluteTimeGetCurrent()
 
@@ -565,9 +582,38 @@ final class ConfidenceScorer: ObservableObject, ConfidenceScorerProtocol {
 
         // Step 6: Calculate overall score (Task 7)
         progress = 0.85
-        let (overallScore, limitingObjectId) = calculateOverallScore(from: objectScores)
+        let (baseScore, limitingObjectId) = calculateOverallScore(from: objectScores)
+
+        // Story 6.2: Apply coverage penalty to overall score (AC3)
+        // Proportional penalty: 75% coverage -> 75% of score
+        var overallScore: Float = baseScore
+        if let coverage = coveragePercentage, coverage < 1.0 {
+            overallScore = overallScore * coverage
+        }
+
+        // Story 6.4: Apply reflective surface penalty (AC5, Task 5.3)
+        // Up to 30% penalty for maximum reflective impact
+        if let reflectiveImpact = reflectiveSurfaceImpact, reflectiveImpact > 0 {
+            let reflectivePenalty = reflectiveImpact * 0.3
+            overallScore = overallScore * (1.0 - reflectivePenalty)
+        }
+
         let overallLevel = AIConfidenceLevel.from(score: overallScore)
-        let quoteReadiness = QuoteReadinessLevel.from(overallScore: overallScore)
+
+        // Story 6.2: Factor coverage into quote readiness (AC3)
+        // Story 6.4: Factor reflective surfaces into quote readiness
+        let quoteReadiness: QuoteReadinessLevel
+        if let coverage = coveragePercentage, coverage < 0.5 {
+            // Severe partial coverage: limit to withCaveats at best
+            let baseReadiness = QuoteReadinessLevel.from(overallScore: overallScore)
+            quoteReadiness = baseReadiness == .ready ? .withCaveats : baseReadiness
+        } else if let reflectiveImpact = reflectiveSurfaceImpact, reflectiveImpact > 0.3 {
+            // Story 6.4: Significant reflective surfaces - limit to withCaveats at best
+            let baseReadiness = QuoteReadinessLevel.from(overallScore: overallScore)
+            quoteReadiness = baseReadiness == .ready ? .withCaveats : baseReadiness
+        } else {
+            quoteReadiness = QuoteReadinessLevel.from(overallScore: overallScore)
+        }
 
         // Step 7: Generate warnings (Task 8)
         progress = 0.92
@@ -582,6 +628,29 @@ final class ConfidenceScorer: ObservableObject, ConfidenceScorerProtocol {
         // Add field verification note if any LOW items
         if itemsNeedingVerification > 0 {
             allWarnings.append("Field verification recommended for \(itemsNeedingVerification) item(s)")
+        }
+
+        // Story 6.1: Add empty kitchen note when no objects detected
+        if objectScores.isEmpty {
+            allWarnings.append("No cabinets detected - room dimensions only")
+        }
+
+        // Story 6.2: Add coverage warnings (AC3, AC4)
+        // Uses AICoverageAnalyzer constants for single source of truth
+        if let coverage = coveragePercentage {
+            if coverage < 1.0 {
+                let percentage = Int(coverage * 100)
+                allWarnings.append("\(AICoverageAnalyzer.partialCoverageWarning) (\(percentage)% coverage)")
+            }
+            if coverage < 0.5 {
+                allWarnings.append(AICoverageAnalyzer.severeCoverageWarning)
+            }
+        }
+
+        // Story 6.4: Add reflective surface warnings (AC5, Task 5.4)
+        if let reflectiveImpact = reflectiveSurfaceImpact, reflectiveImpact > 0.1 {
+            let percentage = Int(reflectiveImpact * 100)
+            allWarnings.append("Reflective surfaces detected - verify measurements (\(percentage)% affected)")
         }
 
         let processingTimeMs = Int((CFAbsoluteTimeGetCurrent() - startTime) * 1000)
@@ -917,11 +986,16 @@ final class ConfidenceScorer: ObservableObject, ConfidenceScorerProtocol {
     // MARK: - Overall Score Calculation (Task 7)
 
     /// Task 7.1-7.4: Calculate weighted overall score with minimum-confidence rule.
+    ///
+    /// Story 6.1: For empty kitchen (no detected objects), returns 0.5 (medium-low)
+    /// indicating room-only data is available but quote readiness is limited.
     private func calculateOverallScore(
         from objectScores: [ObjectConfidenceScore]
     ) -> (score: Float, limitingObjectId: UUID?) {
         guard !objectScores.isEmpty else {
-            return (0.0, nil)
+            // Story 6.1: Empty kitchen - return medium-low confidence for room-only data
+            // This indicates the room dimensions are valid but there's nothing to quote
+            return (0.5, nil)
         }
 
         var weightedSum: Float = 0.0

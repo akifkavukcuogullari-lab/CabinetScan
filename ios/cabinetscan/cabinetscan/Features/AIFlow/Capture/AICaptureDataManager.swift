@@ -443,6 +443,236 @@ class AICaptureDataManager {
         print("[AICaptureDataManager] Cancelled and cleaned up current session")
     }
 
+    /// Discard the current session and reset state
+    /// Per Story 6.7 - Task 6.4
+    func discardSession() {
+        cancelSession()
+        print("[AICaptureDataManager] Session discarded")
+    }
+
+    // MARK: - Timeout Data Preservation (Story 6.8 Task 6)
+
+    /// Save session for later retry after timeout cancellation.
+    ///
+    /// **Per Story 6.8 AC4:**
+    /// User selects "Cancel" → captured data is saved for potential later use
+    ///
+    /// **Per ADR-2:**
+    /// Only serialize checkpoint to disk when user selects "Cancel" for "save for later"
+    ///
+    /// - Parameters:
+    ///   - videoDuration: Duration of video captured so far
+    ///   - photoCount: Number of photos captured
+    ///   - checkpoint: Pipeline checkpoint with progress state (optional)
+    ///   - qualityMetrics: Quality metrics (if available)
+    /// - Returns: The saved session data with timeout marker
+    @discardableResult
+    func saveSessionForLater(
+        videoDuration: TimeInterval,
+        photoCount: Int,
+        checkpoint: PipelineCheckpoint?,
+        qualityMetrics: AIQualityMetrics?
+    ) throws -> AICaptureSessionData {
+        guard let sessionId = currentSessionId,
+              let sessionDir = currentSessionDirectory else {
+            throw AICaptureDataError.sessionNotStarted
+        }
+
+        // Task 6.2: Serialize checkpoint to disk if present
+        if let checkpoint = checkpoint {
+            let checkpointURL = sessionDir.appendingPathComponent("checkpoint.json")
+            do {
+                let data = try jsonEncoder.encode(checkpoint)
+                try data.write(to: checkpointURL)
+                print("[AICaptureDataManager] Checkpoint saved: \(checkpoint.description)")
+            } catch {
+                // Log but don't fail - checkpoint is optional for recovery
+                print("[AICaptureDataManager] Failed to save checkpoint: \(error)")
+            }
+        }
+
+        // Task 6.3: Update metadata with timeoutCancelled marker
+        var metadata = try loadMetadata(for: sessionId)
+        metadata.endTimestamp = Date()
+        metadata.videoDuration = videoDuration
+        metadata.photoCount = photoCount
+        // Mark as timeout cancelled with checkpoint phase info
+        metadata.persistenceState = "timeoutCancelled:\(checkpoint?.phase.rawValue ?? "none")"
+        metadata.qualityMetrics = qualityMetrics
+        try saveMetadata(metadata)
+
+        // Check for video
+        let videoURL = sessionDir.appendingPathComponent("video.mp4")
+        let hasVideo = fileManager.fileExists(atPath: videoURL.path)
+
+        // Load photos
+        var photos: [AICapturedPhoto] = []
+        for i in 0..<photoCount {
+            let photoURL = sessionDir.appendingPathComponent("photo_\(i).jpg")
+            let poseURL = sessionDir.appendingPathComponent("photo_\(i)_pose.json")
+
+            if fileManager.fileExists(atPath: photoURL.path),
+               fileManager.fileExists(atPath: poseURL.path),
+               let poseData = try? Data(contentsOf: poseURL),
+               let photoPose = try? jsonDecoder.decode(AIPhotoPoseFile.self, from: poseData),
+               let transform = photoPose.pose.toTransformMatrix() {
+
+                let pose = AIPose(
+                    transform: transform,
+                    intrinsics: photoPose.pose.intrinsics.toAICameraIntrinsics(),
+                    trackingState: .normal,
+                    zoomFactor: photoPose.pose.zoomFactor
+                )
+                photos.append(AICapturedPhoto(url: photoURL, pose: pose, timestamp: photoPose.timestamp))
+            }
+        }
+
+        let captureMetadata = AICaptureMetadata(
+            deviceModel: metadata.deviceModel,
+            osVersion: metadata.osVersion,
+            captureDate: metadata.startTimestamp,
+            videoDuration: videoDuration,
+            photoCount: photoCount,
+            averageLighting: nil
+        )
+
+        let sessionData = AICaptureSessionData(
+            videoURL: hasVideo ? videoURL : nil,
+            photos: photos,
+            metadata: captureMetadata,
+            qualityMetrics: qualityMetrics
+        )
+
+        print("[AICaptureDataManager] Session saved for later retry: \(sessionId), checkpoint: \(checkpoint?.description ?? "none")")
+        return sessionData
+    }
+
+    /// Check if a session was cancelled due to timeout and can be resumed.
+    ///
+    /// - Parameter sessionId: The session ID to check
+    /// - Returns: The checkpoint if session was timeout-cancelled and has checkpoint, nil otherwise
+    func getTimeoutCheckpoint(for sessionId: String) -> PipelineCheckpoint? {
+        let sessionDir = capturesBaseDirectory.appendingPathComponent(sessionId)
+        let checkpointURL = sessionDir.appendingPathComponent("checkpoint.json")
+
+        guard fileManager.fileExists(atPath: checkpointURL.path),
+              let data = try? Data(contentsOf: checkpointURL),
+              let checkpoint = try? jsonDecoder.decode(PipelineCheckpoint.self, from: data) else {
+            return nil
+        }
+
+        return checkpoint
+    }
+
+    /// Find sessions that were cancelled due to timeout (for recovery prompt).
+    ///
+    /// - Returns: Array of session IDs that were timeout-cancelled
+    func findTimeoutCancelledSessions() -> [String] {
+        do {
+            try ensureBaseDirectoryExists()
+
+            let contents = try fileManager.contentsOfDirectory(
+                at: capturesBaseDirectory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+
+            var timeoutSessions: [String] = []
+
+            for sessionDir in contents where sessionDir.lastPathComponent.hasPrefix("session_") {
+                let sessionId = sessionDir.lastPathComponent
+                if let metadata = try? loadMetadata(for: sessionId),
+                   metadata.persistenceState.hasPrefix("timeoutCancelled") {
+                    timeoutSessions.append(sessionId)
+                }
+            }
+
+            return timeoutSessions
+        } catch {
+            print("[AICaptureDataManager] Failed to find timeout-cancelled sessions: \(error)")
+            return []
+        }
+    }
+
+    /// Save partial session data when tracking fails
+    /// Per Story 6.7 - Task 6.1, 6.2
+    /// - Parameters:
+    ///   - videoDuration: Duration of video captured so far
+    ///   - photoCount: Number of photos captured
+    ///   - qualityMetrics: Quality metrics (if available)
+    ///   - coverageState: Coverage state for partial capture handling
+    /// - Returns: The saved session data
+    @discardableResult
+    func savePartialSession(
+        videoDuration: TimeInterval,
+        photoCount: Int,
+        qualityMetrics: AIQualityMetrics?,
+        coverageState: AICoverageState?
+    ) throws -> AICaptureSessionData {
+        guard let sessionId = currentSessionId,
+              let sessionDir = currentSessionDirectory else {
+            throw AICaptureDataError.sessionNotStarted
+        }
+
+        // Update metadata to mark as partial
+        var metadata = try loadMetadata(for: sessionId)
+        metadata.endTimestamp = Date()
+        metadata.videoDuration = videoDuration
+        metadata.photoCount = photoCount
+        metadata.persistenceState = AISessionPersistenceState.complete.rawValue
+        metadata.qualityMetrics = qualityMetrics
+        try saveMetadata(metadata)
+
+        // Check for video
+        let videoURL = sessionDir.appendingPathComponent("video.mp4")
+        let hasVideo = fileManager.fileExists(atPath: videoURL.path)
+
+        // Load photos
+        var photos: [AICapturedPhoto] = []
+        for i in 0..<photoCount {
+            let photoURL = sessionDir.appendingPathComponent("photo_\(i).jpg")
+            let poseURL = sessionDir.appendingPathComponent("photo_\(i)_pose.json")
+
+            if fileManager.fileExists(atPath: photoURL.path),
+               fileManager.fileExists(atPath: poseURL.path),
+               let poseData = try? Data(contentsOf: poseURL),
+               let photoPose = try? jsonDecoder.decode(AIPhotoPoseFile.self, from: poseData),
+               let transform = photoPose.pose.toTransformMatrix() {
+
+                let pose = AIPose(
+                    transform: transform,
+                    intrinsics: photoPose.pose.intrinsics.toAICameraIntrinsics(),
+                    trackingState: .normal,
+                    zoomFactor: photoPose.pose.zoomFactor
+                )
+                photos.append(AICapturedPhoto(url: photoURL, pose: pose, timestamp: photoPose.timestamp))
+            }
+        }
+
+        // Create capture session data with partial coverage state
+        let captureMetadata = AICaptureMetadata(
+            deviceModel: metadata.deviceModel,
+            osVersion: metadata.osVersion,
+            captureDate: metadata.startTimestamp,
+            videoDuration: videoDuration,
+            photoCount: photoCount,
+            averageLighting: nil
+        )
+
+        var sessionData = AICaptureSessionData(
+            videoURL: hasVideo ? videoURL : nil,
+            photos: photos,
+            metadata: captureMetadata,
+            qualityMetrics: qualityMetrics
+        )
+
+        // Mark as partial via coverage state (Story 6.2 handles display)
+        sessionData.coverageState = coverageState
+
+        print("[AICaptureDataManager] Partial session saved: \(sessionId), video: \(hasVideo), photos: \(photoCount)")
+        return sessionData
+    }
+
     // MARK: - Timeout Helper (Issue #2 fix)
 
     /// Execute an async operation with timeout protection

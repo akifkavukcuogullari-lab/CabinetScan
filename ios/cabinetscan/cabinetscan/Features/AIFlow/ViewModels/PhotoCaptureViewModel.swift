@@ -73,6 +73,29 @@ class PhotoCaptureViewModel: ObservableObject {
     /// Error message to display
     @Published var errorMessage: String?
 
+    // MARK: - Tracking Recovery Properties (Story 6.7)
+
+    /// Current tracking recovery state
+    @Published private(set) var trackingRecoveryState: TrackingRecoveryState = .normal
+
+    /// Whether photo capture is disabled due to tracking issues
+    @Published private(set) var isCaptureDisabledByTracking: Bool = false
+
+    /// Whether to show tracking recovery toast
+    @Published var showTrackingRecoveryToast: Bool = false
+
+    /// Message to show when capture is disabled
+    var captureDisabledMessage: String {
+        switch trackingRecoveryState {
+        case .lost, .failed:
+            return "Tracking lost"
+        case .limited(let reason) where reason == .relocalizing:
+            return "Relocating..."
+        default:
+            return ""
+        }
+    }
+
     // MARK: - Constants
 
     /// Required number of photos
@@ -105,6 +128,9 @@ class PhotoCaptureViewModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
 
+    /// Subscription for tracking recovery state (Story 6.7)
+    private var trackingRecoveryCancellable: AnyCancellable?
+
     // MARK: - Initialization
 
     /// Initialize with required dependencies
@@ -134,7 +160,48 @@ class PhotoCaptureViewModel: ObservableObject {
     func setupPhotoCapture(with session: AVCaptureSession) {
         self.captureSession = session
         self.photoCapture = AIPhotoCapture(captureSession: session, sessionManager: sessionManager)
+
+        // Setup tracking recovery observer (Story 6.7)
+        setupTrackingRecoveryObserver()
+
         print("[PhotoCaptureViewModel] Photo capture setup complete")
+    }
+
+    /// Setup tracking recovery observer (Story 6.7)
+    private func setupTrackingRecoveryObserver() {
+        trackingRecoveryCancellable = sessionManager.trackingRecoveryPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newState in
+                self?.handleTrackingRecoveryStateChange(newState)
+            }
+    }
+
+    /// Handle tracking recovery state changes (Story 6.7)
+    /// Per Task 4.2, 4.3, 4.4
+    private func handleTrackingRecoveryStateChange(_ newState: TrackingRecoveryState) {
+        let oldState = trackingRecoveryState
+        trackingRecoveryState = newState
+
+        // Determine if capture should be disabled
+        switch newState {
+        case .normal:
+            isCaptureDisabledByTracking = false
+            // If recovering from lost state, show toast briefly
+            if case .lost = oldState {
+                showTrackingRecoveryToast = true
+            } else if case .limited(let reason) = oldState, reason == .relocalizing {
+                showTrackingRecoveryToast = true
+            }
+        case .limited(let reason):
+            // Only disable for relocalizing (actively trying to recover)
+            isCaptureDisabledByTracking = (reason == .relocalizing)
+            showTrackingRecoveryToast = true
+        case .lost, .failed:
+            isCaptureDisabledByTracking = true
+            showTrackingRecoveryToast = true
+        }
+
+        print("[PhotoCaptureViewModel] Tracking recovery state: \(newState), capture disabled: \(isCaptureDisabledByTracking)")
     }
 
     // MARK: - Public Methods (Task 2.7 - 2.9)
@@ -325,6 +392,7 @@ class PhotoCaptureViewModel: ObservableObject {
 
     /// Cleanup resources
     func cleanup() {
+        trackingRecoveryCancellable?.cancel()
         photoCapture?.cleanup()
         print("[PhotoCaptureViewModel] Cleanup complete")
     }

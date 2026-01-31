@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       data,
     })
   } catch (error) {
-    console.error('Error calling Cabinet AI service:', error)
+    console.error('Error calling visualization service:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

@@ -59,6 +59,17 @@ class VideoCaptureViewModel: ObservableObject {
     /// Error message to display, if any
     @Published var errorMessage: String?
 
+    // MARK: - Tracking Recovery Properties (Story 6.7)
+
+    /// Current tracking recovery state
+    @Published private(set) var trackingRecoveryState: TrackingRecoveryState = .normal
+
+    /// Whether to show tracking recovery toast
+    @Published var showTrackingRecoveryToast: Bool = false
+
+    /// Whether to show tracking failed sheet
+    @Published var showTrackingFailedSheet: Bool = false
+
     // MARK: - Constants
 
     /// Minimum recording duration in seconds (AC2)
@@ -94,6 +105,9 @@ class VideoCaptureViewModel: ObservableObject {
     /// Subscription for AR session ready state
     private var arReadyCancellable: AnyCancellable?
 
+    /// Subscription for tracking recovery state (Story 6.7)
+    private var trackingRecoveryCancellable: AnyCancellable?
+
     /// Haptic feedback generator (prepared in advance per AC5)
     private let hapticGenerator = UIImpactFeedbackGenerator(style: .medium)
 
@@ -117,6 +131,7 @@ class VideoCaptureViewModel: ObservableObject {
     deinit {
         timerCancellable?.cancel()
         arReadyCancellable?.cancel()
+        trackingRecoveryCancellable?.cancel()
     }
 
     // MARK: - Setup
@@ -129,6 +144,58 @@ class VideoCaptureViewModel: ObservableObject {
                 self?.isARReady = isReady
                 print("[VideoCaptureViewModel] AR ready state changed: \(isReady)")
             }
+    }
+
+    /// Setup tracking recovery observer (Story 6.7)
+    private func setupTrackingRecoveryObserver() {
+        trackingRecoveryCancellable = sessionManager.trackingRecoveryPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newState in
+                self?.handleTrackingRecoveryStateChange(newState)
+            }
+    }
+
+    /// Handle tracking recovery state changes (Story 6.7)
+    /// M2 fix: Added haptic feedback for tracking state changes
+    private func handleTrackingRecoveryStateChange(_ newState: TrackingRecoveryState) {
+        let oldState = trackingRecoveryState
+        trackingRecoveryState = newState
+
+        // Update toast visibility and provide haptic feedback
+        switch newState {
+        case .normal:
+            // If recovering from non-normal state, show briefly then hide
+            if oldState != .normal {
+                showTrackingRecoveryToast = true
+                // Toast will auto-dismiss via container
+                // Light haptic for recovery success
+                selectionHaptic.selectionChanged()
+            }
+        case .limited:
+            showTrackingRecoveryToast = true
+            // Selection haptic for limited tracking (gentle warning)
+            if oldState == .normal {
+                selectionHaptic.selectionChanged()
+            }
+        case .lost:
+            showTrackingRecoveryToast = true
+            // Medium impact haptic for tracking lost (stronger warning)
+            // Only trigger haptic on first transition to lost state
+            if case .lost = oldState {
+                // Already in lost state, don't repeat haptic
+            } else {
+                hapticGenerator.impactOccurred()
+            }
+        case .failed:
+            // Show the failed sheet instead of toast
+            showTrackingRecoveryToast = false
+            showTrackingFailedSheet = true
+            // Strong haptic for failure
+            let errorHaptic = UINotificationFeedbackGenerator()
+            errorHaptic.notificationOccurred(.error)
+        }
+
+        print("[VideoCaptureViewModel] Tracking recovery state: \(newState)")
     }
 
     /// Prepare haptic generators to avoid delay on first use
@@ -207,6 +274,9 @@ class VideoCaptureViewModel: ObservableObject {
             // Start timer for UI updates
             startTimer()
 
+            // Setup tracking recovery observer (Story 6.7)
+            setupTrackingRecoveryObserver()
+
             print("[VideoCaptureViewModel] Recording started with session: \(dataManager.currentSessionId ?? "unknown")")
         } catch {
             // Clean up on error - ensure timer is cancelled
@@ -264,6 +334,108 @@ class VideoCaptureViewModel: ObservableObject {
     /// Get the data manager for passing to photo capture (Story 2.6)
     func getCaptureDataManager() -> AICaptureDataManager {
         return dataManager
+    }
+
+    // MARK: - Tracking Recovery Actions (Story 6.7)
+
+    /// Save partial scan data when tracking fails
+    /// Per Story 6.7 - Task 6.1, 6.3
+    func savePartialAndContinue() {
+        // Stop the timer
+        timerCancellable?.cancel()
+        trackingRecoveryCancellable?.cancel()
+
+        // Stop video recording
+        Task {
+            await finalizePartialRecording()
+        }
+    }
+
+    /// Restart capture when tracking fails
+    /// Per Story 6.7 - Task 6.4
+    func restartCapture() {
+        // Stop the timer
+        timerCancellable?.cancel()
+        trackingRecoveryCancellable?.cancel()
+
+        // Cancel video recording
+        videoCapture?.cancelRecording()
+
+        // Discard session
+        dataManager.discardSession()
+
+        // Reset state
+        recordingState = .idle
+        elapsedTime = 0
+        isStopEnabled = false
+        captureData = nil
+        isRecordingFinalized = false
+        showTrackingFailedSheet = false
+        showTrackingRecoveryToast = false
+        trackingRecoveryState = .normal
+
+        // Stop AR session
+        sessionManager.stopSession()
+
+        print("[VideoCaptureViewModel] Capture restarted due to tracking failure")
+    }
+
+    /// Finalize partial recording when tracking fails
+    private func finalizePartialRecording() async {
+        guard let videoCapture = videoCapture else {
+            errorMessage = "Video capture not available"
+            return
+        }
+
+        // Update state
+        await MainActor.run {
+            recordingState = .stopped
+            showTrackingFailedSheet = false
+        }
+
+        do {
+            // Stop recording and get video URL
+            let tempVideoURL = try await videoCapture.stopRecording()
+
+            // Export pose data from AR session
+            let poseData = sessionManager.exportPoseData()
+            exportedPoseData = poseData
+
+            // Save poses first
+            _ = try dataManager.savePoseDataFromExport(poseData)
+
+            // Persist video to session directory
+            _ = try await dataManager.saveVideo(from: tempVideoURL)
+
+            // Use savePartialSession() to properly finalize partial capture (H2 fix)
+            // Per Story 6.7 - Task 6.1: Call AICaptureDataManager.savePartialSession()
+            let coverageState = AICoverageState(capturedZones: [])
+            captureData = try dataManager.savePartialSession(
+                videoDuration: elapsedTime,
+                photoCount: 0,
+                qualityMetrics: nil,
+                coverageState: coverageState
+            )
+
+            // Signal that recording is finalized
+            await MainActor.run {
+                isRecordingFinalized = true
+            }
+
+            let poseCount = poseData["poseCount"] as? Int ?? 0
+            print("[VideoCaptureViewModel] Partial recording finalized via savePartialSession - poses: \(poseCount)")
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to save partial recording: \(error.localizedDescription)"
+                recordingState = .idle
+            }
+            print("[VideoCaptureViewModel] Failed to finalize partial recording: \(error)")
+        }
+    }
+
+    /// Get last good pose for guidance display
+    func getLastGoodPose() -> AIPose? {
+        return sessionManager.getLastGoodPose()
     }
 
     /// Update zoom level (AC3)

@@ -90,10 +90,34 @@ struct VideoCaptureView: View {
                 maxDurationToast
             }
 
+            // Tracking recovery toast (Story 6.7) - Use container for proper accessibility
+            VStack {
+                TrackingRecoveryToastContainer(
+                    recoveryState: viewModel.trackingRecoveryState,
+                    isVisible: $viewModel.showTrackingRecoveryToast
+                )
+                .padding(.top, 100)
+
+                Spacer()
+            }
+
+            // Tracking lost overlay with guidance arrow (Story 6.7 - Task 3.5)
+            TrackingLostOverlay(
+                recoveryState: viewModel.trackingRecoveryState,
+                lastGoodPose: viewModel.getLastGoodPose()
+            )
+
             // Error overlay
             if let error = viewModel.errorMessage {
                 errorOverlay(message: error)
             }
+        }
+        // Tracking failed sheet (Story 6.7)
+        .sheet(isPresented: $viewModel.showTrackingFailedSheet) {
+            TrackingFailedSheet(
+                onSavePartial: { viewModel.savePartialAndContinue() },
+                onRestart: { viewModel.restartCapture() }
+            )
         }
         .ignoresSafeArea()
         .onAppear {

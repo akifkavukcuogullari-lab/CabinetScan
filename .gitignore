@@ -3,6 +3,11 @@ node_modules/
 .pnp
 .pnp.js
 
+# BMAD
+_bmad/
+.claude/
+bmad-output/
+
 # Testing
 coverage/
 

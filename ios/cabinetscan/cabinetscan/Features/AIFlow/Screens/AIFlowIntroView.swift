@@ -40,18 +40,21 @@ struct AIFlowIntroView: View {
                         title: "Record a Video",
                         description: "Walk around your kitchen (30-60 seconds)"
                     )
+                    .accessibilitySortPriority(3)
 
                     InstructionCard(
                         icon: "camera.fill",
                         title: "Capture Photos",
                         description: "Take 5 photos from different angles"
                     )
+                    .accessibilitySortPriority(2)
 
                     InstructionCard(
                         icon: "ruler",
                         title: "Get Results",
                         description: "We'll measure your kitchen automatically"
                     )
+                    .accessibilitySortPriority(1)
                 }
                 .padding(.horizontal, 16)
 

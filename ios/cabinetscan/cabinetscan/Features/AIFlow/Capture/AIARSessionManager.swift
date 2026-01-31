@@ -42,11 +42,25 @@ class AIARSessionManager: NSObject, ObservableObject {
     /// Fatal session error, if any
     @Published private(set) var sessionError: Error?
 
+    // MARK: - Tracking Recovery Properties (Story 6.7)
+
+    /// Detailed tracking recovery state with reason information
+    /// Per Story 6.7 - Task 1.2, 1.3
+    @Published private(set) var trackingRecoveryState: TrackingRecoveryState = .normal
+
+    /// Current tracking limited reason (if applicable)
+    /// Per Story 6.7 - Task 1.1
+    @Published private(set) var trackingLimitedReason: TrackingLimitedReason?
+
     // MARK: - Publishers
 
     /// Pose update events for guidance system (timestamp, pose)
     /// Published at 60Hz during active tracking for real-time guidance
     let poseUpdatePublisher = PassthroughSubject<(timestamp: TimeInterval, pose: AIPose), Never>()
+
+    /// Tracking recovery state changes publisher
+    /// Per Story 6.7 - Task 1.3
+    let trackingRecoveryPublisher = PassthroughSubject<TrackingRecoveryState, Never>()
 
     // MARK: - ARKit Session
 
@@ -90,6 +104,25 @@ class AIARSessionManager: NSObject, ObservableObject {
     /// Lock for state tracking properties
     private let stateLock = NSLock()
 
+    // MARK: - Tracking Recovery State (Story 6.7)
+
+    /// Last good pose before tracking was lost
+    /// Per Story 6.7 - Task 1.5
+    private var _lastGoodPose: AIPose?
+
+    /// Timer for recovery timeout (10 seconds)
+    /// Per Story 6.7 - Task 1.4
+    private var recoveryTimer: Timer?
+
+    /// Time when tracking was lost (for elapsed calculation)
+    private var _trackingLostTime: Date?
+
+    /// Recovery timeout duration in seconds
+    private static let recoveryTimeoutDuration: TimeInterval = 10.0
+
+    /// Last published recovery state (to avoid redundant dispatches)
+    private var _lastPublishedRecoveryState: TrackingRecoveryState = .normal
+
     // MARK: - App Lifecycle Observers
 
     private var cancellables = Set<AnyCancellable>()
@@ -117,13 +150,21 @@ class AIARSessionManager: NSObject, ObservableObject {
         _hasEverBeenReady = false
         _lastPublishedState = .notAvailable
         _latestPose = nil
+        _lastGoodPose = nil
+        _trackingLostTime = nil
+        _lastPublishedRecoveryState = .normal
         stateLock.unlock()
+
+        // Cancel any existing recovery timer
+        cancelRecoveryTimer()
 
         DispatchQueue.main.async { [weak self] in
             self?.isReadyForCapture = false
             self?.isInterrupted = false
             self?.sessionError = nil
             self?.trackingState = .notAvailable
+            self?.trackingRecoveryState = .normal
+            self?.trackingLimitedReason = nil
         }
 
         // Clear pose history
@@ -165,6 +206,9 @@ class AIARSessionManager: NSObject, ObservableObject {
     func stopSession() {
         session.pause()
 
+        // Cancel recovery timer (Story 6.7)
+        cancelRecoveryTimer()
+
         // Clear pose history
         poseQueue.async { [weak self] in
             self?._poseHistory.removeAll()
@@ -175,11 +219,16 @@ class AIARSessionManager: NSObject, ObservableObject {
         _hasEverBeenReady = false
         _lastPublishedState = .notAvailable
         _latestPose = nil
+        _lastGoodPose = nil
+        _trackingLostTime = nil
+        _lastPublishedRecoveryState = .normal
         stateLock.unlock()
 
         DispatchQueue.main.async { [weak self] in
             self?.isReadyForCapture = false
             self?.trackingState = .notAvailable
+            self?.trackingRecoveryState = .normal
+            self?.trackingLimitedReason = nil
         }
 
         print("[AIARSessionManager] Session stopped and resources cleaned up")
@@ -262,6 +311,26 @@ class AIARSessionManager: NSObject, ObservableObject {
         return zoom
     }
 
+    // MARK: - Tracking Recovery Methods (Story 6.7)
+
+    /// Get the last good pose before tracking was lost
+    /// Per Story 6.7 - Task 1.5
+    func getLastGoodPose() -> AIPose? {
+        stateLock.lock()
+        let pose = _lastGoodPose
+        stateLock.unlock()
+        return pose
+    }
+
+    /// Attempt to relocalize the session
+    /// Per Story 6.7 - Task 1.6
+    /// Note: ARKit handles relocalization automatically, this method logs the attempt
+    func attemptRelocalization() {
+        print("[AIARSessionManager] Relocalization in progress - ARKit handling automatically")
+        // ARKit automatically attempts relocalization when tracking is lost
+        // We don't need to do anything here, but we track it for debugging
+    }
+
     // MARK: - Private Helpers
 
     /// Setup observers for app lifecycle events (ADR-004)
@@ -319,6 +388,99 @@ class AIARSessionManager: NSObject, ObservableObject {
         case .notAvailable: return "notAvailable"
         }
     }
+
+    // MARK: - Tracking Recovery Handling (Story 6.7)
+
+    /// Start the recovery timeout timer
+    /// Per Story 6.7 - Task 1.4
+    private func startRecoveryTimer() {
+        // Cancel any existing timer
+        recoveryTimer?.invalidate()
+
+        stateLock.lock()
+        _trackingLostTime = Date()
+        stateLock.unlock()
+
+        // Create timer on main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            self.recoveryTimer = Timer.scheduledTimer(withTimeInterval: Self.recoveryTimeoutDuration, repeats: false) { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.handleRecoveryTimeout()
+                }
+            }
+
+            print("[AIARSessionManager] Recovery timer started - 10 second timeout")
+        }
+    }
+
+    /// Cancel the recovery timer
+    private func cancelRecoveryTimer() {
+        DispatchQueue.main.async { [weak self] in
+            self?.recoveryTimer?.invalidate()
+            self?.recoveryTimer = nil
+        }
+
+        stateLock.lock()
+        _trackingLostTime = nil
+        stateLock.unlock()
+
+        print("[AIARSessionManager] Recovery timer cancelled")
+    }
+
+    /// Handle recovery timeout (10 seconds elapsed)
+    private func handleRecoveryTimeout() {
+        print("[AIARSessionManager] Recovery timeout reached - tracking failed")
+
+        updateTrackingRecoveryState(.failed)
+    }
+
+    /// Update tracking recovery state and publish changes
+    private func updateTrackingRecoveryState(_ newState: TrackingRecoveryState) {
+        stateLock.lock()
+        let lastState = _lastPublishedRecoveryState
+        let shouldUpdate = newState != lastState
+        if shouldUpdate {
+            _lastPublishedRecoveryState = newState
+        }
+        stateLock.unlock()
+
+        if shouldUpdate {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.trackingRecoveryState = newState
+                self.trackingRecoveryPublisher.send(newState)
+                print("[AIARSessionManager] Recovery state changed: \(newState)")
+            }
+        }
+    }
+
+    /// Convert ARKit tracking reason to our enum
+    private func convertTrackingReason(_ reason: ARCamera.TrackingState.Reason) -> TrackingLimitedReason {
+        switch reason {
+        case .initializing:
+            return .initializing
+        case .excessiveMotion:
+            return .excessiveMotion
+        case .insufficientFeatures:
+            return .insufficientFeatures
+        case .relocalizing:
+            return .relocalizing
+        @unknown default:
+            return .unknown
+        }
+    }
+
+    /// Get elapsed time since tracking was lost
+    private func getElapsedRecoveryTime() -> TimeInterval {
+        stateLock.lock()
+        let lostTime = _trackingLostTime
+        stateLock.unlock()
+
+        guard let lostTime = lostTime else { return 0 }
+        return Date().timeIntervalSince(lostTime)
+    }
 }
 
 // MARK: - ARSessionDelegate
@@ -339,17 +501,46 @@ extension AIARSessionManager: ARSessionDelegate {
             cy: intrinsicsMatrix[2, 1]
         )
 
-        // Map tracking state
+        // Map tracking state and handle recovery (Story 6.7)
         let newState: AITrackingState
+        var newRecoveryState: TrackingRecoveryState = .normal
+        var limitedReason: TrackingLimitedReason?
+
         switch frame.camera.trackingState {
         case .normal:
             newState = .normal
+            newRecoveryState = .normal
+
+            // Story 6.7: Tracking recovered - save as last good pose and cancel timer
+            stateLock.lock()
+            _lastGoodPose = AIPose(
+                transform: transform,
+                intrinsics: intrinsics,
+                trackingState: .normal,
+                zoomFactor: _currentZoomFactor
+            )
+            let wasLost = _trackingLostTime != nil
+            stateLock.unlock()
+
+            if wasLost {
+                cancelRecoveryTimer()
+                print("[AIARSessionManager] Tracking recovered!")
+            }
+
         case .limited(let reason):
             newState = .limited
+            limitedReason = convertTrackingReason(reason)
+            newRecoveryState = .limited(reason: limitedReason!)
+
             // Log reason for debugging (only on state change to avoid spam)
             stateLock.lock()
             let shouldLog = _lastPublishedState != .limited
+            // Save last good pose before tracking becomes limited (if we had normal tracking)
+            if _lastPublishedState == .normal, let latestPose = _latestPose {
+                _lastGoodPose = latestPose
+            }
             stateLock.unlock()
+
             if shouldLog {
                 switch reason {
                 case .excessiveMotion:
@@ -360,13 +551,39 @@ extension AIARSessionManager: ARSessionDelegate {
                     print("[AIARSessionManager] Tracking limited: initializing")
                 case .relocalizing:
                     print("[AIARSessionManager] Tracking limited: relocalizing")
+                    // Story 6.7: Relocalizing means tracking was lost - start recovery timer
+                    startRecoveryTimer()
                 @unknown default:
                     print("[AIARSessionManager] Tracking limited: unknown reason")
                 }
             }
+
         case .notAvailable:
             newState = .notAvailable
+            let elapsed = getElapsedRecoveryTime()
+            newRecoveryState = .lost(elapsedSeconds: elapsed)
+
+            // Story 6.7: Tracking completely lost - start recovery timer if not already started
+            stateLock.lock()
+            let timerStarted = _trackingLostTime != nil
+            // Save last good pose if we have one
+            if _lastPublishedState == .normal || _lastPublishedState == .limited, let latestPose = _latestPose {
+                _lastGoodPose = latestPose
+            }
+            stateLock.unlock()
+
+            if !timerStarted {
+                startRecoveryTimer()
+            }
         }
+
+        // Update tracking limited reason
+        DispatchQueue.main.async { [weak self] in
+            self?.trackingLimitedReason = limitedReason
+        }
+
+        // Update recovery state (Story 6.7)
+        updateTrackingRecoveryState(newRecoveryState)
 
         // Get current zoom factor for this pose (ADR-005: store per-pose)
         stateLock.lock()

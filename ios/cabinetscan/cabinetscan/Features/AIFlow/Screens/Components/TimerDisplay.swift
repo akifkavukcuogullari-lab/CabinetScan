@@ -68,12 +68,16 @@ struct TimerDisplay: View {
 /// Progress indicator showing progress toward minimum recording duration.
 /// Shows a circular progress ring that fills as recording approaches 10 seconds.
 /// Per Story 2.2 AC2 - Task 4.5
+/// Story 6.5: Respects Reduce Motion accessibility preference
 struct MinimumDurationProgress: View {
     /// Progress from 0.0 to 1.0
     let progress: Double
 
     /// Diameter of the progress ring
     var diameter: CGFloat = 24
+
+    /// Story 6.5: Reduce Motion accessibility preference
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -89,7 +93,8 @@ struct MinimumDurationProgress: View {
                     style: StrokeStyle(lineWidth: 3, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .animation(.easeInOut(duration: 0.1), value: progress)
+                // Story 6.5: Respect Reduce Motion preference
+                .animation(reduceMotion ? .none : .easeInOut(duration: 0.1), value: progress)
 
             // Checkmark when complete
             if progress >= 1.0 {

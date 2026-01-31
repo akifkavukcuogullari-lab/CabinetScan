@@ -33,6 +33,11 @@ struct AICaptureSessionData {
     /// Quality metrics collected during capture (Story 2.4 - Task 5.4)
     var qualityMetrics: AIQualityMetrics?
 
+    /// Coverage state at end of capture (Story 6.2)
+    /// Contains the captured zones for partial capture handling.
+    /// If nil, assumes full coverage (backwards compatibility).
+    var coverageState: AICoverageState?
+
     /// Whether the session has minimum required data
     var hasMinimumData: Bool {
         videoURL != nil && photos.count >= Self.minimumPhotoCount
@@ -75,6 +80,113 @@ enum AITrackingState: Sendable {
     case normal
     case limited
     case notAvailable
+}
+
+// MARK: - Tracking Recovery State (Story 6.7)
+
+/// Detailed tracking state for recovery handling.
+/// Extends AITrackingState with reason information and recovery timing.
+/// Per Story 6.7 - Task 1.2
+enum TrackingRecoveryState: Equatable, Sendable {
+    /// Normal tracking - no issues
+    case normal
+
+    /// Limited tracking with specific reason
+    case limited(reason: TrackingLimitedReason)
+
+    /// Tracking completely lost, attempting recovery
+    /// - Parameter elapsedSeconds: Time since tracking was lost
+    case lost(elapsedSeconds: TimeInterval)
+
+    /// Recovery failed after timeout (10 seconds)
+    case failed
+
+    /// Whether tracking is usable (normal or limited)
+    var isUsable: Bool {
+        switch self {
+        case .normal, .limited:
+            return true
+        case .lost, .failed:
+            return false
+        }
+    }
+
+    /// Whether this state requires user attention
+    var requiresUserAction: Bool {
+        switch self {
+        case .normal:
+            return false
+        case .limited, .lost:
+            return true
+        case .failed:
+            return true
+        }
+    }
+
+    /// User-facing message for this state
+    var userMessage: String {
+        switch self {
+        case .normal:
+            return ""
+        case .limited(let reason):
+            return reason.userMessage
+        case .lost:
+            return "Tracking lost - move back to scanned area"
+        case .failed:
+            return "Tracking failed"
+        }
+    }
+}
+
+/// Reason for limited tracking state.
+/// Maps to ARCamera.TrackingState.Reason from ARKit.
+enum TrackingLimitedReason: Equatable, Sendable {
+    /// ARKit is initializing
+    case initializing
+
+    /// User is moving too fast
+    case excessiveMotion
+
+    /// Not enough visual features in the environment
+    case insufficientFeatures
+
+    /// Attempting to relocalize after interruption
+    case relocalizing
+
+    /// Unknown reason
+    case unknown
+
+    /// User-facing message for this reason
+    var userMessage: String {
+        switch self {
+        case .initializing:
+            return "Initializing tracking..."
+        case .excessiveMotion:
+            return "Move slowly, tracking limited"
+        case .insufficientFeatures:
+            return "Point at a textured area"
+        case .relocalizing:
+            return "Tracking lost - move back to scanned area"
+        case .unknown:
+            return "Tracking limited"
+        }
+    }
+
+    /// SF Symbol icon name for this reason
+    var iconName: String {
+        switch self {
+        case .initializing:
+            return "hourglass"
+        case .excessiveMotion:
+            return "hand.raised.fill"
+        case .insufficientFeatures:
+            return "viewfinder"
+        case .relocalizing:
+            return "arrow.uturn.backward"
+        case .unknown:
+            return "exclamationmark.triangle.fill"
+        }
+    }
 }
 
 /// Metadata about the capture session

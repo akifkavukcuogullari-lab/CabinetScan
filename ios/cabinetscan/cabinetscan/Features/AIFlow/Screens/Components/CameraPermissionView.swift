@@ -13,6 +13,10 @@ struct CameraPermissionView: View {
     let onOpenSettings: () -> Void
     let onCancel: () -> Void
 
+    // Reuse haptic generators for better performance (Apple recommendation)
+    private let mediumHaptic = UIImpactFeedbackGenerator(style: .medium)
+    private let lightHaptic = UIImpactFeedbackGenerator(style: .light)
+
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
@@ -38,7 +42,7 @@ struct CameraPermissionView: View {
 
             VStack(spacing: 12) {
                 Button {
-                    triggerHaptic(.medium)
+                    mediumHaptic.impactOccurred()
                     onOpenSettings()
                 } label: {
                     Text("Open Settings")
@@ -49,7 +53,7 @@ struct CameraPermissionView: View {
                 .accessibilityHint("Opens iOS Settings to enable camera access")
 
                 Button {
-                    triggerHaptic(.light)
+                    lightHaptic.impactOccurred()
                     onCancel()
                 } label: {
                     Text("Cancel")
@@ -62,13 +66,7 @@ struct CameraPermissionView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
-    }
-
-    // MARK: - Haptic Feedback
-
-    private func triggerHaptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
-        let generator = UIImpactFeedbackGenerator(style: style)
-        generator.impactOccurred()
+        .accessibilityIdentifier("CameraPermissionView")
     }
 }
 

@@ -12,10 +12,11 @@ import SwiftUI
 /// Directional arrow overlay for capture guidance.
 /// Shows pulsing arrows pointing toward uncaptured areas.
 /// Per Story 2.3 - Task 5, UX-9
+/// Story 6.5: Respects Reduce Motion accessibility preference
 ///
 /// **Features:**
 /// - Directional arrows (left, right, up, down)
-/// - Pulsing animation to draw attention
+/// - Pulsing animation to draw attention (respects Reduce Motion)
 /// - Hides when no guidance needed
 /// - Full accessibility support
 struct GuidanceArrows: View {
@@ -28,18 +29,23 @@ struct GuidanceArrows: View {
     /// Scaled arrow size for accessibility
     @ScaledMetric(relativeTo: .title) private var arrowSize: CGFloat = 40
 
+    /// Story 6.5: Reduce Motion environment
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 if let direction = direction {
                     arrowView(for: direction, in: geometry.size)
-                        .transition(.opacity.animation(.easeInOut(duration: 0.3)))
+                        .transition(.opacity.animation(reduceMotion ? .none : .easeInOut(duration: 0.3)))
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: direction)
+        .animation(reduceMotion ? .none : .easeInOut(duration: 0.3), value: direction)
         .onAppear {
-            startPulsingAnimation()
+            if !reduceMotion {
+                startPulsingAnimation()
+            }
         }
     }
 
@@ -66,8 +72,9 @@ struct GuidanceArrows: View {
                 .fill(Color.blue.opacity(0.8))
                 .shadow(color: .blue.opacity(0.4), radius: 8, y: 2)
         )
-        .scaleEffect(isPulsing ? 1.05 : 1.0)
-        .opacity(isPulsing ? 1.0 : 0.85)
+        // Story 6.5: Respect Reduce Motion for pulsing animation
+        .scaleEffect(reduceMotion ? 1.0 : (isPulsing ? 1.05 : 1.0))
+        .opacity(reduceMotion ? 1.0 : (isPulsing ? 1.0 : 0.85))
         .position(positionForDirection(direction, in: size))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(direction.accessibilityLabel)
@@ -121,10 +128,12 @@ struct GuidanceArrows: View {
 // MARK: - Alternative Compact Arrow
 
 /// Compact arrow indicator for tight spaces
+/// Story 6.5: Respects Reduce Motion accessibility preference
 struct CompactGuidanceArrow: View {
     let direction: AIGuidanceDirection
 
     @State private var isPulsing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Image(systemName: direction.arrowSymbol)
@@ -133,10 +142,12 @@ struct CompactGuidanceArrow: View {
             .padding(8)
             .background(Circle().fill(Color.blue.opacity(0.8)))
             .shadow(color: .blue.opacity(0.4), radius: 4, y: 2)
-            .scaleEffect(isPulsing ? 1.1 : 1.0)
+            .scaleEffect(reduceMotion ? 1.0 : (isPulsing ? 1.1 : 1.0))
             .onAppear {
-                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                    isPulsing = true
+                if !reduceMotion {
+                    withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                        isPulsing = true
+                    }
                 }
             }
             .accessibilityLabel(direction.accessibilityLabel)

@@ -257,9 +257,21 @@ final class ConfidenceWarningSheetTests: XCTestCase {
 
 // MARK: - Test Helpers
 
-/// Mock step enum for testing flow logic
+/// Mock step enum for testing flow logic (mirrors AIFlowStep)
 private enum MockStep: Equatable {
     case intro
+    case videoCapture
+    case photoCapture
     case processing
     case complete
 }
+
+// MARK: - Testing Notes
+//
+// These tests verify the logical behavior of the warning sheet integration:
+// - Condition checking (when to show/hide sheet)
+// - Callback behavior (what happens on Continue/Rescan)
+// - Data structure creation (ConfidenceScoringResult adapter)
+//
+// Full SwiftUI view integration testing would require ViewInspector or
+// XCUITest for end-to-end verification of sheet presentation.

@@ -28,7 +28,6 @@
       "Bash(git init:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push)",
       "Bash(curl:*)",
       "Bash(supabase projects:*)",
       "Bash(cat:*)",
@@ -54,7 +53,10 @@
       "Bash(__NEW_LINE__ curl -s \"https://wnyrnpeabhxdqvcpofmb.supabase.co/functions/v1/get-showroom-config?code=QNEXWR\" )",
       "Bash(xargs:*)",
       "Bash(tree:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(xcodebuild -project cabinetscan.xcodeproj -scheme cabinetscan -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -quiet build)",
+      "Bash(xcodebuild test -project cabinetscan.xcodeproj -scheme cabinetscan -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:cabinetscanTests/AIPipelineOrchestratorTests/testOrchestratorInitialState)",
+      "Bash(xcodebuild:*)"
     ],
     "deny": [],
     "ask": []

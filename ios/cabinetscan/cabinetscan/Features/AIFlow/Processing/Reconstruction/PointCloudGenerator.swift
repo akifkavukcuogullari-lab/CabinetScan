@@ -55,6 +55,24 @@ struct PointCloudGenerationResult {
     /// Total processing time in milliseconds
     let processingTimeMs: Int
 
+    // MARK: - Story 6.4: Reflective Filtering Metrics (Task 4.4)
+
+    /// Number of points filtered due to reflective artifact detection.
+    ///
+    /// **Design Note:** Per ADR-6.4.2, reflective surface detection is performed
+    /// post-TSDF fusion via variance analysis, not during point cloud generation.
+    /// This field tracks any pre-filtering done during generation (currently 0).
+    /// The actual reflective impact is calculated by `ReflectiveSurfaceDetector`
+    /// after fusion completes.
+    let reflectiveFilteredCount: Int
+
+    /// Percentage of points filtered for reflective artifacts (0.0-1.0)
+    var reflectiveFilteredPercentage: Float {
+        let total = totalPointCount + reflectiveFilteredCount
+        guard total > 0 else { return 0 }
+        return Float(reflectiveFilteredCount) / Float(total)
+    }
+
     /// Total number of points across all clouds
     var totalPointCount: Int {
         pointClouds.reduce(0) { $0 + $1.count }
@@ -64,6 +82,21 @@ struct PointCloudGenerationResult {
     var averagePointsPerFrame: Int {
         guard !pointClouds.isEmpty else { return 0 }
         return totalPointCount / pointClouds.count
+    }
+
+    /// Creates a result with default reflective filtering (for backwards compatibility)
+    init(
+        pointClouds: [AIPointCloud],
+        videoPointCloudCount: Int,
+        photoPointCloudCount: Int,
+        processingTimeMs: Int,
+        reflectiveFilteredCount: Int = 0
+    ) {
+        self.pointClouds = pointClouds
+        self.videoPointCloudCount = videoPointCloudCount
+        self.photoPointCloudCount = photoPointCloudCount
+        self.processingTimeMs = processingTimeMs
+        self.reflectiveFilteredCount = reflectiveFilteredCount
     }
 }
 

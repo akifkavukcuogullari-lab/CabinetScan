@@ -836,7 +836,10 @@ struct ScanningView: View {
             videoDurationSeconds: videoData?.durationSeconds,
             videoSizeBytes: videoData?.sizeBytes,
             videoResolution: videoData?.resolution,
-            videoFormat: videoData != nil ? "mp4" : nil
+            videoFormat: videoData != nil ? "mp4" : nil,
+            visualizationPhotoUrls: nil,  // LiDAR flow doesn't use visualization photos
+            scanMethod: nil,  // LiDAR flow: nil (Story 5.4)
+            aiMetadata: nil   // LiDAR flow: nil (Story 5.4)
         )
     }
 
@@ -1947,7 +1950,7 @@ class RoomPlanViewController: UIViewController {
         // FIX: Delay session start to allow view hierarchy to fully set up
         // This helps prevent race conditions on faster processors (A17 Pro / iPhone 15+)
         // The delay gives the RoomCaptureView time to properly initialize its Metal rendering pipeline
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self = self else { return }
             let config = RoomCaptureSession.Configuration()
             print("🟢 [RoomPlanViewController] Starting RoomPlan session with config (after delay)...")

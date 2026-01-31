@@ -172,6 +172,9 @@ struct GuidanceToastContainer: View {
     /// Timer for auto-dismiss
     @State private var dismissTask: Task<Void, Never>?
 
+    /// Story 6.5: Reduce Motion accessibility preference
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         ZStack {
             if let toast = toast {
@@ -180,7 +183,8 @@ struct GuidanceToastContainer: View {
                     icon: toast.icon,
                     type: toast.type
                 )
-                .transition(.opacity.animation(.easeInOut(duration: animationDuration)))
+                // Story 6.5: Respect Reduce Motion preference
+                .transition(.opacity.animation(reduceMotion ? .none : .easeInOut(duration: animationDuration)))
                 .onAppear {
                     scheduleAutoDismiss()
                     announceForAccessibility(toast)
@@ -190,7 +194,8 @@ struct GuidanceToastContainer: View {
                 }
             }
         }
-        .animation(.easeInOut(duration: animationDuration), value: toast?.id)
+        // Story 6.5: Respect Reduce Motion preference
+        .animation(reduceMotion ? .none : .easeInOut(duration: animationDuration), value: toast?.id)
     }
 
     /// Schedule auto-dismiss after duration

@@ -36,6 +36,7 @@ enum CabinetDetectionPhase: String {
     case baseCabinetDetection = "Detecting Base Cabinets"
     case upperCabinetDetection = "Detecting Upper Cabinets"
     case tallCabinetDetection = "Detecting Tall Cabinets"
+    case cornerCabinetDetection = "Detecting Corner Cabinets"
     case dimensionExtraction = "Extracting Dimensions"
     case snapping = "Applying Standard Sizes"
     case validation = "Validating Cabinet Runs"
@@ -43,6 +44,35 @@ enum CabinetDetectionPhase: String {
 
     var displayText: String {
         rawValue
+    }
+}
+
+// MARK: - Wall Corner
+
+/// Represents a corner where two walls meet.
+/// Used for corner cabinet detection (Story 4.3).
+struct WallCorner: Equatable {
+    /// ID of the first wall
+    let wall1Id: UUID
+
+    /// ID of the second wall
+    let wall2Id: UUID
+
+    /// The corner point (where walls meet)
+    let cornerPoint: SIMD2<Float>
+
+    /// Angle between walls in degrees (90° = perpendicular)
+    let cornerAngleDegrees: Float
+
+    /// Direction vector of wall 1 (pointing away from corner)
+    let wall1Direction: SIMD2<Float>
+
+    /// Direction vector of wall 2 (pointing away from corner)
+    let wall2Direction: SIMD2<Float>
+
+    /// Whether this is a valid corner for corner cabinets (75°-105° range)
+    var isValidForCornerCabinet: Bool {
+        StandardCornerCabinetSizes.isValidCornerAngle(cornerAngleDegrees)
     }
 }
 
@@ -216,8 +246,22 @@ final class CabinetDetector: ObservableObject, CabinetDetectorProtocol {
             ceilingHeight: Float(roomStructure.ceilingHeightInches)
         )
         allCabinets.append(contentsOf: tallCabinets)
-        progress = 0.75
+        progress = 0.70
         logger.info("Detected \(tallCabinets.count) tall cabinets")
+
+        // Story 4.3: Detect corner cabinets
+        try Task.checkCancellation()
+        currentPhase = .cornerCabinetDetection
+        let wallCorners = findWallCorners(walls: roomStructure.walls)
+        let cornerResult = detectCornerCabinets(
+            corners: wallCorners,
+            existingCabinets: allCabinets,
+            floorY: floorY
+        )
+        allCabinets = cornerResult.cabinets
+        warnings.append(contentsOf: cornerResult.warnings)
+        progress = 0.85
+        logger.info("Detected \(cornerResult.cornerCount) corner cabinets from \(wallCorners.count) wall corners")
 
         // Task 8: Validate cabinet runs
         try Task.checkCancellation()
@@ -241,7 +285,12 @@ final class CabinetDetector: ObservableObject, CabinetDetectorProtocol {
         let processingTimeMs = Int((CFAbsoluteTimeGetCurrent() - startTime) * 1000)
         progress = 1.0
 
-        logger.info("Cabinet detection complete in \(processingTimeMs)ms: \(allCabinets.count) cabinets (\(baseCabinets.count) base, \(upperCabinets.count) upper, \(tallCabinets.count) tall)")
+        // Story 6.1: Log appropriately for empty kitchen scenario
+        if allCabinets.isEmpty {
+            logger.info("Cabinet detection complete in \(processingTimeMs)ms: No cabinets detected (empty kitchen - room dimensions only)")
+        } else {
+            logger.info("Cabinet detection complete in \(processingTimeMs)ms: \(allCabinets.count) cabinets (\(baseCabinets.count) base, \(upperCabinets.count) upper, \(tallCabinets.count) tall)")
+        }
 
         return CabinetDetectionResult(
             cabinets: allCabinets,
@@ -858,5 +907,547 @@ final class CabinetDetector: ObservableObject, CabinetDetectorProtocol {
         }
 
         return validations
+    }
+
+    // MARK: - Story 4.3: Wall Corner Detection (Task 2)
+
+    /// Finds corners where two walls meet at approximately 90°.
+    ///
+    /// - Parameter walls: Array of detected walls
+    /// - Returns: Array of wall corners suitable for corner cabinet detection
+    private func findWallCorners(walls: [AIWall]) -> [WallCorner] {
+        var corners: [WallCorner] = []
+
+        // Check each pair of walls for intersections
+        for i in 0..<walls.count {
+            for j in (i + 1)..<walls.count {
+                let wall1 = walls[i]
+                let wall2 = walls[j]
+
+                // Check if walls share a common endpoint (within tolerance)
+                let cornerTolerance: Float = 6.0  // 6 inches tolerance for shared endpoint
+
+                // Check all endpoint combinations
+                let endpoints1 = [wall1.startPoint, wall1.endPoint]
+                let endpoints2 = [wall2.startPoint, wall2.endPoint]
+
+                for (idx1, ep1) in endpoints1.enumerated() {
+                    for (idx2, ep2) in endpoints2.enumerated() {
+                        let distance = simd_length(ep1 - ep2)
+                        if distance <= cornerTolerance {
+                            // Found a shared corner
+                            let cornerPoint = (ep1 + ep2) / 2  // Average for precision
+
+                            // Calculate wall directions pointing away from corner
+                            let dir1: SIMD2<Float>
+                            if idx1 == 0 {
+                                // Corner is at startPoint, direction goes toward endPoint
+                                dir1 = simd_normalize(wall1.endPoint - wall1.startPoint)
+                            } else {
+                                // Corner is at endPoint, direction goes toward startPoint
+                                dir1 = simd_normalize(wall1.startPoint - wall1.endPoint)
+                            }
+
+                            let dir2: SIMD2<Float>
+                            if idx2 == 0 {
+                                dir2 = simd_normalize(wall2.endPoint - wall2.startPoint)
+                            } else {
+                                dir2 = simd_normalize(wall2.startPoint - wall2.endPoint)
+                            }
+
+                            // Calculate angle between walls
+                            let angle = calculateCornerAngle(direction1: dir1, direction2: dir2)
+
+                            // Only keep corners suitable for corner cabinets (75°-105°)
+                            if StandardCornerCabinetSizes.isValidCornerAngle(angle) {
+                                corners.append(WallCorner(
+                                    wall1Id: wall1.id,
+                                    wall2Id: wall2.id,
+                                    cornerPoint: cornerPoint,
+                                    cornerAngleDegrees: angle,
+                                    wall1Direction: dir1,
+                                    wall2Direction: dir2
+                                ))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return corners
+    }
+
+    /// Calculates the angle between two wall directions.
+    ///
+    /// - Parameters:
+    ///   - direction1: Normalized direction vector of first wall
+    ///   - direction2: Normalized direction vector of second wall
+    /// - Returns: Angle in degrees (90° = perpendicular)
+    private func calculateCornerAngle(
+        direction1: SIMD2<Float>,
+        direction2: SIMD2<Float>
+    ) -> Float {
+        // Dot product gives cos(angle)
+        let dotProduct = simd_dot(direction1, direction2)
+        // Clamp to avoid acos domain errors due to floating point
+        let clampedDot = max(-1.0, min(1.0, dotProduct))
+        let angleRadians = acos(abs(clampedDot))
+        let angleDegrees = angleRadians * 180.0 / .pi
+
+        // Convert to angle from perpendicular
+        // If dot product is ~0, walls are perpendicular (90°)
+        // If dot product is ~1 or -1, walls are parallel (0° or 180°)
+        return angleDegrees
+    }
+
+    // MARK: - Story 4.3: Corner Cabinet Detection (Task 3)
+
+    /// Result of corner cabinet detection.
+    private struct CornerDetectionResult {
+        let cabinets: [AIDetectedCabinet]
+        let cornerCount: Int
+        let warnings: [String]
+    }
+
+    /// Detects corner cabinets at wall intersections.
+    ///
+    /// Detects both base and upper corner cabinets at each wall intersection.
+    ///
+    /// - Parameters:
+    ///   - corners: Wall corners found by findWallCorners
+    ///   - existingCabinets: Already detected base/upper/tall cabinets
+    ///   - floorY: Y coordinate of the floor
+    /// - Returns: Updated cabinet array with corner cabinets identified
+    private func detectCornerCabinets(
+        corners: [WallCorner],
+        existingCabinets: [AIDetectedCabinet],
+        floorY: Float
+    ) -> CornerDetectionResult {
+        var updatedCabinets = existingCabinets
+        var warnings: [String] = []
+        var cornerCount = 0
+
+        for corner in corners {
+            // Detect corner cabinets for both base and upper types
+            for cabinetType in [AICabinetType.base, AICabinetType.upper] {
+                let isUpper = cabinetType == .upper
+
+                // Find cabinets near this corner on both walls
+                let wall1Cabinets = existingCabinets.filter { $0.wallId == corner.wall1Id && $0.type == cabinetType }
+                let wall2Cabinets = existingCabinets.filter { $0.wallId == corner.wall2Id && $0.type == cabinetType }
+
+                // Find cabinets at the corner (within proximity threshold)
+                guard let cornerCabinetResult = findCornerCabinetPair(
+                    corner: corner,
+                    wall1Cabinets: wall1Cabinets,
+                    wall2Cabinets: wall2Cabinets,
+                    isUpper: isUpper
+                ) else {
+                    continue
+                }
+
+                // Classify the corner type
+                let (cornerType, typeConfidence, typeNotes) = classifyCornerType(
+                    wall1Length: cornerCabinetResult.wall1Length,
+                    wall2Length: cornerCabinetResult.wall2Length,
+                    isUpper: isUpper
+                )
+
+                // Create corner cabinet details
+                let cornerDetails = AICornerCabinetDetails(
+                    wall1Id: corner.wall1Id,
+                    wall2Id: corner.wall2Id,
+                    wall1LengthInches: cornerCabinetResult.wall1Length,
+                    wall2LengthInches: cornerCabinetResult.wall2Length,
+                    diagonalWidthInches: cornerType == .diagonal ? StandardCornerCabinetSizes.diagonalFaceWidth : nil,
+                    cornerAngleDegrees: corner.cornerAngleDegrees,
+                    isUpper: isUpper,
+                    rawWallLengths: SIMD2(cornerCabinetResult.rawWall1Length, cornerCabinetResult.rawWall2Length),
+                    snappedWallLengths: SIMD2(cornerCabinetResult.wall1Length, cornerCabinetResult.wall2Length)
+                )
+
+                // Calculate corner confidence
+                let cornerConfidence = calculateCornerConfidence(
+                    cornerType: cornerType,
+                    typeConfidence: typeConfidence,
+                    wall1Length: cornerCabinetResult.wall1Length,
+                    wall2Length: cornerCabinetResult.wall2Length,
+                    cornerAngle: corner.cornerAngleDegrees,
+                    isUpper: isUpper
+                )
+
+                // Build notes for the corner cabinet
+                var notes = typeNotes
+                if cornerConfidence == .low {
+                    notes.append("Verify corner cabinet type")
+                }
+                if !cornerDetails.isStandardCornerSize {
+                    notes.append("Non-standard corner dimensions")
+                }
+                if !cornerDetails.isRightAngle {
+                    notes.append("Corner angle: \(String(format: "%.1f", corner.cornerAngleDegrees))°")
+                }
+
+                // Create merged corner cabinet
+                guard let cornerCabinet = createCornerCabinet(
+                    corner: corner,
+                    cornerDetails: cornerDetails,
+                    cornerType: cornerType,
+                    cabinetType: cabinetType,
+                    confidence: cornerConfidence,
+                    originalCabinets: cornerCabinetResult.originalCabinets,
+                    notes: notes
+                ) else {
+                    logger.warning("Failed to create \(isUpper ? "upper" : "base") corner cabinet at corner point (\(corner.cornerPoint.x), \(corner.cornerPoint.y))")
+                    continue
+                }
+
+                // Remove original cabinets that were merged
+                updatedCabinets.removeAll { cabinet in
+                    cornerCabinetResult.originalCabinets.contains { $0.id == cabinet.id }
+                }
+
+                // Add the corner cabinet
+                updatedCabinets.append(cornerCabinet)
+                cornerCount += 1
+                logger.debug("Detected \(isUpper ? "upper" : "base") corner cabinet: \(cornerType.displayText) at (\(corner.cornerPoint.x), \(corner.cornerPoint.y))")
+
+                // Add warning if confidence is low
+                if cornerConfidence == .low {
+                    warnings.append("\(isUpper ? "Upper" : "Base") corner cabinet at wall intersection requires verification")
+                }
+            }
+        }
+
+        return CornerDetectionResult(
+            cabinets: updatedCabinets,
+            cornerCount: cornerCount,
+            warnings: warnings
+        )
+    }
+
+    /// Result of finding a corner cabinet pair.
+    private struct CornerCabinetPairResult {
+        let wall1Length: Float
+        let wall2Length: Float
+        let rawWall1Length: Float
+        let rawWall2Length: Float
+        let originalCabinets: [AIDetectedCabinet]
+    }
+
+    /// Finds cabinets at a corner that could form a corner cabinet.
+    ///
+    /// - Parameters:
+    ///   - corner: The wall corner to check
+    ///   - wall1Cabinets: Cabinets on wall 1
+    ///   - wall2Cabinets: Cabinets on wall 2
+    ///   - isUpper: Whether looking for upper cabinets
+    /// - Returns: Corner cabinet pair if found, nil otherwise
+    private func findCornerCabinetPair(
+        corner: WallCorner,
+        wall1Cabinets: [AIDetectedCabinet],
+        wall2Cabinets: [AIDetectedCabinet],
+        isUpper: Bool = false
+    ) -> CornerCabinetPairResult? {
+        // Find cabinet on wall 1 nearest to corner
+        // Since wall directions point away from corner, cabinet at corner has position ~0
+        let cornerProximityThreshold: Float = 6.0  // inches
+
+        let wall1AtCorner = wall1Cabinets.filter { $0.positionOnWallInches <= cornerProximityThreshold }
+            .sorted { $0.positionOnWallInches < $1.positionOnWallInches }
+            .first
+
+        let wall2AtCorner = wall2Cabinets.filter { $0.positionOnWallInches <= cornerProximityThreshold }
+            .sorted { $0.positionOnWallInches < $1.positionOnWallInches }
+            .first
+
+        guard let cab1 = wall1AtCorner, let cab2 = wall2AtCorner else {
+            return nil
+        }
+
+        // Use cabinet widths as wall lengths for corner
+        let rawWall1Length = cab1.rawWidthInches
+        let rawWall2Length = cab2.rawWidthInches
+
+        // Apply corner-specific snapping
+        let snappedWall1 = snapCornerDimension(rawWall1Length, isUpper: isUpper)
+        let snappedWall2 = snapCornerDimension(rawWall2Length, isUpper: isUpper)
+
+        return CornerCabinetPairResult(
+            wall1Length: snappedWall1,
+            wall2Length: snappedWall2,
+            rawWall1Length: rawWall1Length,
+            rawWall2Length: rawWall2Length,
+            originalCabinets: [cab1, cab2]
+        )
+    }
+
+    // MARK: - Story 4.3: Corner Type Classification (Task 4)
+
+    /// Classifies the type of corner cabinet based on dimensions.
+    ///
+    /// - Parameters:
+    ///   - wall1Length: Length along wall 1 (inches)
+    ///   - wall2Length: Length along wall 2 (inches)
+    ///   - isUpper: Whether this is an upper cabinet
+    /// - Returns: Tuple of (corner type, confidence, notes)
+    private func classifyCornerType(
+        wall1Length: Float,
+        wall2Length: Float,
+        isUpper: Bool
+    ) -> (AICornerCabinetType, AIConfidenceLevel, [String]) {
+        var notes: [String] = []
+
+        // Check for Lazy Susan (equal sides)
+        if StandardCornerCabinetSizes.areWallsEqual(wall1Length, wall2Length) {
+            // Check if dimensions match standard Lazy Susan sizes
+            let standardSizes = isUpper ? StandardCornerCabinetSizes.lazySusanUpper : StandardCornerCabinetSizes.lazySusanBase
+            let avgLength = (wall1Length + wall2Length) / 2
+            let nearestStandard = standardSizes.min(by: { abs($0 - avgLength) < abs($1 - avgLength) }) ?? avgLength
+            let diff = abs(nearestStandard - avgLength)
+
+            if diff <= StandardCornerCabinetSizes.snappingTolerance {
+                return (.lazySusan, .high, notes)
+            } else {
+                notes.append("Dimensions suggest Lazy Susan but non-standard size")
+                return (.lazySusan, .medium, notes)
+            }
+        }
+
+        // Check for Blind Corner (asymmetric)
+        let blindCornerCheck = StandardCornerCabinetSizes.isBlindCornerPattern(wall1: wall1Length, wall2: wall2Length)
+        if blindCornerCheck.isBlindCorner {
+            return (.blindCorner, .high, notes)
+        }
+
+        // Check for Diagonal (both walls ~24")
+        let diagonalWallFace = StandardCornerCabinetSizes.diagonalWallFace
+        let tolerance = StandardCornerCabinetSizes.snappingTolerance
+        if abs(wall1Length - diagonalWallFace) <= tolerance && abs(wall2Length - diagonalWallFace) <= tolerance {
+            return (.diagonal, .medium, notes)  // Medium because we can't visually confirm diagonal face
+        }
+
+        // If dimensions don't clearly match any pattern, make best guess
+        let diff = abs(wall1Length - wall2Length)
+        if diff <= 6 {
+            // Relatively equal - probably Lazy Susan
+            notes.append("Type inferred from dimensions")
+            return (.lazySusan, .medium, notes)
+        } else {
+            // Asymmetric - probably Blind Corner
+            notes.append("Type inferred from dimensions")
+            return (.blindCorner, .medium, notes)
+        }
+    }
+
+    // MARK: - Story 4.3: Corner Dimension Snapping (Task 5)
+
+    /// Snaps a corner dimension to standard corner cabinet sizes.
+    ///
+    /// - Parameters:
+    ///   - rawDimension: Raw measured dimension
+    ///   - isUpper: Whether this is an upper cabinet
+    /// - Returns: Snapped dimension
+    private func snapCornerDimension(_ rawDimension: Float, isUpper: Bool) -> Float {
+        let tolerance = StandardCornerCabinetSizes.snappingTolerance
+
+        // Try Lazy Susan sizes
+        let lazySusanSizes = isUpper ? StandardCornerCabinetSizes.lazySusanUpper : StandardCornerCabinetSizes.lazySusanBase
+        for size in lazySusanSizes {
+            if abs(rawDimension - size) <= tolerance {
+                return size
+            }
+        }
+
+        // Try Blind Corner sizes
+        for size in StandardCornerCabinetSizes.blindCornerDoorSideWidths {
+            if abs(rawDimension - size) <= tolerance {
+                return size
+            }
+        }
+        for size in StandardCornerCabinetSizes.blindCornerBlindSideWidths {
+            if abs(rawDimension - size) <= tolerance {
+                return size
+            }
+        }
+
+        // Try Diagonal size
+        if abs(rawDimension - StandardCornerCabinetSizes.diagonalWallFace) <= tolerance {
+            return StandardCornerCabinetSizes.diagonalWallFace
+        }
+
+        // No match - return raw
+        return rawDimension
+    }
+
+    // MARK: - Story 4.3: Corner Confidence Scoring (Task 6)
+
+    /// Calculates confidence level for a corner cabinet detection.
+    ///
+    /// Confidence scoring uses a point system:
+    /// - Type confidence: HIGH=3, MEDIUM=2, LOW=1 points
+    /// - Standard dimensions: +2 points
+    /// - Right angle (90° ± 2°): +1 point
+    /// - Max score = 6, thresholds: >=5 HIGH, >=3 MEDIUM, else LOW
+    ///
+    /// - Parameters:
+    ///   - cornerType: Classified corner type
+    ///   - typeConfidence: Confidence in the type classification
+    ///   - wall1Length: Length along wall 1
+    ///   - wall2Length: Length along wall 2
+    ///   - cornerAngle: Angle of the corner
+    ///   - isUpper: Whether this is an upper cabinet (affects standard size check)
+    /// - Returns: Overall confidence level
+    private func calculateCornerConfidence(
+        cornerType: AICornerCabinetType,
+        typeConfidence: AIConfidenceLevel,
+        wall1Length: Float,
+        wall2Length: Float,
+        cornerAngle: Float,
+        isUpper: Bool = false
+    ) -> AIConfidenceLevel {
+        // Start with type confidence
+        var score = 0
+
+        switch typeConfidence {
+        case .high: score += 3
+        case .medium: score += 2
+        case .low: score += 1
+        }
+
+        // Check if dimensions match standards
+        let isStandardDimensions = checkStandardCornerDimensions(
+            wall1Length: wall1Length,
+            wall2Length: wall2Length,
+            cornerType: cornerType,
+            isUpper: isUpper
+        )
+        if isStandardDimensions {
+            score += 2
+        }
+
+        // Check corner angle (90° ± 2° is ideal)
+        let isRightAngle = abs(cornerAngle - 90.0) <= StandardCornerCabinetSizes.rightAngleTolerance
+        if isRightAngle {
+            score += 1
+        }
+
+        // Map score to confidence
+        // Max score = 6 (high type + standard dims + right angle)
+        if score >= 5 {
+            return .high
+        } else if score >= 3 {
+            return .medium
+        } else {
+            return .low
+        }
+    }
+
+    /// Checks if corner dimensions match standard sizes.
+    private func checkStandardCornerDimensions(
+        wall1Length: Float,
+        wall2Length: Float,
+        cornerType: AICornerCabinetType,
+        isUpper: Bool = false
+    ) -> Bool {
+        let tolerance = StandardCornerCabinetSizes.snappingTolerance
+
+        switch cornerType {
+        case .lazySusan:
+            let standardSizes = isUpper ? StandardCornerCabinetSizes.lazySusanUpper : StandardCornerCabinetSizes.lazySusanBase
+            for size in standardSizes {
+                if abs(wall1Length - size) <= tolerance && abs(wall2Length - size) <= tolerance {
+                    return true
+                }
+            }
+            return false
+
+        case .blindCorner:
+            // Blind corner not typical for upper cabinets, but check anyway
+            let doorRange = StandardCornerCabinetSizes.blindCornerDoorSideRange
+            let blindRange = StandardCornerCabinetSizes.blindCornerBlindSideRange
+            // Check if wall1 is door side, wall2 is blind
+            if doorRange.contains(wall1Length) && blindRange.contains(wall2Length) {
+                return true
+            }
+            // Check reverse
+            if doorRange.contains(wall2Length) && blindRange.contains(wall1Length) {
+                return true
+            }
+            return false
+
+        case .diagonal:
+            let diag = StandardCornerCabinetSizes.diagonalWallFace
+            return abs(wall1Length - diag) <= tolerance && abs(wall2Length - diag) <= tolerance
+
+        case .deadCorner:
+            // Dead corners have no standard dimensions
+            return false
+        }
+    }
+
+    // MARK: - Story 4.3: Create Corner Cabinet (Task 7)
+
+    /// Creates a corner cabinet from merged cabinets.
+    ///
+    /// - Parameters:
+    ///   - corner: The wall corner
+    ///   - cornerDetails: Corner-specific details
+    ///   - cornerType: Classified corner type
+    ///   - cabinetType: Type of cabinet (base or upper)
+    ///   - confidence: Detection confidence
+    ///   - originalCabinets: Original cabinets being merged (must not be empty)
+    ///   - notes: Detection notes
+    /// - Returns: A corner cabinet, or nil if originalCabinets is empty
+    private func createCornerCabinet(
+        corner: WallCorner,
+        cornerDetails: AICornerCabinetDetails,
+        cornerType: AICornerCabinetType,
+        cabinetType: AICabinetType = .base,
+        confidence: AIConfidenceLevel,
+        originalCabinets: [AIDetectedCabinet],
+        notes: [String]
+    ) -> AIDetectedCabinet? {
+        // Use first original cabinet as base for some properties
+        guard let firstCabinet = originalCabinets.first else {
+            logger.error("createCornerCabinet called with empty originalCabinets array")
+            return nil
+        }
+
+        // Calculate combined dimensions
+        // Width is the larger of the two wall lengths (for general cabinet sizing)
+        let width = max(cornerDetails.wall1LengthInches, cornerDetails.wall2LengthInches)
+        let height = firstCabinet.rawHeightInches
+        let depth = firstCabinet.rawDepthInches
+
+        // Create bounding box centered at corner
+        let center3D = SIMD3<Float>(
+            corner.cornerPoint.x,
+            height / 2,
+            corner.cornerPoint.y
+        )
+
+        let boundingBox = AIBoundingBox3D(
+            center: center3D,
+            size: SIMD3<Float>(width, height, depth)
+        )
+
+        // Check if both wall dimensions are standard
+        let isStandardSize = cornerDetails.isStandardCornerSize
+
+        return AIDetectedCabinet(
+            boundingBox: boundingBox,
+            type: cabinetType,
+            wallId: corner.wall1Id,  // Primary wall reference
+            positionOnWallInches: 0,  // At wall start (corner)
+            rawDimensions: SIMD3<Float>(width, height, depth),
+            snappedDimensions: SIMD3<Float>(width, height, depth),
+            confidence: confidence,
+            isStandardSize: isStandardSize,
+            cornerType: cornerType,
+            cornerDetails: cornerDetails,
+            notes: notes
+        )
     }
 }

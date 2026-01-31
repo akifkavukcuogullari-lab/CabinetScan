@@ -136,6 +136,12 @@ final class ProcessingTimeLogger {
         case geometricConstraints = "geometric_constraints"
         case roomDetection = "room_detection"
         case cabinetDetection = "cabinet_detection"
+        case applianceDetection = "appliance_detection"
+        case islandPeninsulaDetection = "island_peninsula_detection"
+        case countertopDetection = "countertop_detection"
+        case openingDetection = "opening_detection"
+        case measurementExtraction = "measurement_extraction"
+        case confidenceScoring = "confidence_scoring"
 
         /// Performance budget in milliseconds (iPhone 12 baseline)
         var budgetMs: ClosedRange<Int> {
@@ -149,6 +155,12 @@ final class ProcessingTimeLogger {
             case .geometricConstraints: return 200...400
             case .roomDetection: return 300...500
             case .cabinetDetection: return 500...1000
+            case .applianceDetection: return 300...500
+            case .islandPeninsulaDetection: return 100...200
+            case .countertopDetection: return 100...200
+            case .openingDetection: return 50...100
+            case .measurementExtraction: return 50...100
+            case .confidenceScoring: return 20...50
             }
         }
 

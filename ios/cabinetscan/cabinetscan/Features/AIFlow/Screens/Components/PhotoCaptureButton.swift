@@ -10,12 +10,19 @@ import UIKit
 
 /// Capture button for photo mode with haptic feedback and press animation.
 /// Per Story 2.5 - Task 6.3, 6.4, Task 7.1, 7.2, UX-8, UX-12
+/// Story 6.5: Enhanced accessibility with remaining photo count per AC1
 struct PhotoCaptureButton: View {
     /// Action to perform when button is tapped
     let action: () -> Void
 
     /// Whether the button is enabled
     var isEnabled: Bool = true
+
+    /// Current photo count for accessibility (Story 6.5 - AC1)
+    var currentPhotoCount: Int = 0
+
+    /// Total photos required for accessibility (Story 6.5 - AC1)
+    var totalPhotosRequired: Int = 5
 
     /// Whether to show flash effect
     @State private var showFlash = false
@@ -82,9 +89,21 @@ struct PhotoCaptureButton: View {
                     }
                 }
         )
-        .accessibilityLabel("Capture photo")
+        .accessibilityLabel(accessibilityLabelText)
         .accessibilityHint(isEnabled ? "Double tap to take a photo" : "Capture is disabled")
         .accessibilityAddTraits(isEnabled ? .isButton : [.isButton, .isStaticText])
+    }
+
+    // MARK: - Accessibility
+
+    /// Dynamic accessibility label including remaining photo count per AC1
+    private var accessibilityLabelText: String {
+        let remaining = totalPhotosRequired - currentPhotoCount
+        if remaining > 0 {
+            return "Capture photo, \(remaining) of \(totalPhotosRequired) remaining"
+        } else {
+            return "All photos captured"
+        }
     }
 
     // MARK: - Capture Action

@@ -29,7 +29,7 @@ class AIFlowViewModel: ObservableObject {
     }
 
     /// Camera permission states
-    enum CameraPermissionStatus {
+    enum CameraPermissionStatus: Equatable {
         case authorized
         case notDetermined
         case denied

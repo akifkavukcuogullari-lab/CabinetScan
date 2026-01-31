@@ -90,6 +90,41 @@ struct ProjectInfo: Codable {
     let notes: String?
 }
 
+// MARK: - Scan Method
+enum ScanMethod: String, Codable, CaseIterable {
+    case lidar = "lidar"
+    case aiFlow = "ai_flow"
+}
+
+// MARK: - AI Metadata
+struct AIMetadata: Codable {
+    let calibrationMethod: String
+    let calibrationConfidence: Double
+    let overallConfidence: Double
+    let processingTimeMs: Int
+    let modelVersions: [String: String]
+    let needsVerification: Bool
+    let frameCount: Int
+    let photoCount: Int
+    let scaleFactor: Double
+    let coveragePercentage: Double
+    let warnings: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case calibrationMethod = "calibration_method"
+        case calibrationConfidence = "calibration_confidence"
+        case overallConfidence = "overall_confidence"
+        case processingTimeMs = "processing_time_ms"
+        case modelVersions = "model_versions"
+        case needsVerification = "needs_verification"
+        case frameCount = "frame_count"
+        case photoCount = "photo_count"
+        case scaleFactor = "scale_factor"
+        case coveragePercentage = "coverage_percentage"
+        case warnings
+    }
+}
+
 // MARK: - Measurement Data
 struct MeasurementData: Codable {
     let roomName: String?
@@ -113,6 +148,9 @@ struct MeasurementData: Codable {
     let videoFormat: String?
     // Visualization photos (multiple angles - up to 5 photos)
     var visualizationPhotoUrls: [String]?
+    // AI Flow specific fields (Story 5.4)
+    let scanMethod: ScanMethod?
+    let aiMetadata: AIMetadata?
 
     enum CodingKeys: String, CodingKey {
         case measurements
@@ -134,6 +172,8 @@ struct MeasurementData: Codable {
         case videoResolution = "video_resolution"
         case videoFormat = "video_format"
         case visualizationPhotoUrls = "visualization_photo_urls"
+        case scanMethod = "scan_method"
+        case aiMetadata = "ai_metadata"
     }
 }
 

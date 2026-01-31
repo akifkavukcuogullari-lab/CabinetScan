@@ -286,8 +286,8 @@ final class ConfidenceScorerTests: XCTestCase {
             measurementResult: nil
         )
 
-        // With no inputs, result should be empty/default
-        XCTAssertEqual(result.overallScore, 0.0)
+        // With no inputs, result should return room-only confidence (Story 6.1)
+        XCTAssertEqual(result.overallScore, 0.5, accuracy: 0.01)
 
         // Direct weight verification through ObjectConfidenceScore
         XCTAssertEqual(largeCabinetScore.widthInches, 36.0)
@@ -473,8 +473,9 @@ final class ConfidenceScorerTests: XCTestCase {
         )
 
         // Then: Should return valid result with defaults
+        // Story 6.1: Empty kitchen returns 50% confidence for room-only data
         XCTAssertTrue(result.objectScores.isEmpty)
-        XCTAssertEqual(result.overallScore, 0.0)
+        XCTAssertEqual(result.overallScore, 0.5, accuracy: 0.01)
         XCTAssertEqual(result.overallLevel, .low)
         XCTAssertEqual(result.quoteReadiness, .notRecommended)
         XCTAssertEqual(result.itemsNeedingVerification, 0)
@@ -537,5 +538,413 @@ final class ConfidenceScorerTests: XCTestCase {
 
         // Then: Should complete under 50ms budget
         XCTAssertLessThan(elapsedMs, 50, "Confidence scoring should complete under 50ms")
+    }
+
+    // MARK: - Story 6.1: Empty Kitchen Handling Tests
+
+    /// Tests that empty kitchen (no objects) returns 50% confidence, not 0%.
+    /// Story 6.1 AC3: Confidence should reflect room detection quality.
+    func testEmptyKitchen_ReturnsRoomOnlyConfidence() async throws {
+        // Given: No detection results (empty kitchen)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil
+        )
+
+        // Then: Should return 50% (medium-low) confidence, not 0%
+        XCTAssertEqual(result.overallScore, 0.5, accuracy: 0.01,
+            "Empty kitchen should return 50% confidence for room-only data")
+        XCTAssertEqual(result.overallLevel, .low,
+            "50% confidence should be LOW level (below 0.6 threshold)")
+    }
+
+    /// Tests that empty kitchen adds appropriate warning.
+    /// Story 6.1 AC3: Clear message about empty kitchen.
+    func testEmptyKitchen_AddsEmptyKitchenWarning() async throws {
+        // Given: No detection results (empty kitchen)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil
+        )
+
+        // Then: Should include "No cabinets detected" warning
+        XCTAssertTrue(result.warnings.contains { $0.contains("No cabinets detected") },
+            "Should include empty kitchen warning: \(result.warnings)")
+    }
+
+    /// Tests that empty kitchen has zero items needing verification.
+    func testEmptyKitchen_ZeroItemsNeedingVerification() async throws {
+        // Given: No detection results (empty kitchen)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil
+        )
+
+        // Then: No items to verify (there are no objects)
+        XCTAssertEqual(result.itemsNeedingVerification, 0)
+        XCTAssertEqual(result.objectScores.count, 0)
+    }
+
+    /// Tests quote readiness for empty kitchen.
+    func testEmptyKitchen_QuoteReadinessIsLimited() async throws {
+        // Given: No detection results (empty kitchen)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil
+        )
+
+        // Then: Quote readiness should be limited (can't quote without cabinets)
+        // At 50%, this should be "notRecommended" (below 60% threshold)
+        XCTAssertEqual(result.quoteReadiness, .notRecommended,
+            "Empty kitchen at 50% confidence should be Not Recommended for quoting")
+    }
+
+    // MARK: - Story 6.2: Coverage Penalty Tests
+
+    /// Tests that coverage penalty is applied correctly (AC3).
+    func testCoveragePenalty_75Percent_ReducesScore() async throws {
+        // Given: Empty kitchen (50% base score) with 75% coverage
+        // When: Calculating confidence with coverage penalty
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: 0.75
+        )
+
+        // Then: Score should be 50% * 75% = 37.5%
+        XCTAssertEqual(result.overallScore, 0.375, accuracy: 0.01,
+            "Score should be reduced by coverage penalty")
+    }
+
+    /// Tests coverage warning is added for partial coverage (AC3).
+    func testCoverageWarning_PartialCoverage_AddsWarning() async throws {
+        // Given: Partial coverage (75%)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: 0.75
+        )
+
+        // Then: Should include "Some areas not captured" warning
+        XCTAssertTrue(result.warnings.contains { $0.contains("Some areas not captured") },
+            "Should include partial coverage warning: \(result.warnings)")
+    }
+
+    /// Tests severe coverage warning is added for <50% coverage (AC4).
+    func testCoverageWarning_SevereCoverage_AddsBothWarnings() async throws {
+        // Given: Severe coverage (25%)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: 0.25
+        )
+
+        // Then: Should include both warnings
+        XCTAssertTrue(result.warnings.contains { $0.contains("Some areas not captured") },
+            "Should include partial coverage warning")
+        XCTAssertTrue(result.warnings.contains { $0.contains("Incomplete scan - consider rescanning") },
+            "Should include severe coverage warning: \(result.warnings)")
+    }
+
+    /// Tests 100% coverage produces no coverage warnings.
+    func testCoverageWarning_FullCoverage_NoWarning() async throws {
+        // Given: Full coverage (100%)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: 1.0
+        )
+
+        // Then: Should not include coverage warnings
+        XCTAssertFalse(result.warnings.contains { $0.contains("Some areas not captured") },
+            "Full coverage should not have partial warning")
+        XCTAssertFalse(result.warnings.contains { $0.contains("Incomplete scan") },
+            "Full coverage should not have severe warning")
+    }
+
+    /// Tests that coverage warnings use AICoverageAnalyzer constants (single source of truth).
+    func testCoverageIntegration_WarningsUseAnalyzerConstants() async throws {
+        // Given: Coverage at 75% (partial)
+        let coveragePercentage: Float = 0.75
+
+        // When
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: coveragePercentage
+        )
+
+        // Then: Warnings should use AICoverageAnalyzer's constants
+        let partialWarning = result.warnings.first { $0.contains("areas not captured") }
+        XCTAssertNotNil(partialWarning, "Should have partial coverage warning")
+        XCTAssertTrue(partialWarning?.contains(AICoverageAnalyzer.partialCoverageWarning) ?? false,
+                      "Warning should use AICoverageAnalyzer constant")
+    }
+
+    /// Tests that severe coverage warnings use AICoverageAnalyzer constant.
+    func testCoverageIntegration_SevereUsesAnalyzerConstants() async throws {
+        // Given: Coverage at 25% (severe)
+        let coveragePercentage: Float = 0.25
+
+        // When
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: coveragePercentage
+        )
+
+        // Then: Should have both warnings using AICoverageAnalyzer constants
+        XCTAssertTrue(result.warnings.contains(AICoverageAnalyzer.severeCoverageWarning),
+                      "Should include severe warning constant")
+    }
+
+    /// Tests nil coverage assumes full coverage (backwards compatibility).
+    func testCoverageWarning_NilCoverage_NoWarning() async throws {
+        // Given: nil coverage (backwards compatibility)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: nil
+        )
+
+        // Then: Should not include coverage warnings
+        XCTAssertFalse(result.warnings.contains { $0.contains("Some areas not captured") },
+            "Nil coverage should assume full coverage")
+    }
+
+    /// Tests quote readiness is limited for severe coverage (AC3).
+    /// With severe coverage (<50%), quote readiness should be limited even with cabinets.
+    func testQuoteReadiness_SevereCoverage_LimitsQuoteReadiness() async throws {
+        // Given: Severe coverage (25%) - no cabinets for simplicity
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: 0.25
+        )
+
+        // Then: Quote readiness should be limited
+        // At 50% base * 25% coverage = 12.5% -> notRecommended
+        XCTAssertEqual(result.quoteReadiness, .notRecommended,
+            "Severe coverage should result in not recommended for quoting")
+    }
+
+    // MARK: - Story 6.4: Reflective Surface Impact Tests
+
+    /// Tests that 0% reflective impact applies no penalty (AC5).
+    func testReflectiveSurfaceImpact_ZeroImpact_NoPenalty() async throws {
+        // Given: No reflective surface impact
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: nil,
+            reflectiveSurfaceImpact: 0.0
+        )
+
+        // Then: Score should not be penalized
+        // Empty kitchen base score is 0.5, no penalties applied
+        XCTAssertEqual(result.overallScore, 0.5, accuracy: 0.01)
+    }
+
+    /// Tests that 10% reflective impact applies minor penalty (AC5).
+    func testReflectiveSurfaceImpact_MinorImpact_AppliesPenalty() async throws {
+        // Given: Minor reflective impact (10%)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: nil,
+            reflectiveSurfaceImpact: 0.1
+        )
+
+        // Then: Score should be penalized by 3% (10% * 0.3 = 3% penalty)
+        // Base 0.5 * (1 - 0.03) = 0.485
+        XCTAssertEqual(result.overallScore, 0.485, accuracy: 0.01)
+    }
+
+    /// Tests that 50% reflective impact applies significant penalty (AC5).
+    func testReflectiveSurfaceImpact_SignificantImpact_AppliesPenalty() async throws {
+        // Given: Significant reflective impact (50%)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: nil,
+            reflectiveSurfaceImpact: 0.5
+        )
+
+        // Then: Score should be penalized by 15% (50% * 0.3 = 15% penalty)
+        // Base 0.5 * (1 - 0.15) = 0.425
+        XCTAssertEqual(result.overallScore, 0.425, accuracy: 0.01)
+    }
+
+    /// Tests reflective surface warning is generated above 10% threshold (AC5).
+    func testReflectiveSurfaceImpact_AboveThreshold_GeneratesWarning() async throws {
+        // Given: Reflective impact above warning threshold (15%)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: nil,
+            reflectiveSurfaceImpact: 0.15
+        )
+
+        // Then: Should include reflective surface warning
+        XCTAssertTrue(result.warnings.contains { $0.contains("Reflective surfaces detected") },
+            "Should include reflective surface warning: \(result.warnings)")
+    }
+
+    /// Tests reflective surface warning is NOT generated below 10% threshold.
+    func testReflectiveSurfaceImpact_BelowThreshold_NoWarning() async throws {
+        // Given: Reflective impact below warning threshold (5%)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: nil,
+            reflectiveSurfaceImpact: 0.05
+        )
+
+        // Then: Should NOT include reflective surface warning
+        XCTAssertFalse(result.warnings.contains { $0.contains("Reflective surfaces detected") },
+            "Should NOT include reflective surface warning below 10% threshold")
+    }
+
+    /// Tests that significant reflective impact limits quote readiness (AC5).
+    func testReflectiveSurfaceImpact_SignificantImpact_LimitsQuoteReadiness() async throws {
+        // Given: Significant reflective impact (40% - above 30% threshold)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: nil,
+            reflectiveSurfaceImpact: 0.4
+        )
+
+        // Then: Quote readiness should be limited to withCaveats at most
+        XCTAssertNotEqual(result.quoteReadiness, .ready,
+            "Significant reflective impact should limit quote readiness")
+    }
+
+    /// Tests nil reflective impact (legacy/no analysis) applies no penalty.
+    func testReflectiveSurfaceImpact_Nil_NoPenalty() async throws {
+        // Given: No reflective surface analysis (nil)
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: nil,
+            reflectiveSurfaceImpact: nil  // Backwards compatible - no analysis
+        )
+
+        // Then: Score should not be penalized
+        XCTAssertEqual(result.overallScore, 0.5, accuracy: 0.01,
+            "Nil reflective impact should not apply penalty")
+    }
+
+    /// Tests reflective impact combines with coverage penalty correctly.
+    func testReflectiveSurfaceImpact_CombinesWithCoverage() async throws {
+        // Given: Both coverage and reflective impact
+        // When: Calculating confidence
+        let result = try await sut.calculateConfidence(
+            cabinetResult: nil,
+            applianceResult: nil,
+            islandPeninsulaResult: nil,
+            countertopResult: nil,
+            openingResult: nil,
+            measurementResult: nil,
+            coveragePercentage: 0.8,      // 80% coverage
+            reflectiveSurfaceImpact: 0.2  // 20% reflective impact
+        )
+
+        // Then: Both penalties should be applied
+        // Base 0.5 * 0.8 (coverage) * 0.94 (reflective: 1 - 0.2*0.3) = 0.376
+        XCTAssertEqual(result.overallScore, 0.376, accuracy: 0.02,
+            "Both coverage and reflective penalties should be applied")
     }
 }

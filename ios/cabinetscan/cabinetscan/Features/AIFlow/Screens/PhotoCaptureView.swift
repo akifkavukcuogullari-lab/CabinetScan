@@ -86,6 +86,17 @@ struct PhotoCaptureView: View {
             // Toast overlays
             toastOverlays
 
+            // Tracking recovery toast (Story 6.7) - Use container for proper accessibility
+            VStack {
+                TrackingRecoveryToastContainer(
+                    recoveryState: viewModel.trackingRecoveryState,
+                    isVisible: $viewModel.showTrackingRecoveryToast
+                )
+                .padding(.top, 100)
+
+                Spacer()
+            }
+
             // Completion celebration overlay (AC6)
             if viewModel.showCompletionCelebration {
                 completionOverlay
@@ -113,6 +124,35 @@ struct PhotoCaptureView: View {
                 }
             )
         }
+        // Story 6.5: Accessibility announcements for photo capture
+        .onChange(of: viewModel.photoCount) { oldCount, newCount in
+            // Announce photo capture success with remaining count
+            if newCount > oldCount {
+                let remaining = PhotoCaptureViewModel.requiredPhotoCount - newCount
+                if remaining > 0 {
+                    announceForVoiceOver("Photo captured, \(remaining) remaining")
+                }
+            }
+        }
+        .onChange(of: viewModel.showCompletionCelebration) { _, showCelebration in
+            // Announce completion celebration
+            if showCelebration {
+                announceForVoiceOver("All \(PhotoCaptureViewModel.requiredPhotoCount) photos captured. Tap Continue to process.")
+            }
+        }
+        .onChange(of: viewModel.showBlurWarning) { _, showWarning in
+            // Announce blur warning for VoiceOver users
+            if showWarning {
+                announceForVoiceOver("Warning: Photo may be blurry. Consider retaking.")
+            }
+        }
+    }
+
+    // MARK: - Accessibility Helpers
+
+    /// Announce message for VoiceOver users
+    private func announceForVoiceOver(_ message: String) {
+        UIAccessibility.post(notification: .announcement, argument: message)
     }
 
     // MARK: - Camera Preview
@@ -211,14 +251,30 @@ struct PhotoCaptureView: View {
                 .accessibilityHint("All photos captured, tap to continue")
                 .transition(.scale.combined(with: .opacity))
             } else {
-                // Capture button (UX-8, UX-12)
-                PhotoCaptureButton(
-                    action: {
-                        viewModel.capturePhoto()
-                    },
-                    isEnabled: !viewModel.isCapturing
-                )
-                .opacity(viewModel.isCapturing ? 0.5 : 1.0)
+                // Capture button (UX-8, UX-12) - Story 6.5: Pass count for accessibility
+                // Story 6.7: Disable when tracking is lost
+                VStack(spacing: 8) {
+                    PhotoCaptureButton(
+                        action: {
+                            viewModel.capturePhoto()
+                        },
+                        isEnabled: !viewModel.isCapturing && !viewModel.isCaptureDisabledByTracking,
+                        currentPhotoCount: viewModel.photoCount,
+                        totalPhotosRequired: PhotoCaptureViewModel.requiredPhotoCount
+                    )
+                    .opacity(viewModel.isCapturing || viewModel.isCaptureDisabledByTracking ? 0.5 : 1.0)
+
+                    // Show tracking lost message (Story 6.7 - Task 4.2)
+                    if viewModel.isCaptureDisabledByTracking {
+                        Text(viewModel.captureDisabledMessage)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Capsule())
+                    }
+                }
             }
         }
         .animation(reduceMotion ? .none : .spring(response: 0.3), value: viewModel.canContinue)

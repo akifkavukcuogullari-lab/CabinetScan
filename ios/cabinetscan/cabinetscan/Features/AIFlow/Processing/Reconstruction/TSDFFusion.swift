@@ -70,6 +70,7 @@ struct VoxelIndex: Hashable {
 }
 
 /// Single TSDF voxel storing signed distance and accumulated weight
+/// Enhanced for Story 6.4: Reflective Surface Handling - includes variance tracking
 struct TSDFVoxel {
     /// Truncated signed distance (-truncation to +truncation)
     /// Positive = outside surface, Negative = inside surface, Zero = on surface
@@ -77,6 +78,29 @@ struct TSDFVoxel {
 
     /// Accumulated weight for running average
     var weight: Float = 0
+
+    // MARK: - Variance Tracking (Story 6.4, Task 2.1-2.3)
+
+    /// Sum of squared TSDF values for variance calculation: E[X²]
+    /// Used with Welford's online algorithm variant for running variance
+    var sumSquared: Float = 0
+
+    /// Calculated observation variance across multiple views.
+    /// High variance indicates potential reflective surface (AC4).
+    ///
+    /// Formula: Var(X) = E[X²] - E[X]²
+    /// - Returns: Variance value, or 0 if insufficient observations
+    var observationVariance: Float {
+        // Need at least 2 observations for meaningful variance
+        guard weight > 1 else { return 0 }
+
+        let mean = tsdf
+        let meanOfSquares = sumSquared / weight
+
+        // Variance = E[X²] - E[X]²
+        // max(0, ...) to handle floating point errors that could give tiny negatives
+        return max(0, meanOfSquares - mean * mean)
+    }
 }
 
 // MARK: - Bounding Box for TSDF (min/max style)
@@ -317,6 +341,12 @@ struct TSDFVolume {
                     // Get or create voxel and update using running weighted average
                     var voxel = getOrCreateVoxel(at: voxelIdx)
                     let newWeight = voxel.weight + weight
+
+                    // Story 6.4: Update running variance tracking (Task 2.2-2.3)
+                    // Track sum of squared values for variance calculation
+                    voxel.sumSquared += truncatedSDF * truncatedSDF * weight
+
+                    // Update TSDF using running weighted average
                     voxel.tsdf = (voxel.tsdf * voxel.weight + truncatedSDF * weight) / newWeight
                     voxel.weight = newWeight
 
@@ -376,6 +406,46 @@ struct TSDFVolume {
         return surfaceVoxels
     }
 
+    // MARK: - Variance Analysis (Story 6.4, Task 2.4-2.6)
+
+    /// Checks if a new observation is consistent with existing voxel state.
+    /// High variance indicates potential reflective surface.
+    ///
+    /// - Parameters:
+    ///   - newSDF: The new SDF observation
+    ///   - voxel: The existing voxel state
+    /// - Returns: True if observation is consistent, false if potentially reflective
+    func checkObservationConsistency(newSDF: Float, voxel: TSDFVoxel) -> Bool {
+        // Need at least 2 observations for comparison
+        guard voxel.weight >= 1 else { return true }
+
+        // Check if new observation deviates significantly from mean
+        let deviation = abs(newSDF - voxel.tsdf)
+        let threshold = truncationDistance * 0.5  // 50% of truncation = significant deviation
+
+        return deviation <= threshold
+    }
+
+    /// Returns voxels with variance above the threshold.
+    /// These are candidates for reflective surface regions.
+    ///
+    /// - Parameter threshold: Variance threshold (default: 0.04 for ~2cm std dev)
+    /// - Returns: Array of (index, variance) tuples for high-variance voxels
+    func flagHighVarianceVoxels(threshold: Float = 0.04) -> [(VoxelIndex, Float)] {
+        var results: [(VoxelIndex, Float)] = []
+
+        for (index, voxel) in voxels {
+            guard voxel.weight >= 2 else { continue }
+
+            let variance = voxel.observationVariance
+            if variance > threshold {
+                results.append((index, variance))
+            }
+        }
+
+        return results
+    }
+
     // MARK: - Memory Management
 
     /// Removes voxels with low weight (likely noise).
@@ -413,6 +483,32 @@ struct TSDFFusionResult {
 
     /// Fusion quality metrics
     let qualityMetrics: TSDFQualityMetrics
+
+    // MARK: - Story 6.4: Reflective Surface Analysis
+
+    /// Reflective surface analysis result (optional, nil if not run)
+    let reflectiveSurfaceAnalysis: ReflectiveSurfaceAnalysisResult?
+
+    /// Creates a fusion result with optional reflective surface analysis
+    init(
+        mesh: AIMesh,
+        boundingBox: TSDFBoundingBox,
+        voxelSize: Float,
+        integratedCloudCount: Int,
+        totalPointsProcessed: Int,
+        processingTimeMs: Int,
+        qualityMetrics: TSDFQualityMetrics,
+        reflectiveSurfaceAnalysis: ReflectiveSurfaceAnalysisResult? = nil
+    ) {
+        self.mesh = mesh
+        self.boundingBox = boundingBox
+        self.voxelSize = voxelSize
+        self.integratedCloudCount = integratedCloudCount
+        self.totalPointsProcessed = totalPointsProcessed
+        self.processingTimeMs = processingTimeMs
+        self.qualityMetrics = qualityMetrics
+        self.reflectiveSurfaceAnalysis = reflectiveSurfaceAnalysis
+    }
 }
 
 /// Surface mesh generated from TSDF fusion
@@ -635,6 +731,9 @@ final class TSDFFusion: ObservableObject {
             isMeshManifold: true  // Marching cubes produces manifold meshes by construction
         )
 
+        // Story 6.4: Run reflective surface analysis on the fused volume
+        let reflectiveAnalysis = analyzeReflectiveSurfaces(volume: volume)
+
         return TSDFFusionResult(
             mesh: mesh,
             boundingBox: volume.boundingBox,
@@ -642,7 +741,40 @@ final class TSDFFusion: ObservableObject {
             integratedCloudCount: pointClouds.count,
             totalPointsProcessed: totalPointsProcessed,
             processingTimeMs: processingTimeMs,
-            qualityMetrics: qualityMetrics
+            qualityMetrics: qualityMetrics,
+            reflectiveSurfaceAnalysis: reflectiveAnalysis
+        )
+    }
+
+    // MARK: - Story 6.4: Reflective Surface Analysis
+
+    /// Analyzes the fused volume for reflective surfaces using variance data.
+    /// This runs after all point clouds have been integrated.
+    private func analyzeReflectiveSurfaces(volume: TSDFVolume) -> ReflectiveSurfaceAnalysisResult {
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        // Get high-variance voxels
+        let highVarianceVoxels = volume.flagHighVarianceVoxels(threshold: ReflectiveSurfaceDetector.varianceThreshold)
+
+        var totalVoxels = 0
+        volume.forEachVoxel { _, voxel in
+            if voxel.weight >= 2 {
+                totalVoxels += 1
+            }
+        }
+
+        let processingTimeMs = Int((CFAbsoluteTimeGetCurrent() - startTime) * 1000)
+
+        if highVarianceVoxels.count > 0 {
+            logger.info("Story 6.4: Found \(highVarianceVoxels.count) high-variance voxels (\(String(format: "%.1f", Float(highVarianceVoxels.count) / Float(max(1, totalVoxels)) * 100))%)")
+        }
+
+        return ReflectiveSurfaceAnalysisResult(
+            totalVoxelsAnalyzed: totalVoxels,
+            highVarianceVoxelCount: highVarianceVoxels.count,
+            reflectiveRegions: [],  // Full region detection done by ReflectiveSurfaceDetector if needed
+            mirrorRegions: [],
+            processingTimeMs: processingTimeMs
         )
     }
 }
