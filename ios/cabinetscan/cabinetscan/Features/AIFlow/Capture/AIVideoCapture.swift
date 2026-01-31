@@ -335,72 +335,97 @@ class AIVideoCapture: NSObject {
     /// Stop recording and return the video URL (Task 2.5)
     /// Includes timeout protection to prevent infinite hang if delegate is not called
     func stopRecording() async throws -> URL {
-        print("[AIVideoCapture] stopRecording() called, isRecording=\(isRecording)")
-        print("[AIVideoCapture] movieOutput.isRecording=\(movieOutput.isRecording)")
-        print("[AIVideoCapture] captureSession.isRunning=\(captureSession.isRunning)")
-        print("[AIVideoCapture] outputURL=\(outputURL?.lastPathComponent ?? "nil")")
+        print("[AIVideoCapture] stopRecording() called")
+        print("[AIVideoCapture] - isRecording=\(isRecording)")
+        print("[AIVideoCapture] - movieOutput.isRecording=\(movieOutput.isRecording)")
+        print("[AIVideoCapture] - captureSession.isRunning=\(captureSession.isRunning)")
+        print("[AIVideoCapture] - outputURL=\(outputURL?.lastPathComponent ?? "nil")")
+        print("[AIVideoCapture] - stopContinuation already set=\(stopContinuation != nil)")
 
+        // Primary check: our internal flag
         guard isRecording else {
-            print("[AIVideoCapture] ERROR: Not recording, throwing noActiveRecording")
+            print("[AIVideoCapture] ERROR: isRecording is false")
+            // Check if we have a valid output file anyway (recovery path)
+            if let url = outputURL, FileManager.default.fileExists(atPath: url.path) {
+                let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+                print("[AIVideoCapture] Found existing file: \(url.lastPathComponent), size=\(fileSize)")
+                if fileSize > 0 {
+                    print("[AIVideoCapture] Returning existing file as recovery")
+                    return url
+                }
+            }
             throw AIVideoCaptureError.noActiveRecording
         }
 
-        // Check if AVFoundation thinks we're recording
-        guard movieOutput.isRecording else {
-            print("[AIVideoCapture] WARNING: movieOutput.isRecording is false!")
-            print("[AIVideoCapture] Recording may not have started properly")
-            // Return the output URL if we have one, otherwise throw
+        // Secondary check: AVFoundation's state
+        // If AVFoundation stopped unexpectedly, try to return the file if it exists
+        if !movieOutput.isRecording {
+            print("[AIVideoCapture] WARNING: movieOutput.isRecording is false but isRecording was true")
+            print("[AIVideoCapture] AVFoundation may have stopped unexpectedly")
+            isRecording = false // Sync our state
+
             if let url = outputURL, FileManager.default.fileExists(atPath: url.path) {
-                print("[AIVideoCapture] Found existing file at outputURL, returning it")
-                isRecording = false
-                return url
+                let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+                print("[AIVideoCapture] Found output file: \(url.lastPathComponent), size=\(fileSize)")
+                if fileSize > 0 {
+                    print("[AIVideoCapture] Returning existing file")
+                    return url
+                }
             }
             throw AIVideoCaptureError.recordingFailed("Recording was not active in AVFoundation")
         }
 
         // Use a timeout to prevent infinite hang if delegate callback never fires
-        let timeoutSeconds: UInt64 = 30 // 30 second timeout for video finalization
+        let timeoutSeconds: UInt64 = 30
         print("[AIVideoCapture] Starting stop with \(timeoutSeconds)s timeout")
 
-        return try await withThrowingTaskGroup(of: URL.self) { group in
-            // Task 1: Wait for delegate callback
-            group.addTask { [weak self] in
-                print("[AIVideoCapture] Task 1: Starting continuation task")
-                return try await withCheckedThrowingContinuation { continuation in
-                    guard let self = self else {
-                        print("[AIVideoCapture] ERROR: self is nil in continuation")
-                        continuation.resume(throwing: AIVideoCaptureError.noActiveRecording)
-                        return
-                    }
-                    print("[AIVideoCapture] Task 1: Setting stopContinuation")
-                    self.stopContinuation = continuation
-                    self.sessionQueue.async { [weak self] in
-                        print("[AIVideoCapture] Task 1: Calling movieOutput.stopRecording()")
-                        self?.movieOutput.stopRecording()
-                        print("[AIVideoCapture] Task 1: movieOutput.stopRecording() called, waiting for delegate")
+        do {
+            return try await withThrowingTaskGroup(of: URL.self) { group in
+                // Task 1: Wait for delegate callback
+                group.addTask { [weak self] in
+                    print("[AIVideoCapture] Task 1: Starting continuation task")
+                    return try await withCheckedThrowingContinuation { continuation in
+                        guard let self = self else {
+                            print("[AIVideoCapture] ERROR: self is nil in continuation")
+                            continuation.resume(throwing: AIVideoCaptureError.noActiveRecording)
+                            return
+                        }
+                        print("[AIVideoCapture] Task 1: Setting stopContinuation")
+                        self.stopContinuation = continuation
+                        self.sessionQueue.async { [weak self] in
+                            print("[AIVideoCapture] Task 1: Calling movieOutput.stopRecording()")
+                            self?.movieOutput.stopRecording()
+                            print("[AIVideoCapture] Task 1: movieOutput.stopRecording() called, waiting for delegate")
+                        }
                     }
                 }
-            }
 
-            // Task 2: Timeout protection
-            group.addTask {
-                print("[AIVideoCapture] Task 2: Starting timeout task (\(timeoutSeconds)s)")
-                try await Task.sleep(nanoseconds: timeoutSeconds * 1_000_000_000)
-                print("[AIVideoCapture] Task 2: Timeout reached, throwing error")
-                throw AIVideoCaptureError.recordingFailed("Video finalization timed out after \(timeoutSeconds) seconds")
-            }
+                // Task 2: Timeout protection
+                group.addTask {
+                    print("[AIVideoCapture] Task 2: Starting timeout task (\(timeoutSeconds)s)")
+                    try await Task.sleep(nanoseconds: timeoutSeconds * 1_000_000_000)
+                    print("[AIVideoCapture] Task 2: Timeout reached")
+                    throw AIVideoCaptureError.recordingFailed("Video finalization timed out after \(timeoutSeconds) seconds")
+                }
 
-            // Wait for first task to complete
-            print("[AIVideoCapture] Waiting for first task to complete...")
-            guard let result = try await group.next() else {
-                print("[AIVideoCapture] ERROR: group.next() returned nil")
-                throw AIVideoCaptureError.recordingFailed("Unexpected error during video finalization")
-            }
+                // Wait for first task to complete
+                print("[AIVideoCapture] Waiting for first task to complete...")
+                guard let result = try await group.next() else {
+                    print("[AIVideoCapture] ERROR: group.next() returned nil")
+                    throw AIVideoCaptureError.recordingFailed("Unexpected error during video finalization")
+                }
 
-            print("[AIVideoCapture] Got result, cancelling remaining tasks")
-            // Cancel remaining tasks
-            group.cancelAll()
-            return result
+                print("[AIVideoCapture] Got result, cancelling remaining tasks")
+                group.cancelAll()
+                return result
+            }
+        } catch {
+            // Clean up on any error (including timeout)
+            print("[AIVideoCapture] stopRecording error: \(error.localizedDescription)")
+            print("[AIVideoCapture] Cleaning up: isRecording=false, stopContinuation=nil")
+            isRecording = false
+            stopContinuation = nil
+            throw error
         }
     }
 
@@ -471,14 +496,19 @@ extension AIVideoCapture: AVCaptureFileOutputRecordingDelegate {
         print("[AIVideoCapture] DELEGATE: outputFileURL=\(outputFileURL.lastPathComponent)")
         print("[AIVideoCapture] DELEGATE: error=\(error?.localizedDescription ?? "nil")")
         print("[AIVideoCapture] DELEGATE: stopContinuation exists=\(stopContinuation != nil)")
-
-        isRecording = false
+        print("[AIVideoCapture] DELEGATE: isRecording was=\(isRecording)")
 
         // Capture continuation before any async work to avoid race conditions
         guard let continuation = stopContinuation else {
-            print("[AIVideoCapture] DELEGATE: WARNING - No continuation to resume!")
+            // No continuation means this was an unexpected stop (AVFoundation error)
+            // Log but don't change isRecording - the ViewModel will detect this via movieOutput.isRecording
+            print("[AIVideoCapture] DELEGATE: WARNING - No continuation to resume! Unexpected recording stop.")
+            print("[AIVideoCapture] DELEGATE: File exists=\(FileManager.default.fileExists(atPath: outputFileURL.path))")
             return
         }
+
+        // Only set isRecording = false for controlled stops
+        isRecording = false
         stopContinuation = nil
 
         if let error = error {
