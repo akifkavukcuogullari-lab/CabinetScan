@@ -56,6 +56,15 @@ struct ProcessingView: View {
     /// Timer for showing cancel button
     @State private var cancelButtonTimer: Timer?
 
+    /// Last announced progress percentage for VoiceOver (Story 6.5)
+    @State private var lastAnnouncedProgress: Int = 0
+
+    /// Last announced phase for VoiceOver (Story 6.5)
+    @State private var lastAnnouncedPhase: AIPipelinePhase = .frameExtraction
+
+    /// Reduce Motion environment (Story 6.5)
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     // MARK: - Constants
 
     private static let cancelButtonDelay: TimeInterval = 5.0
@@ -111,12 +120,31 @@ struct ProcessingView: View {
         // Issue #3 fix: Monitor state changes to call onComplete when processing finishes
         .onChange(of: orchestrator.state) { _, newState in
             if case .completed = newState {
+                // Story 6.5: Announce completion for VoiceOver
+                announceForVoiceOver("Processing complete")
                 // Brief delay to show the complete UI, then notify coordinator
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     if let result = orchestrator.result {
                         onComplete(result)
                     }
                 }
+            } else if case .failed(let error) = newState {
+                // Story 6.5: Announce error for VoiceOver
+                announceForVoiceOver("Processing failed. \(error.userFriendlyMessage)")
+            } else if case .cancelled = newState {
+                // Story 6.5: Announce cancellation for VoiceOver
+                announceForVoiceOver("Processing cancelled")
+            }
+        }
+        // Story 6.5: Announce progress at 20% intervals for VoiceOver
+        .onChange(of: orchestrator.progress) { _, newProgress in
+            announceProgressIfNeeded(newProgress)
+        }
+        // Story 6.5: Announce phase transitions for VoiceOver
+        .onChange(of: orchestrator.currentPhase) { oldPhase, newPhase in
+            if newPhase != oldPhase {
+                lastAnnouncedPhase = newPhase
+                announceForVoiceOver(newPhase.accessibilityDescription)
             }
         }
         .confirmationDialog(
@@ -205,6 +233,7 @@ struct ProcessingView: View {
     private var progressBar: some View {
         VStack(spacing: 8) {
             // Progress bar with smooth animation (Task 9.9)
+            // Story 6.5: Respect Reduce Motion preference
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     // Background track
@@ -219,15 +248,20 @@ struct ProcessingView: View {
                             width: max(0, geometry.size.width * orchestrator.progress),
                             height: 8
                         )
-                        .animation(.linear(duration: 0.3), value: orchestrator.progress)
+                        .animation(reduceMotion ? .none : .linear(duration: 0.3), value: orchestrator.progress)
                 }
             }
             .frame(height: 8)
+            // Story 6.5: Accessibility for progress bar
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Processing progress")
+            .accessibilityValue("\(Int(orchestrator.progress * 100)) percent")
 
             // Percentage text
             Text("\(Int(orchestrator.progress * 100))%")
                 .font(.caption.monospacedDigit())
                 .foregroundColor(.secondary)
+                .accessibilityHidden(true) // Already announced via progress bar
         }
     }
 
@@ -401,11 +435,17 @@ struct ProcessingView: View {
     // MARK: - Helpers
 
     private func startCancelButtonTimer() {
+        // Story 6.5: Capture reduceMotion preference for Timer callback
+        let shouldAnimate = !reduceMotion
         cancelButtonTimer = Timer.scheduledTimer(
             withTimeInterval: Self.cancelButtonDelay,
             repeats: false
         ) { _ in
-            withAnimation {
+            if shouldAnimate {
+                withAnimation {
+                    showCancelButton = true
+                }
+            } else {
                 showCancelButton = true
             }
         }
@@ -434,29 +474,75 @@ struct ProcessingView: View {
             }
         }
     }
+
+    // MARK: - Accessibility Helpers (Story 6.5)
+
+    /// Announce message for VoiceOver users
+    private func announceForVoiceOver(_ message: String) {
+        UIAccessibility.post(notification: .announcement, argument: message)
+    }
+
+    /// Announce progress at 20% intervals for VoiceOver users
+    private func announceProgressIfNeeded(_ progress: Double) {
+        let currentPercent = Int(progress * 100)
+        // Announce at 20%, 40%, 60%, 80%, 100%
+        let milestones = [20, 40, 60, 80, 100]
+
+        for milestone in milestones {
+            if currentPercent >= milestone && lastAnnouncedProgress < milestone {
+                lastAnnouncedProgress = milestone
+                announceForVoiceOver("Processing \(milestone) percent complete")
+                break
+            }
+        }
+    }
 }
 
 // MARK: - Spinner View
 
 /// Custom spinner with continuous rotation animation.
+/// Story 6.5: Respects Reduce Motion accessibility preference
 private struct SpinnerView: View {
     @State private var isAnimating = false
+    @State private var opacity: Double = 1.0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Circle()
-            .trim(from: 0.0, to: 0.75)
-            .stroke(
-                Color.accentColor,
-                style: StrokeStyle(lineWidth: 4, lineCap: .round)
-            )
-            .rotationEffect(Angle(degrees: isAnimating ? 360 : 0))
-            .animation(
-                .linear(duration: 1.0).repeatForever(autoreverses: false),
-                value: isAnimating
-            )
-            .onAppear {
-                isAnimating = true
+        Group {
+            if reduceMotion {
+                // Static spinner with pulsing opacity for Reduce Motion users
+                Circle()
+                    .trim(from: 0.0, to: 0.75)
+                    .stroke(
+                        Color.accentColor,
+                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                    )
+                    .opacity(opacity)
+                    .onAppear {
+                        // Gentle opacity pulse instead of rotation
+                        withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                            opacity = 0.5
+                        }
+                    }
+            } else {
+                // Normal rotating spinner
+                Circle()
+                    .trim(from: 0.0, to: 0.75)
+                    .stroke(
+                        Color.accentColor,
+                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                    )
+                    .rotationEffect(Angle(degrees: isAnimating ? 360 : 0))
+                    .animation(
+                        .linear(duration: 1.0).repeatForever(autoreverses: false),
+                        value: isAnimating
+                    )
+                    .onAppear {
+                        isAnimating = true
+                    }
             }
+        }
+        .accessibilityHidden(true) // Decorative element
     }
 }
 

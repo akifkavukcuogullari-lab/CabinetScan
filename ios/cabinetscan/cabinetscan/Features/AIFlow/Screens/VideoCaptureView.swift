@@ -43,6 +43,15 @@ struct VideoCaptureView: View {
     /// Base zoom level before pinch
     @State private var baseZoom: CGFloat = 1.0
 
+    /// Last announced time for periodic VoiceOver announcements (every 10s)
+    @State private var lastAnnouncedTime: Int = 0
+
+    /// Accessibility: Interval for periodic time announcements (10 seconds)
+    private static let timeAnnouncementInterval: Int = 10
+
+    /// Story 6.5: Reduce Motion accessibility preference
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     /// Initialize with AR session manager, data manager, and callbacks
     /// - Parameters:
     ///   - sessionManager: The AR session manager for pose tracking
@@ -116,14 +125,22 @@ struct VideoCaptureView: View {
                 // Connect guidance to video capture for frame analysis
                 guidanceViewModel.setVideoCapture(viewModel.videoCapture)
                 guidanceViewModel.startGuidance()
+                // Accessibility: Announce recording started
+                announceForVoiceOver("Recording started")
             } else if newState != .recording && oldState == .recording {
                 guidanceViewModel.stopGuidance()
                 guidanceViewModel.setVideoCapture(nil)
+                // Accessibility: Announce recording stopped
+                if newState == .stopped {
+                    announceForVoiceOver("Recording stopped, saving video")
+                }
             }
         }
         .onChange(of: viewModel.elapsedTime) { _, newTime in
             // Process elapsed time for timed prompts
             guidanceViewModel.processElapsedTime(newTime)
+            // Accessibility: Announce time periodically for VoiceOver users
+            announceTimeIfNeeded(newTime)
         }
     }
 
@@ -285,8 +302,8 @@ struct VideoCaptureView: View {
                     .clipShape(Capsule())
             }
             .disabled(!viewModel.isStopEnabled)
-            .accessibilityLabel("Stop recording")
-            .accessibilityHint(viewModel.isStopEnabled ? "Stops video recording" : "Recording must be at least 10 seconds")
+            .accessibilityLabel(stopButtonAccessibilityLabel)
+            .accessibilityHint(viewModel.isStopEnabled ? "Double tap to stop video recording" : "Recording must be at least 10 seconds")
 
             Spacer()
 
@@ -367,7 +384,8 @@ struct VideoCaptureView: View {
             Spacer()
         }
         .transition(.move(edge: .top).combined(with: .opacity))
-        .animation(.spring(response: 0.3), value: viewModel.showMaxDurationToast)
+        // Story 6.5: Respect Reduce Motion preference
+        .animation(reduceMotion ? .none : .spring(response: 0.3), value: viewModel.showMaxDurationToast)
     }
 
     @ViewBuilder
@@ -396,6 +414,48 @@ struct VideoCaptureView: View {
             .padding(.horizontal, 40)
 
             Spacer()
+        }
+    }
+
+    // MARK: - Accessibility Helpers
+
+    /// Dynamic accessibility label for stop button including elapsed time
+    private var stopButtonAccessibilityLabel: String {
+        let totalSeconds = Int(viewModel.elapsedTime)
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+
+        if minutes > 0 {
+            return "Stop recording, \(minutes) minute\(minutes == 1 ? "" : "s") \(seconds) second\(seconds == 1 ? "" : "s") recorded"
+        } else {
+            return "Stop recording, \(seconds) second\(seconds == 1 ? "" : "s") recorded"
+        }
+    }
+
+    /// Announce message for VoiceOver users
+    private func announceForVoiceOver(_ message: String) {
+        UIAccessibility.post(notification: .announcement, argument: message)
+    }
+
+    /// Announce time periodically for VoiceOver users (every 10 seconds)
+    private func announceTimeIfNeeded(_ time: TimeInterval) {
+        let currentSeconds = Int(time)
+        let intervalSeconds = Self.timeAnnouncementInterval
+
+        // Check if we've crossed a 10-second boundary
+        if currentSeconds > 0 && currentSeconds % intervalSeconds == 0 && currentSeconds != lastAnnouncedTime {
+            lastAnnouncedTime = currentSeconds
+            let minutes = currentSeconds / 60
+            let seconds = currentSeconds % 60
+
+            let timeString: String
+            if minutes > 0 {
+                timeString = "\(minutes) minute\(minutes == 1 ? "" : "s") \(seconds) second\(seconds == 1 ? "" : "s")"
+            } else {
+                timeString = "\(seconds) seconds"
+            }
+
+            announceForVoiceOver("\(timeString) recorded")
         }
     }
 }
