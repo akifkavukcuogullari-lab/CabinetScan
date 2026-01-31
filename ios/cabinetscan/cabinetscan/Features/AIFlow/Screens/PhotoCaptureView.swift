@@ -381,30 +381,69 @@ struct PhotoCaptureView: View {
 private struct CameraSessionPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
+    func makeUIView(context: Context) -> PreviewContainerView {
+        print("[CameraSessionPreviewView] makeUIView called")
+        print("[CameraSessionPreviewView] session.isRunning=\(session.isRunning)")
+        print("[CameraSessionPreviewView] session.inputs.count=\(session.inputs.count)")
+        print("[CameraSessionPreviewView] session.outputs.count=\(session.outputs.count)")
+
+        let view = PreviewContainerView()
         view.backgroundColor = .black
+        view.session = session
 
-        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
-        previewLayer.videoGravity = .resizeAspectFill
-        previewLayer.frame = view.bounds
-        view.layer.addSublayer(previewLayer)
-
-        context.coordinator.previewLayer = previewLayer
+        // Start session if not running
+        if !session.isRunning {
+            print("[CameraSessionPreviewView] Session not running, starting...")
+            DispatchQueue.global(qos: .userInitiated).async {
+                session.startRunning()
+                print("[CameraSessionPreviewView] Session started")
+            }
+        }
 
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.previewLayer?.frame = uiView.bounds
+    func updateUIView(_ uiView: PreviewContainerView, context: Context) {
+        // Session might have changed
+        if uiView.session !== session {
+            uiView.session = session
+        }
+    }
+}
+
+/// Custom UIView that automatically sizes preview layer on layout
+private class PreviewContainerView: UIView {
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+
+    var session: AVCaptureSession? {
+        didSet {
+            if session !== oldValue {
+                setupPreviewLayer()
+            }
+        }
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
+    private func setupPreviewLayer() {
+        // Remove old layer
+        previewLayer?.removeFromSuperlayer()
+        previewLayer = nil
+
+        guard let session = session else { return }
+
+        let layer = AVCaptureVideoPreviewLayer(session: session)
+        layer.videoGravity = .resizeAspectFill
+        layer.frame = bounds
+        self.layer.addSublayer(layer)
+        previewLayer = layer
+
+        print("[PreviewContainerView] Preview layer setup, bounds=\(bounds)")
     }
 
-    class Coordinator {
-        var previewLayer: AVCaptureVideoPreviewLayer?
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // Update preview layer frame whenever view resizes
+        previewLayer?.frame = bounds
+        print("[PreviewContainerView] layoutSubviews, bounds=\(bounds)")
     }
 }
 
