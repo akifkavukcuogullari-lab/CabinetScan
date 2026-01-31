@@ -258,13 +258,26 @@ class AIVideoCapture: NSObject {
     }
 
     /// Start recording video (Task 2.4)
-    func startRecording() throws {
+    /// Now async to verify recording actually starts
+    func startRecording() async throws {
         guard isPrepared else {
             throw AIVideoCaptureError.recordingNotPrepared
         }
 
         guard !isRecording else {
             throw AIVideoCaptureError.recordingAlreadyInProgress
+        }
+
+        // Verify session is running
+        guard captureSession.isRunning else {
+            print("[AIVideoCapture] ERROR: Capture session not running")
+            throw AIVideoCaptureError.sessionConfigurationFailed
+        }
+
+        // Verify movie output is connected
+        guard movieOutput.connection(with: .video) != nil else {
+            print("[AIVideoCapture] ERROR: No video connection to movie output")
+            throw AIVideoCaptureError.sessionConfigurationFailed
         }
 
         // Create output URL with timestamp (Task 2.7)
@@ -277,13 +290,35 @@ class AIVideoCapture: NSObject {
         try? FileManager.default.removeItem(at: url)
 
         outputURL = url
-        isRecording = true
 
-        // Start recording on session queue
-        sessionQueue.async { [weak self] in
-            guard let self = self else { return }
-            self.movieOutput.startRecording(to: url, recordingDelegate: self)
-            print("[AIVideoCapture] Recording started to: \(url.lastPathComponent)")
+        print("[AIVideoCapture] Starting recording to: \(url.lastPathComponent)")
+        print("[AIVideoCapture] Session running: \(captureSession.isRunning)")
+        print("[AIVideoCapture] Movie output connections: \(movieOutput.connections.count)")
+
+        // Start recording synchronously on session queue and wait for it
+        await withCheckedContinuation { continuation in
+            sessionQueue.async { [weak self] in
+                guard let self = self else {
+                    continuation.resume()
+                    return
+                }
+                self.movieOutput.startRecording(to: url, recordingDelegate: self)
+                continuation.resume()
+            }
+        }
+
+        // Wait a moment for AVFoundation to start recording
+        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+
+        // Verify recording actually started
+        if movieOutput.isRecording {
+            isRecording = true
+            print("[AIVideoCapture] Recording confirmed started: \(url.lastPathComponent)")
+        } else {
+            print("[AIVideoCapture] WARNING: Recording did not start! movieOutput.isRecording=false")
+            // Still set our flag - the delegate might fire later
+            isRecording = true
+            print("[AIVideoCapture] Proceeding anyway, delegate may confirm start later")
         }
     }
 

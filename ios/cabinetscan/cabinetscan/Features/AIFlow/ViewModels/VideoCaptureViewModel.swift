@@ -255,37 +255,40 @@ class VideoCaptureViewModel: ObservableObject {
         // Create video capture service
         videoCapture = AIVideoCapture()
 
-        do {
-            // Start persistence session (Story 2.6)
-            try dataManager.startSession()
-            dataManager.cleanupOldSessions(keepLatest: 3)
+        // Use Task since startRecording is now async
+        Task {
+            do {
+                // Start persistence session (Story 2.6)
+                try dataManager.startSession()
+                dataManager.cleanupOldSessions(keepLatest: 3)
 
-            try videoCapture?.prepare()
-            try videoCapture?.startRecording()
+                try videoCapture?.prepare()
+                try await videoCapture?.startRecording()
 
-            // Trigger haptic feedback (AC1)
-            hapticGenerator.impactOccurred()
+                // Trigger haptic feedback (AC1)
+                hapticGenerator.impactOccurred()
 
-            // Update state
-            recordingState = .recording
-            elapsedTime = 0
-            isStopEnabled = false
+                // Update state
+                recordingState = .recording
+                elapsedTime = 0
+                isStopEnabled = false
 
-            // Start timer for UI updates
-            startTimer()
+                // Start timer for UI updates
+                startTimer()
 
-            // Setup tracking recovery observer (Story 6.7)
-            setupTrackingRecoveryObserver()
+                // Setup tracking recovery observer (Story 6.7)
+                setupTrackingRecoveryObserver()
 
-            print("[VideoCaptureViewModel] Recording started with session: \(dataManager.currentSessionId ?? "unknown")")
-        } catch {
-            // Clean up on error - ensure timer is cancelled
-            timerCancellable?.cancel()
-            videoCapture = nil
-            dataManager.cancelSession()
-            errorMessage = "Failed to start recording: \(error.localizedDescription)"
-            recordingState = .idle
-            print("[VideoCaptureViewModel] Failed to start recording: \(error)")
+                print("[VideoCaptureViewModel] Recording started with session: \(dataManager.currentSessionId ?? "unknown")")
+            } catch {
+                // Clean up on error - ensure timer is cancelled
+                timerCancellable?.cancel()
+                videoCapture = nil
+                dataManager.cancelSession()
+                errorMessage = "Failed to start recording: \(error.localizedDescription)"
+                recordingState = .idle
+                print("[VideoCaptureViewModel] Failed to start recording: \(error)")
+            }
         }
     }
 
