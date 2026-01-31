@@ -288,17 +288,45 @@ class AIVideoCapture: NSObject {
     }
 
     /// Stop recording and return the video URL (Task 2.5)
+    /// Includes timeout protection to prevent infinite hang if delegate is not called
     func stopRecording() async throws -> URL {
         guard isRecording else {
             throw AIVideoCaptureError.noActiveRecording
         }
 
-        return try await withCheckedThrowingContinuation { continuation in
-            stopContinuation = continuation
-            sessionQueue.async { [weak self] in
-                self?.movieOutput.stopRecording()
-                print("[AIVideoCapture] Stop recording requested")
+        // Use a timeout to prevent infinite hang if delegate callback never fires
+        let timeoutSeconds: UInt64 = 30 // 30 second timeout for video finalization
+
+        return try await withThrowingTaskGroup(of: URL.self) { group in
+            // Task 1: Wait for delegate callback
+            group.addTask { [weak self] in
+                try await withCheckedThrowingContinuation { continuation in
+                    guard let self = self else {
+                        continuation.resume(throwing: AIVideoCaptureError.noActiveRecording)
+                        return
+                    }
+                    self.stopContinuation = continuation
+                    self.sessionQueue.async { [weak self] in
+                        self?.movieOutput.stopRecording()
+                        print("[AIVideoCapture] Stop recording requested")
+                    }
+                }
             }
+
+            // Task 2: Timeout protection
+            group.addTask {
+                try await Task.sleep(nanoseconds: timeoutSeconds * 1_000_000_000)
+                throw AIVideoCaptureError.recordingFailed("Video finalization timed out after \(timeoutSeconds) seconds")
+            }
+
+            // Wait for first task to complete
+            guard let result = try await group.next() else {
+                throw AIVideoCaptureError.recordingFailed("Unexpected error during video finalization")
+            }
+
+            // Cancel remaining tasks
+            group.cancelAll()
+            return result
         }
     }
 
@@ -306,19 +334,24 @@ class AIVideoCapture: NSObject {
     func cancelRecording() {
         guard isRecording else { return }
 
+        // Capture and clear continuation BEFORE dispatching to avoid race condition
+        let continuation = stopContinuation
+        stopContinuation = nil
+        isRecording = false
+
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
             self.movieOutput.stopRecording()
             // Delete the file after stopping
             if let url = self.outputURL {
                 try? FileManager.default.removeItem(at: url)
+                self.outputURL = nil
             }
             print("[AIVideoCapture] Recording cancelled")
         }
 
-        isRecording = false
-        outputURL = nil
-        stopContinuation = nil
+        // Resume any waiting continuation with an error so it doesn't hang
+        continuation?.resume(throwing: AIVideoCaptureError.recordingFailed("Recording was cancelled"))
     }
 
     /// Set zoom level (Task 3.3 - called from view model)
