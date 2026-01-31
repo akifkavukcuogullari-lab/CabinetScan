@@ -268,11 +268,21 @@ class AIVideoCapture: NSObject {
             throw AIVideoCaptureError.recordingAlreadyInProgress
         }
 
+        // Wait for session to be running (it starts async in prepare())
+        // Poll for up to 2 seconds
+        var waitCount = 0
+        while !captureSession.isRunning && waitCount < 20 {
+            print("[AIVideoCapture] Waiting for capture session to start... (\(waitCount + 1)/20)")
+            try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            waitCount += 1
+        }
+
         // Verify session is running
         guard captureSession.isRunning else {
-            print("[AIVideoCapture] ERROR: Capture session not running")
+            print("[AIVideoCapture] ERROR: Capture session not running after waiting 2 seconds")
             throw AIVideoCaptureError.sessionConfigurationFailed
         }
+        print("[AIVideoCapture] Capture session confirmed running")
 
         // Verify movie output is connected
         guard movieOutput.connection(with: .video) != nil else {
