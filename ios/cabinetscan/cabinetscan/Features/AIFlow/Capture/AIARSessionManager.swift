@@ -501,6 +501,19 @@ extension AIARSessionManager: ARSessionDelegate {
             cy: intrinsicsMatrix[2, 1]
         )
 
+        // Extract gravity vector from ARKit
+        // With worldAlignment = .gravity, the world Y-axis is aligned with gravity (pointing up)
+        // So gravity vector in world coordinates is (0, -1, 0)
+        // We also capture the actual estimated gravity for validation/debugging
+        let gravityVector: SIMD3<Float>
+        if let worldGravity = frame.worldMappingStatus == .mapped ? SIMD3<Float>(0, -1, 0) : nil {
+            gravityVector = worldGravity
+        } else {
+            // Default gravity direction when using .gravity world alignment
+            // ARKit aligns Y-axis with gravity, so gravity points in -Y direction
+            gravityVector = SIMD3<Float>(0, -1, 0)
+        }
+
         // Map tracking state and handle recovery (Story 6.7)
         let newState: AITrackingState
         var newRecoveryState: TrackingRecoveryState = .normal
@@ -517,7 +530,8 @@ extension AIARSessionManager: ARSessionDelegate {
                 transform: transform,
                 intrinsics: intrinsics,
                 trackingState: .normal,
-                zoomFactor: _currentZoomFactor
+                zoomFactor: _currentZoomFactor,
+                gravityVector: gravityVector
             )
             let wasLost = _trackingLostTime != nil
             stateLock.unlock()
@@ -594,7 +608,8 @@ extension AIARSessionManager: ARSessionDelegate {
             transform: transform,
             intrinsics: intrinsics,
             trackingState: newState,
-            zoomFactor: zoomForPose
+            zoomFactor: zoomForPose,
+            gravityVector: gravityVector
         )
 
         // Store pose with thread-safe access

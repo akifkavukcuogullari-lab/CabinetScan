@@ -16,7 +16,6 @@ struct AIFlowEntryPoint: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var viewModel = AIFlowViewModel()
     @StateObject private var coordinator = AIFlowCoordinator()
-    @StateObject private var pipelineOrchestrator = AIPipelineOrchestrator()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Show confidence warning sheet if there are warnings
@@ -42,7 +41,7 @@ struct AIFlowEntryPoint: View {
             case .videoCapture:
                 VideoCaptureView(
                     sessionManager: coordinator.arSessionManager,
-                    dataManager: coordinator.captureDataManager,  // Issue #7 fix - pass shared manager
+                    dataManager: coordinator.captureDataManager,
                     onBack: {
                         coordinator.onVideoCaptureBack()
                         viewModel.backToIntro()
@@ -63,7 +62,7 @@ struct AIFlowEntryPoint: View {
                     PhotoCaptureView(
                         sessionManager: coordinator.arSessionManager,
                         captureSession: videoCapture.captureSession,
-                        dataManager: coordinator.captureDataManager,  // Issue #7 fix - pass shared manager
+                        dataManager: coordinator.captureDataManager,
                         onBack: {
                             coordinator.onPhotoCaptureBack()
                             viewModel.currentStep = .videoCapture
@@ -97,67 +96,26 @@ struct AIFlowEntryPoint: View {
                 }
 
             case .processing:
-                // Story 3.8: Processing view with pipeline orchestration
-                // Story 5.6: Output adapter integration via onComplete callback
+                // Processing view — placeholder for server pipeline
                 ProcessingView(
-                    orchestrator: pipelineOrchestrator,
                     showroomLogoURL: appState.showroomConfig?.branding.logoUrl.flatMap { URL(string: $0) },
-                    onComplete: { pipelineResult in
-                        // Story 5.6: Use output adapter to convert and store result
-                        Task {
-                            await coordinator.onProcessingComplete(
-                                pipelineResult: pipelineResult,
-                                appState: appState
-                            )
-                            // Check for warnings to display
-                            if !coordinator.outputWarnings.isEmpty {
-                                showConfidenceWarningSheet = true
-                            } else {
-                                viewModel.advanceToNextStep()
-                            }
-                        }
-                    },
                     onCancel: {
                         coordinator.cancelCapture()
                         viewModel.backToIntro()
-                    },
-                    onRetry: {
-                        // Retry processing with same capture data
-                        if let captureData = coordinator.captureSessionData {
-                            Task {
-                                do {
-                                    _ = try await pipelineOrchestrator.process(captureData: captureData)
-                                } catch {
-                                    // Error is handled by orchestrator state
-                                    print("[AIFlowEntryPoint] Retry failed: \(error.localizedDescription)")
-                                }
-                            }
-                        }
                     },
                     onStartOver: {
                         coordinator.reset()
                         viewModel.currentStep = .intro
                     },
-                    onNeedManualCalibration: { input in
-                        coordinator.triggerManualCalibration(input: input)
-                    }
+                    coordinator: coordinator
                 )
                 .onAppear {
-                    // Start processing when view appears
-                    if let captureData = coordinator.captureSessionData {
-                        Task {
-                            do {
-                                _ = try await pipelineOrchestrator.process(captureData: captureData)
-                            } catch {
-                                // Error is handled by orchestrator state
-                                print("[AIFlowEntryPoint] Processing failed: \(error.localizedDescription)")
-                            }
-                        }
-                    }
+                    // TODO: Start server pipeline upload when implemented
+                    // For now, transition to complete after a brief delay
+                    // This will be replaced by actual upload + server processing
                 }
 
             case .complete:
-                // Story 5.6/5.7: Complete state with confidence warnings
                 // Brief transition state - will route to Selection/Review
                 VStack(spacing: 24) {
                     Image(systemName: "checkmark.circle.fill")
@@ -177,9 +135,6 @@ struct AIFlowEntryPoint: View {
                 }
             }
 
-            // Story 5.7: Low confidence warning is handled via ConfidenceWarningSheet
-            // (see .sheet modifier below)
-
             // Camera permission error overlay
             if viewModel.showCameraPermissionError {
                 CameraPermissionView(
@@ -194,18 +149,16 @@ struct AIFlowEntryPoint: View {
             }
         }
         .animation(reduceMotion ? .none : .easeInOut(duration: 0.2), value: viewModel.showCameraPermissionError)
-        // Story 5.7: Confidence warning sheet for low confidence scans
+        // Confidence warning sheet for low confidence scans
         .sheet(isPresented: $showConfidenceWarningSheet) {
             ConfidenceWarningSheet(
                 scoringResult: createMinimalScoringResult(),
                 onDismiss: {
-                    // AC2: Continue flow - clear warnings and proceed to results
                     showConfidenceWarningSheet = false
                     coordinator.clearOutputWarnings()
                     viewModel.advanceToNextStep()
                 },
                 onRescan: {
-                    // AC3: Rescan flow - reset and return to intro
                     showConfidenceWarningSheet = false
                     coordinator.reset()
                     viewModel.currentStep = .intro
@@ -216,30 +169,22 @@ struct AIFlowEntryPoint: View {
         }
     }
 
-    // MARK: - Story 5.7: Confidence Warning Helper
+    // MARK: - Confidence Warning Helper
 
-    /// Confidence threshold below which warnings are shown (matching AIOutputAdapter)
     private static let lowConfidenceThreshold: Float = 0.6
 
     /// Creates minimal ConfidenceScoringResult for warning sheet display.
-    ///
-    /// Uses outputWarnings from coordinator since full scoring result isn't stored.
-    /// We know confidence is below the threshold because warnings were generated.
-    ///
-    /// Per ADR-5.7.1: This minimal adapter avoids storing full scoring data in coordinator
-    /// while still providing the sheet with all the information it needs to display.
     private func createMinimalScoringResult() -> ConfidenceScoringResult {
-        // Use a representative low score (below threshold) since actual score isn't stored
         let representativeLowScore = Self.lowConfidenceThreshold - 0.1
 
         return ConfidenceScoringResult(
-            objectScores: [],  // Not needed for warning display
+            objectScores: [],
             overallScore: representativeLowScore,
             overallLevel: .low,
             quoteReadiness: .notRecommended,
             itemsNeedingVerification: coordinator.outputWarnings.count,
             warnings: coordinator.outputWarnings,
-            processingTimeMs: 0,  // Not needed for display
+            processingTimeMs: 0,
             limitingObjectId: nil
         )
     }

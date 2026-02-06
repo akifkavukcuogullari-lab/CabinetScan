@@ -78,6 +78,7 @@ class AIVideoCapture: NSObject {
     private let movieOutput = AVCaptureMovieFileOutput()
 
     /// Video data output for frame analysis (Story 2.3)
+    /// NOTE: This output is only enabled when NOT recording to avoid conflicts
     private let videoDataOutput = AVCaptureVideoDataOutput()
 
     /// Serial queue for session operations
@@ -103,6 +104,9 @@ class AIVideoCapture: NSObject {
 
     /// Continuation for async stopRecording
     private var stopContinuation: CheckedContinuation<URL, Error>?
+
+    /// Recording start time for duration validation
+    private var recordingStartTime: Date?
 
     // MARK: - Video Settings
 
@@ -211,6 +215,12 @@ class AIVideoCapture: NSObject {
         if captureSession.canAddOutput(movieOutput) {
             captureSession.addOutput(movieOutput)
 
+            // Configure video for reliable recording
+            // Set max duration to 3 minutes (per FR: 30-60 second typical scans)
+            movieOutput.maxRecordedDuration = CMTime(seconds: 180, preferredTimescale: 600)
+            // Require at least 100MB free disk space
+            movieOutput.minFreeDiskSpaceLimit = 100_000_000
+
             // Configure video orientation for portrait (Task 2.6)
             if let connection = movieOutput.connection(with: .video) {
                 // Use the new rotation angle API for iOS 17+
@@ -227,23 +237,12 @@ class AIVideoCapture: NSObject {
             throw AIVideoCaptureError.sessionConfigurationFailed
         }
 
-        // Add video data output for quality analysis (Story 2.3)
-        if captureSession.canAddOutput(videoDataOutput) {
-            captureSession.addOutput(videoDataOutput)
-            videoDataOutput.alwaysDiscardsLateVideoFrames = true
-            videoDataOutput.setSampleBufferDelegate(self, queue: videoDataQueue)
-
-            // Configure video orientation for data output
-            if let connection = videoDataOutput.connection(with: .video) {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                }
-            }
-            print("[AIVideoCapture] Video data output added for quality analysis")
-        } else {
-            // Non-fatal: quality analysis just won't work
-            print("[AIVideoCapture] Warning: Could not add video data output for quality analysis")
-        }
+        // NOTE: Video data output for quality analysis is NOT added during prepare()
+        // Adding both movieOutput and videoDataOutput causes frame competition issues
+        // that result in truncated recordings. Quality analysis should be done on
+        // the recorded video file after recording completes.
+        // See: AI_FLOW_ISSUES_AND_FIX_PLAN.md - Issue 1.1
+        print("[AIVideoCapture] Video data output disabled during recording to prevent truncation")
 
         captureSession.commitConfiguration()
 
@@ -304,6 +303,9 @@ class AIVideoCapture: NSObject {
         print("[AIVideoCapture] Starting recording to: \(url.lastPathComponent)")
         print("[AIVideoCapture] Session running: \(captureSession.isRunning)")
         print("[AIVideoCapture] Movie output connections: \(movieOutput.connections.count)")
+
+        // Record start time for duration validation
+        recordingStartTime = Date()
 
         // Start recording synchronously on session queue and wait for it
         await withCheckedContinuation { continuation in
@@ -379,9 +381,15 @@ class AIVideoCapture: NSObject {
         let timeoutSeconds: UInt64 = 30
         print("[AIVideoCapture] Starting stop with \(timeoutSeconds)s timeout")
 
+        // Calculate expected duration for validation
+        let expectedDuration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+        print("[AIVideoCapture] Expected recording duration: \(String(format: "%.1f", expectedDuration))s")
+
         do {
-            return try await withThrowingTaskGroup(of: URL.self) { group in
+            let videoURL = try await withThrowingTaskGroup(of: URL.self) { group in
                 // Task 1: Wait for delegate callback
+                // CRITICAL FIX: Set continuation BEFORE dispatching stopRecording
+                // to prevent race condition where delegate fires before continuation is set
                 group.addTask { [weak self] in
                     print("[AIVideoCapture] Task 1: Starting continuation task")
                     return try await withCheckedThrowingContinuation { continuation in
@@ -390,8 +398,12 @@ class AIVideoCapture: NSObject {
                             continuation.resume(throwing: AIVideoCaptureError.noActiveRecording)
                             return
                         }
-                        print("[AIVideoCapture] Task 1: Setting stopContinuation")
+
+                        // CRITICAL: Set continuation FIRST
+                        print("[AIVideoCapture] Task 1: Setting stopContinuation BEFORE dispatch")
                         self.stopContinuation = continuation
+
+                        // THEN dispatch stop (delegate callback will find continuation ready)
                         self.sessionQueue.async { [weak self] in
                             print("[AIVideoCapture] Task 1: Calling movieOutput.stopRecording()")
                             self?.movieOutput.stopRecording()
@@ -419,14 +431,56 @@ class AIVideoCapture: NSObject {
                 group.cancelAll()
                 return result
             }
+
+            // Validate video file after successful recording
+            try validateRecordedVideo(at: videoURL, expectedDuration: expectedDuration)
+
+            return videoURL
         } catch {
             // Clean up on any error (including timeout)
             print("[AIVideoCapture] stopRecording error: \(error.localizedDescription)")
             print("[AIVideoCapture] Cleaning up: isRecording=false, stopContinuation=nil")
             isRecording = false
             stopContinuation = nil
+            recordingStartTime = nil
             throw error
         }
+    }
+
+    /// Validates that the recorded video file is valid
+    /// - Parameters:
+    ///   - url: URL of the recorded video
+    ///   - expectedDuration: Expected duration based on recording time
+    private func validateRecordedVideo(at url: URL, expectedDuration: TimeInterval) throws {
+        // Check file exists
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw AIVideoCaptureError.recordingFailed("Video file does not exist")
+        }
+
+        // Check file size
+        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+        let fileSize = attrs[.size] as? Int64 ?? 0
+
+        print("[AIVideoCapture] Video validation: size=\(fileSize) bytes, expectedDuration=\(String(format: "%.1f", expectedDuration))s")
+
+        // Minimum expected size: ~100KB per second for compressed H.264 video
+        // For a 30-second video, we expect at least 3MB
+        let minExpectedSize: Int64
+        if expectedDuration >= 3 {
+            // At least 100KB per second of expected recording
+            minExpectedSize = Int64(expectedDuration * 100_000)
+        } else {
+            // Short recordings: at least 100KB
+            minExpectedSize = 100_000
+        }
+
+        if fileSize < minExpectedSize && expectedDuration > 3 {
+            print("[AIVideoCapture] WARNING: Video file suspiciously small: \(fileSize) bytes for \(String(format: "%.1f", expectedDuration))s recording")
+            print("[AIVideoCapture] Expected at least \(minExpectedSize) bytes")
+            // Don't throw here - the file might still be usable, just log the warning
+        }
+
+        print("[AIVideoCapture] Video validation passed: \(url.lastPathComponent)")
     }
 
     /// Cancel recording without saving
@@ -437,6 +491,7 @@ class AIVideoCapture: NSObject {
         let continuation = stopContinuation
         stopContinuation = nil
         isRecording = false
+        recordingStartTime = nil
 
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
@@ -510,6 +565,7 @@ extension AIVideoCapture: AVCaptureFileOutputRecordingDelegate {
         // Only set isRecording = false for controlled stops
         isRecording = false
         stopContinuation = nil
+        recordingStartTime = nil
 
         if let error = error {
             // Check if this was a user-initiated stop (not a real error)

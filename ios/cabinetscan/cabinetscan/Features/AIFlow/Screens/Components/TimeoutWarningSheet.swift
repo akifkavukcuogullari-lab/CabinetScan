@@ -18,17 +18,6 @@ enum TimeoutWarningLevel {
     /// 90-second critical warning (AC2)
     case critical
 
-    /// Convert from TimeoutState
-    init?(from state: TimeoutState) {
-        switch state {
-        case .normal:
-            return nil
-        case .warning:
-            self = .warning
-        case .critical:
-            self = .critical
-        }
-    }
 }
 
 // MARK: - Timeout Warning Sheet (Task 2)

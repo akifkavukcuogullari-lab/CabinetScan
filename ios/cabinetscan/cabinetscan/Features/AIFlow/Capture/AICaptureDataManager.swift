@@ -454,23 +454,15 @@ class AICaptureDataManager {
 
     /// Save session for later retry after timeout cancellation.
     ///
-    /// **Per Story 6.8 AC4:**
-    /// User selects "Cancel" → captured data is saved for potential later use
-    ///
-    /// **Per ADR-2:**
-    /// Only serialize checkpoint to disk when user selects "Cancel" for "save for later"
-    ///
     /// - Parameters:
     ///   - videoDuration: Duration of video captured so far
     ///   - photoCount: Number of photos captured
-    ///   - checkpoint: Pipeline checkpoint with progress state (optional)
     ///   - qualityMetrics: Quality metrics (if available)
     /// - Returns: The saved session data with timeout marker
     @discardableResult
     func saveSessionForLater(
         videoDuration: TimeInterval,
         photoCount: Int,
-        checkpoint: PipelineCheckpoint?,
         qualityMetrics: AIQualityMetrics?
     ) throws -> AICaptureSessionData {
         guard let sessionId = currentSessionId,
@@ -478,26 +470,12 @@ class AICaptureDataManager {
             throw AICaptureDataError.sessionNotStarted
         }
 
-        // Task 6.2: Serialize checkpoint to disk if present
-        if let checkpoint = checkpoint {
-            let checkpointURL = sessionDir.appendingPathComponent("checkpoint.json")
-            do {
-                let data = try jsonEncoder.encode(checkpoint)
-                try data.write(to: checkpointURL)
-                print("[AICaptureDataManager] Checkpoint saved: \(checkpoint.description)")
-            } catch {
-                // Log but don't fail - checkpoint is optional for recovery
-                print("[AICaptureDataManager] Failed to save checkpoint: \(error)")
-            }
-        }
-
-        // Task 6.3: Update metadata with timeoutCancelled marker
+        // Update metadata with timeoutCancelled marker
         var metadata = try loadMetadata(for: sessionId)
         metadata.endTimestamp = Date()
         metadata.videoDuration = videoDuration
         metadata.photoCount = photoCount
-        // Mark as timeout cancelled with checkpoint phase info
-        metadata.persistenceState = "timeoutCancelled:\(checkpoint?.phase.rawValue ?? "none")"
+        metadata.persistenceState = "timeoutCancelled"
         metadata.qualityMetrics = qualityMetrics
         try saveMetadata(metadata)
 
@@ -543,25 +521,8 @@ class AICaptureDataManager {
             qualityMetrics: qualityMetrics
         )
 
-        print("[AICaptureDataManager] Session saved for later retry: \(sessionId), checkpoint: \(checkpoint?.description ?? "none")")
+        print("[AICaptureDataManager] Session saved for later retry: \(sessionId)")
         return sessionData
-    }
-
-    /// Check if a session was cancelled due to timeout and can be resumed.
-    ///
-    /// - Parameter sessionId: The session ID to check
-    /// - Returns: The checkpoint if session was timeout-cancelled and has checkpoint, nil otherwise
-    func getTimeoutCheckpoint(for sessionId: String) -> PipelineCheckpoint? {
-        let sessionDir = capturesBaseDirectory.appendingPathComponent(sessionId)
-        let checkpointURL = sessionDir.appendingPathComponent("checkpoint.json")
-
-        guard fileManager.fileExists(atPath: checkpointURL.path),
-              let data = try? Data(contentsOf: checkpointURL),
-              let checkpoint = try? jsonDecoder.decode(PipelineCheckpoint.self, from: data) else {
-            return nil
-        }
-
-        return checkpoint
     }
 
     /// Find sessions that were cancelled due to timeout (for recovery prompt).
