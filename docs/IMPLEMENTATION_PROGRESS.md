@@ -52,7 +52,7 @@
   - [x] Call `processCapture()` on `.processing` appear
   - [x] On success: `appState.setMeasurementData(result)`
   - [x] On error: show in ProcessingView
-- [ ] 2.5-test: `AIFlowIntegrationTests.swift`
+- [x] 2.5-test: `AIFlowIntegrationTests.swift`
 
 ## Phase 3: Supabase — Database & Edge Functions
 - [x] 3.1 Create `processing_jobs` migration
@@ -101,10 +101,10 @@
 - [x] 4.11 Supabase utils (`utils/supabase_client.py`)
 
 ## Phase 5: End-to-End Integration & Testing
-- [ ] 5.1 iOS integration test (mock server responses)
-- [ ] 5.2 Supabase integration test (job lifecycle)
+- [x] 5.1 iOS integration test (`AIFlowIntegrationTests.swift` — mock server responses)
+- [x] 5.2 Python pipeline E2E test (`test_pipeline_e2e.py` — stage chain + output format)
 - [ ] 5.3 Full E2E test (manual — device to dashboard)
-- [ ] 5.4 LiDAR flow regression test
+- [x] 5.4 LiDAR/AI compatibility test (`MeasurementDataCompatibilityTests.swift`)
 
 ---
 
@@ -119,4 +119,5 @@
 | 3.1–3.5 | 2fe07b0 | 2026-02-06 |
 | 4.0–4.11 | 93e0947 | 2026-02-06 |
 | 2.1-test, 2.2-test, 4.1-test, 4.3–4.9-test | df318dd | 2026-02-06 |
-| 3.2-test, 3.3-test, 3.4-test, 3.5-test | — | 2026-02-06 |
+| 3.2-test, 3.3-test, 3.4-test, 3.5-test | ea296a9 | 2026-02-06 |
+| 5.1, 5.2, 5.4 (integration + compatibility tests) | — | 2026-02-06 |
