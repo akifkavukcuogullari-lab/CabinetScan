@@ -30,28 +30,28 @@
   - [x] Add `buildCapturePackage(showroomId:)` method
 
 ## Phase 2: iOS — Server Pipeline Client & Upload Flow
-- [ ] 2.1 Create `ServerPipelineClient.swift` (actor)
-  - [ ] `submitJob()` — upload files + create job
-  - [ ] `pollForResults()` — poll status + download results
-  - [ ] `ServerPipelineResult` struct
-  - [ ] Error handling + retry logic
+- [x] 2.1 Create `ServerPipelineClient.swift` (actor)
+  - [x] `submitJob()` — upload files + create job
+  - [x] `pollForResults()` — poll status + download results
+  - [x] `ServerPipelineResult` struct
+  - [x] Error handling + retry logic
 - [ ] 2.1-test: `ServerPipelineClientTests.swift`
-- [ ] 2.2 Create `ServerResultAdapter.swift`
-  - [ ] Convert server JSON → `MeasurementData`
-  - [ ] Map all fields (values in FEET)
-  - [ ] Set `scanMethod = .aiFlow`
-  - [ ] Populate `aiMetadata`
+- [x] 2.2 Create `ServerResultAdapter.swift`
+  - [x] Convert server JSON → `MeasurementData`
+  - [x] Map all fields (values in FEET)
+  - [x] Set `scanMethod = .aiFlow`
+  - [x] Populate `aiMetadata`
 - [ ] 2.2-test: `ServerResultAdapterTests.swift`
-- [ ] 2.3 Wire upload flow into `AIFlowCoordinator.processCapture()`
-  - [ ] Build package → submit job → poll → convert results
-  - [ ] Update `uploadStatus` at each stage
-- [ ] 2.4 Update `ProcessingView.swift` for server pipeline states
-  - [ ] Stage-specific messages from server
-  - [ ] Error state with retry option
-- [ ] 2.5 Wire processing into `AIFlowEntryPoint.swift`
-  - [ ] Call `processCapture()` on `.processing` appear
-  - [ ] On success: `appState.setMeasurementData(result)`
-  - [ ] On error: show in ProcessingView
+- [x] 2.3 Wire upload flow into `AIFlowCoordinator.processCapture()`
+  - [x] Build package → submit job → poll → convert results
+  - [x] Update `uploadStatus` at each stage
+- [x] 2.4 Update `ProcessingView.swift` for server pipeline states
+  - [x] Stage-specific messages from server
+  - [x] Error state with retry option
+- [x] 2.5 Wire processing into `AIFlowEntryPoint.swift`
+  - [x] Call `processCapture()` on `.processing` appear
+  - [x] On success: `appState.setMeasurementData(result)`
+  - [x] On error: show in ProcessingView
 - [ ] 2.5-test: `AIFlowIntegrationTests.swift`
 
 ## Phase 3: Supabase — Database & Edge Functions

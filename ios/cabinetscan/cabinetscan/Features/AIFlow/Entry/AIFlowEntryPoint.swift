@@ -21,6 +21,9 @@ struct AIFlowEntryPoint: View {
     /// Show confidence warning sheet if there are warnings
     @State private var showConfidenceWarningSheet = false
 
+    /// Pending measurement data (held while confidence warning is shown)
+    @State private var pendingMeasurementData: MeasurementData?
+
     var body: some View {
         ZStack {
             // Main navigation based on current step
@@ -96,7 +99,6 @@ struct AIFlowEntryPoint: View {
                 }
 
             case .processing:
-                // Processing view — placeholder for server pipeline
                 ProcessingView(
                     showroomLogoURL: appState.showroomConfig?.branding.logoUrl.flatMap { URL(string: $0) },
                     onCancel: {
@@ -107,12 +109,13 @@ struct AIFlowEntryPoint: View {
                         coordinator.reset()
                         viewModel.currentStep = .intro
                     },
+                    onRetry: {
+                        startServerProcessing()
+                    },
                     coordinator: coordinator
                 )
                 .onAppear {
-                    // TODO: Start server pipeline upload when implemented
-                    // For now, transition to complete after a brief delay
-                    // This will be replaced by actual upload + server processing
+                    startServerProcessing()
                 }
 
             case .complete:
@@ -156,7 +159,10 @@ struct AIFlowEntryPoint: View {
                 onDismiss: {
                     showConfidenceWarningSheet = false
                     coordinator.clearOutputWarnings()
-                    viewModel.advanceToNextStep()
+                    if let data = pendingMeasurementData {
+                        pendingMeasurementData = nil
+                        appState.setMeasurementData(data)
+                    }
                 },
                 onRescan: {
                     showConfidenceWarningSheet = false
@@ -166,6 +172,46 @@ struct AIFlowEntryPoint: View {
             )
             .presentationDetents(coordinator.outputWarnings.count > 3 ? [.large] : [.medium, .large])
             .accessibilityIdentifier("ConfidenceWarningSheet")
+        }
+    }
+
+    // MARK: - Server Processing
+
+    /// Processing task reference for cancellation
+    @State private var processingTask: Task<Void, Never>?
+
+    /// Start the server pipeline processing.
+    /// Handles success (navigate to selection) and error (show in ProcessingView).
+    private func startServerProcessing() {
+        guard let showroomId = appState.showroomConfig?.id,
+              let showroomCode = appState.showroomConfig?.showroomCode else {
+            coordinator.setError(AIFlowError.processingFailed("Showroom configuration not available"))
+            return
+        }
+
+        // Cancel any existing processing task
+        processingTask?.cancel()
+
+        processingTask = Task {
+            do {
+                let measurementData = try await coordinator.processCapture(
+                    showroomId: showroomId,
+                    showroomCode: showroomCode
+                )
+
+                // Check for validation warnings before navigating
+                if !coordinator.outputWarnings.isEmpty {
+                    pendingMeasurementData = measurementData
+                    showConfidenceWarningSheet = true
+                } else {
+                    appState.setMeasurementData(measurementData)
+                }
+            } catch is CancellationError {
+                print("[AIFlowEntryPoint] Processing cancelled")
+            } catch {
+                print("[AIFlowEntryPoint] Processing failed: \(error.localizedDescription)")
+                coordinator.setError(error)
+            }
         }
     }
 

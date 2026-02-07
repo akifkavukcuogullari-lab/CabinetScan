@@ -26,7 +26,7 @@ protocol AIFlowCoordinatorProtocol {
     func cancelCapture()
 
     /// Process captured data and return measurement results
-    func processCapture() async throws -> MeasurementData
+    func processCapture(showroomId: String, showroomCode: String) async throws -> MeasurementData
 
     /// Current state of the capture flow
     var captureState: AICaptureState { get }
@@ -208,16 +208,80 @@ class AIFlowCoordinator: ObservableObject, AIFlowCoordinatorProtocol {
     func cancelCapture() {
         captureState = .idle
         processingProgress = 0.0
+        uploadStatus = nil
         captureSessionData = nil
         arSessionManager.stopSession()
+        Task { await pipelineClient.cancel() }
         print("[AIFlowCoordinator] Capture cancelled, session stopped")
     }
 
-    /// Process captured data into measurements
-    func processCapture() async throws -> MeasurementData {
+    /// Process captured data by uploading to server pipeline and polling for results.
+    ///
+    /// Flow: Build package -> Upload files -> Create job -> Poll status -> Convert results
+    ///
+    /// - Parameters:
+    ///   - showroomId: Showroom UUID for job context
+    ///   - showroomCode: Showroom code for storage paths
+    /// - Returns: MeasurementData ready for AppState.setMeasurementData()
+    func processCapture(showroomId: String, showroomCode: String) async throws -> MeasurementData {
         captureState = .processing
-        // TODO: Will be replaced by server pipeline upload
-        throw AIFlowError.notImplemented
+        processingProgress = 0.0
+
+        // 1. Build capture package
+        uploadStatus = "Preparing capture data..."
+        print("[AIFlowCoordinator] Building capture package...")
+        let package = try buildCapturePackage(showroomId: showroomId)
+        processingProgress = 0.05
+
+        // 2. Upload files and create job
+        let jobId = try await pipelineClient.submitJob(
+            package: package,
+            showroomCode: showroomCode,
+            showroomId: showroomId
+        ) { [weak self] status in
+            self?.uploadStatus = status
+        }
+        processingProgress = 0.3
+        print("[AIFlowCoordinator] Job submitted: \(jobId)")
+
+        // 3. Poll for results
+        uploadStatus = "Processing scan on server..."
+        let result = try await pipelineClient.pollForResults(jobId: jobId) { [weak self] progress, stage in
+            // Map server progress (0-1) to our progress range (0.3-0.9)
+            self?.processingProgress = 0.3 + (progress * 0.6)
+            self?.uploadStatus = stage
+        }
+        processingProgress = 0.9
+        print("[AIFlowCoordinator] Results received, converting...")
+
+        // 4. Convert to MeasurementData
+        uploadStatus = "Finalizing measurements..."
+        let uploadContext = UploadContext(
+            videoUrl: captureSessionData?.videoURL?.absoluteString ?? "",
+            videoThumbnailUrl: nil,
+            videoDurationSeconds: Int(captureSessionData?.metadata?.videoDuration ?? 0),
+            videoSizeBytes: 0,
+            videoResolution: "unknown",
+            photoUrls: []
+        )
+
+        let adapter = ServerResultAdapter()
+        let measurementData = adapter.convert(
+            result: result,
+            uploadContext: uploadContext
+        )
+
+        // Store validation warnings
+        if !result.validationIssues.isEmpty {
+            outputWarnings = result.validationIssues
+        }
+
+        processingProgress = 1.0
+        captureState = .complete
+        uploadStatus = nil
+
+        print("[AIFlowCoordinator] Processing complete")
+        return measurementData
     }
 
     /// Update processing progress
@@ -331,6 +395,11 @@ class AIFlowCoordinator: ObservableObject, AIFlowCoordinatorProtocol {
             showroomId: showroomId
         )
     }
+
+    // MARK: - Server Pipeline Client (Phase 2.1)
+
+    /// Server pipeline client for uploading and polling
+    private lazy var pipelineClient = ServerPipelineClient(uploader: uploader)
 
     // MARK: - Upload
 

@@ -2,8 +2,8 @@
 //  ProcessingView.swift
 //  cabinetscan
 //
-//  Placeholder for server pipeline processing.
-//  Will be replaced with upload + server status UI.
+//  Server pipeline processing UI.
+//  Shows upload progress, server stage messages, and error recovery.
 //
 
 import SwiftUI
@@ -12,8 +12,8 @@ import SwiftUI
 
 /// Displays processing progress during server pipeline execution.
 ///
-/// Currently a placeholder that shows upload and processing status.
-/// Will be fully implemented when server pipeline is integrated.
+/// Shows stage-specific messages from the server pipeline, progress bar,
+/// and error recovery options (retry or start over).
 struct ProcessingView: View {
 
     // MARK: - Dependencies
@@ -26,6 +26,9 @@ struct ProcessingView: View {
 
     /// Callback when user wants to start over after error
     let onStartOver: () -> Void
+
+    /// Callback when user wants to retry after error (re-submits same capture)
+    var onRetry: (() -> Void)?
 
     /// Coordinator for upload and state management
     @ObservedObject var coordinator: AIFlowCoordinator
@@ -135,16 +138,36 @@ struct ProcessingView: View {
     // MARK: - Status Title
 
     private var statusTitle: String {
-        if let status = coordinator.uploadStatus {
-            if status.contains("video") {
-                return "Uploading video..."
-            } else if status.contains("photo") {
-                return "Uploading photos..."
-            } else {
-                return "Processing..."
-            }
+        guard let status = coordinator.uploadStatus else {
+            return "Analyzing your kitchen..."
         }
-        return "Analyzing your kitchen..."
+
+        // Map server stages to user-friendly titles
+        let lowered = status.lowercased()
+        if lowered.contains("upload") || lowered.contains("video") || lowered.contains("photo") || lowered.contains("pose") || lowered.contains("plane") {
+            return "Uploading scan data..."
+        } else if lowered.contains("frame") || lowered.contains("extract") {
+            return "Analyzing video frames..."
+        } else if lowered.contains("depth") {
+            return "Measuring distances..."
+        } else if lowered.contains("calibrat") || lowered.contains("scale") {
+            return "Calibrating measurements..."
+        } else if lowered.contains("wall") {
+            return "Detecting walls..."
+        } else if lowered.contains("cabinet") || lowered.contains("object") || lowered.contains("detect") {
+            return "Finding cabinets..."
+        } else if lowered.contains("snap") || lowered.contains("standard") {
+            return "Matching standard sizes..."
+        } else if lowered.contains("floor") || lowered.contains("plan") {
+            return "Creating floor plan..."
+        } else if lowered.contains("valid") {
+            return "Validating results..."
+        } else if lowered.contains("final") {
+            return "Finalizing..."
+        } else if lowered.contains("process") || lowered.contains("server") {
+            return "Processing on server..."
+        }
+        return "Processing..."
     }
 
     // MARK: - Progress Bar
@@ -196,14 +219,34 @@ struct ProcessingView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
-            Button(action: onStartOver) {
-                Text("Start Over")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.accentColor)
-                    .cornerRadius(10)
+            VStack(spacing: 12) {
+                if let onRetry = onRetry {
+                    Button(action: onRetry) {
+                        Text("Try Again")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.accentColor)
+                            .cornerRadius(10)
+                    }
+                }
+
+                Button(action: onStartOver) {
+                    Text("Start Over")
+                        .font(.headline)
+                        .foregroundColor(onRetry != nil ? .accentColor : .white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(onRetry != nil ? Color.clear : Color.accentColor)
+                        .cornerRadius(10)
+                        .overlay(
+                            onRetry != nil ?
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.accentColor, lineWidth: 1.5)
+                            : nil
+                        )
+                }
             }
             .padding(.horizontal, 48)
         }
@@ -302,6 +345,7 @@ struct ProcessingView_Previews: PreviewProvider {
             showroomLogoURL: nil,
             onCancel: { },
             onStartOver: { },
+            onRetry: { },
             coordinator: coordinator
         )
     }
