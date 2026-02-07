@@ -123,6 +123,18 @@ class AIARSessionManager: NSObject, ObservableObject {
     /// Last published recovery state (to avoid redundant dispatches)
     private var _lastPublishedRecoveryState: TrackingRecoveryState = .normal
 
+    // MARK: - Plane Detection (Server Pipeline V2)
+
+    /// Detected ARKit plane anchors, keyed by identifier for deduplication.
+    /// Updated on delegate queue, exported via `exportPlanesJSON()`.
+    private var _detectedPlanes: [UUID: ARPlaneAnchor] = [:]
+
+    /// Serial queue for thread-safe plane access
+    private let planeQueue = DispatchQueue(label: "com.cabinetscan.aiflow.planeHistory")
+
+    /// Number of currently detected planes (observable, updated on main thread)
+    @Published private(set) var detectedPlaneCount: Int = 0
+
     // MARK: - App Lifecycle Observers
 
     private var cancellables = Set<AnyCancellable>()
@@ -167,9 +179,13 @@ class AIARSessionManager: NSObject, ObservableObject {
             self?.trackingLimitedReason = nil
         }
 
-        // Clear pose history
+        // Clear pose history and planes
         poseQueue.async { [weak self] in
             self?._poseHistory.removeAll()
+        }
+        planeQueue.async { [weak self] in
+            self?._detectedPlanes.removeAll()
+            DispatchQueue.main.async { self?.detectedPlaneCount = 0 }
         }
 
         // Configure ARKit (ADR-001: Battery-optimized settings)
@@ -184,8 +200,9 @@ class AIARSessionManager: NSObject, ObservableObject {
 
         configuration.isAutoFocusEnabled = true
 
-        // ADR-001: Explicitly disable ALL optional features
-        configuration.planeDetection = []           // We only need poses, not planes
+        // Server Pipeline V2: Enable plane detection for wall measurement
+        // Vertical planes → wall segments, horizontal planes → floor/countertop reference
+        configuration.planeDetection = [.horizontal, .vertical]
         // Note: environmentTexturing left at default (automatic) as .none is deprecated
         // Note: sceneReconstruction left at default as .none is unavailable - it's LiDAR-only anyway
         configuration.frameSemantics = []           // No body/person detection needed
@@ -193,7 +210,7 @@ class AIARSessionManager: NSObject, ObservableObject {
         // Run session
         session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
 
-        print("[AIARSessionManager] Session started with battery-optimized configuration")
+        print("[AIARSessionManager] Session started with plane detection enabled (horizontal + vertical)")
     }
 
     /// Pause the ARKit session (preserves tracking state for resume)
@@ -209,9 +226,13 @@ class AIARSessionManager: NSObject, ObservableObject {
         // Cancel recovery timer (Story 6.7)
         cancelRecoveryTimer()
 
-        // Clear pose history
+        // Clear pose history and planes
         poseQueue.async { [weak self] in
             self?._poseHistory.removeAll()
+        }
+        planeQueue.async { [weak self] in
+            self?._detectedPlanes.removeAll()
+            DispatchQueue.main.async { self?.detectedPlaneCount = 0 }
         }
 
         // Reset state
@@ -290,6 +311,31 @@ class AIARSessionManager: NSObject, ObservableObject {
                 "poses": poses
             ]
         }
+    }
+
+    // MARK: - Plane Export (Server Pipeline V2)
+
+    /// Export all detected plane anchors as JSON data for server pipeline.
+    /// Each plane includes identifier, alignment, center, extent, and 4x4 transform.
+    /// - Returns: JSON-serialized Data containing an array of plane dictionaries
+    func exportPlanesJSON() -> Data {
+        return planeQueue.sync {
+            let planes = _detectedPlanes.values.map { anchor -> [String: Any] in
+                [
+                    "identifier": anchor.identifier.uuidString,
+                    "alignment": anchor.alignment == .horizontal ? "horizontal" : "vertical",
+                    "center": [anchor.center.x, anchor.center.y, anchor.center.z],
+                    "extent": [anchor.extent.x, anchor.extent.y, anchor.extent.z],
+                    "transform": transformToArray(anchor.transform)
+                ]
+            }
+            return (try? JSONSerialization.data(withJSONObject: planes, options: [])) ?? Data("[]".utf8)
+        }
+    }
+
+    /// Get the current number of detected planes (thread-safe)
+    func getDetectedPlaneCount() -> Int {
+        planeQueue.sync { _detectedPlanes.count }
     }
 
     // MARK: - Zoom Factor (ADR-005)
@@ -650,6 +696,67 @@ extension AIARSessionManager: ARSessionDelegate {
                     self.isReadyForCapture = true
                     print("[AIARSessionManager] Session ready for capture - tracking achieved normal state")
                 }
+            }
+        }
+    }
+
+    // MARK: - Anchor Handling (Server Pipeline V2 — Plane Detection)
+
+    /// Called when new anchors are added to the session
+    func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
+        var addedPlanes = false
+        for anchor in anchors {
+            if let planeAnchor = anchor as? ARPlaneAnchor {
+                planeQueue.async { [weak self] in
+                    self?._detectedPlanes[planeAnchor.identifier] = planeAnchor
+                }
+                addedPlanes = true
+            }
+        }
+        if addedPlanes {
+            updatePlaneCount()
+        }
+    }
+
+    /// Called when existing anchors are updated
+    func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
+        var updatedPlanes = false
+        for anchor in anchors {
+            if let planeAnchor = anchor as? ARPlaneAnchor {
+                planeQueue.async { [weak self] in
+                    self?._detectedPlanes[planeAnchor.identifier] = planeAnchor
+                }
+                updatedPlanes = true
+            }
+        }
+        if updatedPlanes {
+            updatePlaneCount()
+        }
+    }
+
+    /// Called when anchors are removed from the session
+    func session(_ session: ARSession, didRemove anchors: [ARAnchor]) {
+        var removedPlanes = false
+        for anchor in anchors {
+            if let planeAnchor = anchor as? ARPlaneAnchor {
+                planeQueue.async { [weak self] in
+                    self?._detectedPlanes.removeValue(forKey: planeAnchor.identifier)
+                }
+                removedPlanes = true
+            }
+        }
+        if removedPlanes {
+            updatePlaneCount()
+        }
+    }
+
+    /// Update published plane count on main thread
+    private func updatePlaneCount() {
+        planeQueue.async { [weak self] in
+            guard let self = self else { return }
+            let count = self._detectedPlanes.count
+            DispatchQueue.main.async {
+                self.detectedPlaneCount = count
             }
         }
     }
