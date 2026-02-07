@@ -63,18 +63,19 @@
   - [x] Validate input (video_url, showroom_id required)
   - [x] Insert row with status = 'queued'
   - [ ] Trigger RunPod/Modal worker (TODO placeholder)
-- [ ] 3.2-test: `create-processing-job.test.ts`
+- [x] 3.2-test: `create-processing-job/index.test.ts`
 - [x] 3.3 Create `get-job-status` edge function
   - [x] Query by job ID
   - [x] Return status, progress, stage
-- [ ] 3.3-test: `get-job-status.test.ts`
+- [x] 3.3-test: `get-job-status/index.test.ts`
 - [x] 3.4 Create `get-job-results` edge function
   - [x] Query completed job
   - [x] Return measurements_data, floor_plan URL
-- [ ] 3.4-test: `get-job-results.test.ts`
+- [x] 3.4-test: `get-job-results/index.test.ts`
 - [x] 3.5 Create `update-job-status` edge function (service role)
   - [x] Validate service role auth
   - [x] Update progress, stage, results
+- [x] 3.5-test: `update-job-status/index.test.ts`
 
 ## Phase 4: Server — Python Pipeline
 - [x] 4.0 Project setup (`server/` directory, requirements.txt, Dockerfile)
@@ -117,4 +118,5 @@
 | 2.1–2.5 | 46b86c3 | 2026-02-06 |
 | 3.1–3.5 | 2fe07b0 | 2026-02-06 |
 | 4.0–4.11 | 93e0947 | 2026-02-06 |
-| 2.1-test, 2.2-test, 4.1-test, 4.3–4.9-test | 00575cc | 2026-02-06 |
+| 2.1-test, 2.2-test, 4.1-test, 4.3–4.9-test | df318dd | 2026-02-06 |
+| 3.2-test, 3.3-test, 3.4-test, 3.5-test | — | 2026-02-06 |
