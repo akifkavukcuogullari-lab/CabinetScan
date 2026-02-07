@@ -25,9 +25,9 @@
   - [x] `CapturePackageMetadata` struct (Codable)
   - [x] `build()` method using session manager exports
 - [x] 1.2-test: `CapturePackageBuilderTests.swift`
-- [ ] 1.3 Update `AIFlowCoordinator` for package building
-  - [ ] Add `packageBuilder` property
-  - [ ] Add `buildCapturePackage(showroomId:)` method
+- [x] 1.3 Update `AIFlowCoordinator` for package building
+  - [x] Add `packageBuilder` property
+  - [x] Add `buildCapturePackage(showroomId:)` method
 
 ## Phase 2: iOS — Server Pipeline Client & Upload Flow
 - [ ] 2.1 Create `ServerPipelineClient.swift` (actor)

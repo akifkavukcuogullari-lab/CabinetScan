@@ -310,6 +310,28 @@ class AIFlowCoordinator: ObservableObject, AIFlowCoordinatorProtocol {
         print("[AIFlowCoordinator] Photo capture cancelled - returning to video capture")
     }
 
+    // MARK: - Capture Package Builder (Phase 1.3)
+
+    /// Builds capture packages for server pipeline upload
+    private lazy var packageBuilder = CapturePackageBuilder(sessionManager: arSessionManager)
+
+    /// Build a capture package from the current session data.
+    /// - Parameter showroomId: The showroom identifier for server context
+    /// - Returns: A `CapturePackage` ready for upload
+    /// - Throws: `AIFlowError.insufficientData` if video URL or session data is missing
+    func buildCapturePackage(showroomId: String) throws -> CapturePackage {
+        guard let sessionData = captureSessionData,
+              let videoURL = sessionData.videoURL else {
+            throw AIFlowError.insufficientData
+        }
+
+        return packageBuilder.build(
+            videoURL: videoURL,
+            sessionData: sessionData,
+            showroomId: showroomId
+        )
+    }
+
     // MARK: - Upload
 
     /// Uploader for video and photos to Supabase storage
