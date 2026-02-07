@@ -35,13 +35,13 @@
   - [x] `pollForResults()` — poll status + download results
   - [x] `ServerPipelineResult` struct
   - [x] Error handling + retry logic
-- [ ] 2.1-test: `ServerPipelineClientTests.swift`
+- [x] 2.1-test: `ServerPipelineClientTests.swift`
 - [x] 2.2 Create `ServerResultAdapter.swift`
   - [x] Convert server JSON → `MeasurementData`
   - [x] Map all fields (values in FEET)
   - [x] Set `scanMethod = .aiFlow`
   - [x] Populate `aiMetadata`
-- [ ] 2.2-test: `ServerResultAdapterTests.swift`
+- [x] 2.2-test: `ServerResultAdapterTests.swift`
 - [x] 2.3 Wire upload flow into `AIFlowCoordinator.processCapture()`
   - [x] Build package → submit job → poll → convert results
   - [x] Update `uploadStatus` at each stage
@@ -79,23 +79,23 @@
 ## Phase 4: Server — Python Pipeline
 - [x] 4.0 Project setup (`server/` directory, requirements.txt, Dockerfile)
 - [x] 4.1 Stage 1: Frame Extraction (`frame_extraction.py`)
-- [ ] 4.1-test: `test_frame_extraction.py`
+- [x] 4.1-test: `test_frame_extraction.py`
 - [x] 4.2 Stage 2: Depth Estimation (`depth_estimation.py`) — Video Depth Anything
 - [ ] 4.2-test: `test_depth_estimation.py`
 - [x] 4.3 Stage 3: Scale Calibration (`scale_calibration.py`)
-- [ ] 4.3-test: `test_scale_calibration.py`
+- [x] 4.3-test: `test_scale_calibration.py`
 - [x] 4.4 Stage 4: Wall Detection (`wall_detection.py`) — ARKit planes
-- [ ] 4.4-test: `test_wall_detection.py`
+- [x] 4.4-test: `test_wall_detection.py`
 - [x] 4.5 Stage 5: Object Detection (`object_detection.py`) — SAM 3
 - [ ] 4.5-test: `test_object_detection.py`
 - [x] 4.6 Stage 6: Snap to Standards (`snap_to_standards.py`)
-- [ ] 4.6-test: `test_snap_to_standards.py`
+- [x] 4.6-test: `test_snap_to_standards.py`
 - [x] 4.7 Stage 7: Floor Plan Generation (`floor_plan_gen.py`)
-- [ ] 4.7-test: `test_floor_plan_gen.py`
+- [x] 4.7-test: `test_floor_plan_gen.py`
 - [x] 4.8 Stage 8: VLM Validation (`vlm_validation.py`)
-- [ ] 4.8-test: `test_vlm_validation.py`
+- [x] 4.8-test: `test_vlm_validation.py`
 - [x] 4.9 Pipeline Orchestrator (`orchestrator.py`)
-- [ ] 4.9-test: `test_orchestrator.py`
+- [x] 4.9-test: `test_orchestrator.py`
 - [x] 4.10 RunPod Handler (`runpod_handler.py`)
 - [x] 4.11 Supabase utils (`utils/supabase_client.py`)
 
@@ -116,3 +116,5 @@
 | 1.3 | 52c42c5 | 2026-02-06 |
 | 2.1–2.5 | 46b86c3 | 2026-02-06 |
 | 3.1–3.5 | 2fe07b0 | 2026-02-06 |
+| 4.0–4.11 | 93e0947 | 2026-02-06 |
+| 2.1-test, 2.2-test, 4.1-test, 4.3–4.9-test | 00575cc | 2026-02-06 |
