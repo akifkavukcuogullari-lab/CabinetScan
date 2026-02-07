@@ -7,6 +7,7 @@
 
 import Foundation
 import simd
+import SwiftUI
 
 // MARK: - AI Flow Internal Models
 // These types are internal to AIFlow module and not shared with existing app code.
@@ -244,6 +245,75 @@ enum AIConfidenceLevel: String, Comparable, Codable {
 
     static func < (lhs: AIConfidenceLevel, rhs: AIConfidenceLevel) -> Bool {
         lhs.sortOrder < rhs.sortOrder
+    }
+
+    var badgeColor: Color {
+        switch self {
+        case .high: return .green
+        case .medium: return .yellow
+        case .low: return .red
+        }
+    }
+}
+
+// MARK: - Object Confidence Score (stub for ConfidenceBadge UI)
+
+/// Per-object confidence score with factor breakdown.
+/// Used by ConfidenceBadge/ConfidenceDetailView for detailed drill-down.
+/// In the server pipeline, per-object scores come from the Python backend.
+struct ObjectConfidenceScore {
+    let level: AIConfidenceLevel
+    let objectType: ObjectType
+    let score: Float
+    let factors: ConfidenceFactors
+    let warnings: [String]
+
+    var displayPercentage: String {
+        "\(Int(score * 100))%"
+    }
+
+    enum ObjectType {
+        case baseCabinet, upperCabinet, appliance, wall, other
+
+        var displayText: String {
+            switch self {
+            case .baseCabinet: return "Base Cabinet"
+            case .upperCabinet: return "Upper Cabinet"
+            case .appliance: return "Appliance"
+            case .wall: return "Wall"
+            case .other: return "Object"
+            }
+        }
+    }
+}
+
+/// Factor breakdown for a confidence score.
+struct ConfidenceFactors {
+    let segmentationClarity: Float
+    let depthConsistency: Float
+    let poseAccuracy: Float
+    let standardSizeMatch: Float
+
+    enum Weights {
+        static let segmentationClarity: Float = 0.3
+        static let depthConsistency: Float = 0.3
+        static let poseAccuracy: Float = 0.2
+        static let standardSizeMatch: Float = 0.2
+    }
+}
+
+/// Quote readiness level for QuoteReadinessBadge UI.
+enum QuoteReadinessLevel {
+    case ready
+    case withCaveats
+    case notRecommended
+
+    var shortLabel: String {
+        switch self {
+        case .ready: return "Quote Ready"
+        case .withCaveats: return "With Caveats"
+        case .notRecommended: return "Not Recommended"
+        }
     }
 }
 
