@@ -9,22 +9,22 @@
 ---
 
 ## Phase 0: Setup
-- [x] 0.1 Create `pipeline-dev` custom agent (`.claude/agents/pipeline-dev.md`)
-- [x] 0.2 Create progress tracking file (`docs/IMPLEMENTATION_PROGRESS.md`)
+- [x] 0.1 Create `pipeline-dev` custom agent (`.claude/agents/pipeline-dev.md`) _(84567d5)_
+- [x] 0.2 Create progress tracking file (`docs/IMPLEMENTATION_PROGRESS.md`) _(84567d5)_
 
 ## Phase 1: iOS — ARKit Plane Detection & Capture Package
-- [ ] 1.1 Enable ARKit plane detection in `AIARSessionManager.swift`
-  - [ ] Change `planeDetection = []` → `[.horizontal, .vertical]`
-  - [ ] Add `detectedPlanes` storage dictionary
-  - [ ] Implement `session(_:didAdd:)` / `session(_:didUpdate:)` for plane anchors
-  - [ ] Add `exportPlanesJSON()` method
-  - [ ] Clear planes on stop/start
-- [ ] 1.1-test: `AIARSessionManagerPlaneTests.swift`
-- [ ] 1.2 Create `CapturePackageBuilder.swift`
-  - [ ] `CapturePackage` struct (videoURL, posesData, planesData, metadata)
-  - [ ] `CapturePackageMetadata` struct (Codable)
-  - [ ] `build()` method using session manager exports
-- [ ] 1.2-test: `CapturePackageBuilderTests.swift`
+- [x] 1.1 Enable ARKit plane detection in `AIARSessionManager.swift` _(aae7137)_
+  - [x] Change `planeDetection = []` → `[.horizontal, .vertical]`
+  - [x] Add `detectedPlanes` storage dictionary
+  - [x] Implement `session(_:didAdd:)` / `session(_:didUpdate:)` for plane anchors
+  - [x] Add `exportPlanesJSON()` method
+  - [x] Clear planes on stop/start
+- [x] 1.1-test: `AIARSessionManagerPlaneTests.swift`
+- [x] 1.2 Create `CapturePackageBuilder.swift`
+  - [x] `CapturePackage` struct (videoURL, posesData, planesData, metadata)
+  - [x] `CapturePackageMetadata` struct (Codable)
+  - [x] `build()` method using session manager exports
+- [x] 1.2-test: `CapturePackageBuilderTests.swift`
 - [ ] 1.3 Update `AIFlowCoordinator` for package building
   - [ ] Add `packageBuilder` property
   - [ ] Add `buildCapturePackage(showroomId:)` method
@@ -110,4 +110,5 @@
 ## Commit Log
 | Task | Commit | Date |
 |------|--------|------|
-| 0.1 + 0.2 | *pending* | |
+| 0.1 + 0.2 | 84567d5 | 2026-02-06 |
+| 1.1 | aae7137 | 2026-02-06 |
