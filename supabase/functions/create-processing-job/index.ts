@@ -65,17 +65,41 @@ serve(async (req: Request) => {
       )
     }
 
-    // TODO: Trigger RunPod/Modal serverless worker
-    // For now, the job sits in 'queued' status until a worker picks it up.
-    // In production, this will call RunPod API to start a serverless GPU job:
-    //
-    // const runpodResponse = await fetch('https://api.runpod.ai/v2/{endpoint_id}/run', {
-    //   method: 'POST',
-    //   headers: { 'Authorization': `Bearer ${Deno.env.get('RUNPOD_API_KEY')}` },
-    //   body: JSON.stringify({
-    //     input: { job_id: job.id, video_url: body.video_url, ... }
-    //   })
-    // })
+    // Trigger RunPod serverless worker
+    const runpodEndpointId = Deno.env.get('RUNPOD_ENDPOINT_ID')
+    const runpodApiKey = Deno.env.get('RUNPOD_API_KEY')
+
+    if (runpodEndpointId && runpodApiKey) {
+      try {
+        const runpodResponse = await fetch(
+          `https://api.runpod.ai/v2/${runpodEndpointId}/run`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${runpodApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              input: {
+                job_id: job.id,
+                video_url: body.video_url,
+                poses_url: body.poses_url || null,
+                planes_url: body.planes_url || null,
+                metadata: body.metadata || {},
+              },
+            }),
+          }
+        )
+
+        if (!runpodResponse.ok) {
+          console.error('RunPod trigger failed:', runpodResponse.status, await runpodResponse.text())
+          // Job stays queued — can be retried or picked up by polling worker
+        }
+      } catch (triggerErr) {
+        console.error('RunPod trigger error:', triggerErr)
+        // Non-fatal: job remains queued for retry
+      }
+    }
 
     return new Response(
       JSON.stringify({

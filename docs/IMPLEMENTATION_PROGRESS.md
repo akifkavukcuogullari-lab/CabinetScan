@@ -62,7 +62,7 @@
 - [x] 3.2 Create `create-processing-job` edge function
   - [x] Validate input (video_url, showroom_id required)
   - [x] Insert row with status = 'queued'
-  - [ ] Trigger RunPod/Modal worker (TODO placeholder)
+  - [x] Trigger RunPod serverless worker via API
 - [x] 3.2-test: `create-processing-job/index.test.ts`
 - [x] 3.3 Create `get-job-status` edge function
   - [x] Query by job ID
