@@ -11,8 +11,8 @@ transformers>=4.36.0
 accelerate>=0.25.0
 
 # Segmentation
-# SAM 3 (Meta, installed from source)
-segment-anything-3>=1.0.0
+# SAM 2 (Meta) — SAM 3 will be swapped in when released
+sam2>=1.0.0
 
 # Computer Vision
 opencv-python>=4.8.0
