@@ -55,26 +55,26 @@
 - [ ] 2.5-test: `AIFlowIntegrationTests.swift`
 
 ## Phase 3: Supabase — Database & Edge Functions
-- [ ] 3.1 Create `processing_jobs` migration
-  - [ ] Table schema with status, progress, results columns
-  - [ ] Indexes on status + showroom_id
-  - [ ] RLS policies (anon create/read, service_role update)
-- [ ] 3.2 Create `create-processing-job` edge function
-  - [ ] Validate input (video_url, showroom_id required)
-  - [ ] Insert row with status = 'queued'
-  - [ ] Trigger RunPod/Modal worker
+- [x] 3.1 Create `processing_jobs` migration
+  - [x] Table schema with status, progress, results columns
+  - [x] Indexes on status + showroom_id
+  - [x] RLS policies (anon create/read, service_role update)
+- [x] 3.2 Create `create-processing-job` edge function
+  - [x] Validate input (video_url, showroom_id required)
+  - [x] Insert row with status = 'queued'
+  - [ ] Trigger RunPod/Modal worker (TODO placeholder)
 - [ ] 3.2-test: `create-processing-job.test.ts`
-- [ ] 3.3 Create `get-job-status` edge function
-  - [ ] Query by job ID
-  - [ ] Return status, progress, stage
+- [x] 3.3 Create `get-job-status` edge function
+  - [x] Query by job ID
+  - [x] Return status, progress, stage
 - [ ] 3.3-test: `get-job-status.test.ts`
-- [ ] 3.4 Create `get-job-results` edge function
-  - [ ] Query completed job
-  - [ ] Return measurements_data, floor_plan URL
+- [x] 3.4 Create `get-job-results` edge function
+  - [x] Query completed job
+  - [x] Return measurements_data, floor_plan URL
 - [ ] 3.4-test: `get-job-results.test.ts`
-- [ ] 3.5 Create `update-job-status` edge function (service role)
-  - [ ] Validate service role auth
-  - [ ] Update progress, stage, results
+- [x] 3.5 Create `update-job-status` edge function (service role)
+  - [x] Validate service role auth
+  - [x] Update progress, stage, results
 
 ## Phase 4: Server — Python Pipeline
 - [ ] 4.0 Project setup (`server/` directory, requirements.txt, Dockerfile)
@@ -112,3 +112,6 @@
 |------|--------|------|
 | 0.1 + 0.2 | 84567d5 | 2026-02-06 |
 | 1.1 | aae7137 | 2026-02-06 |
+| 1.1-test + 1.2 + 1.2-test | 19900ed | 2026-02-06 |
+| 1.3 | 52c42c5 | 2026-02-06 |
+| 2.1–2.5 | 46b86c3 | 2026-02-06 |
