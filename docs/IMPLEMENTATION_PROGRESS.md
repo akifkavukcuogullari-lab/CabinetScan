@@ -82,13 +82,13 @@
 - [x] 4.1 Stage 1: Frame Extraction (`frame_extraction.py`)
 - [x] 4.1-test: `test_frame_extraction.py`
 - [x] 4.2 Stage 2: Depth Estimation (`depth_estimation.py`) — Video Depth Anything
-- [ ] 4.2-test: `test_depth_estimation.py`
+- [x] 4.2-test: `test_depth_estimation.py`
 - [x] 4.3 Stage 3: Scale Calibration (`scale_calibration.py`)
 - [x] 4.3-test: `test_scale_calibration.py`
 - [x] 4.4 Stage 4: Wall Detection (`wall_detection.py`) — ARKit planes
 - [x] 4.4-test: `test_wall_detection.py`
 - [x] 4.5 Stage 5: Object Detection (`object_detection.py`) — SAM 3
-- [ ] 4.5-test: `test_object_detection.py`
+- [x] 4.5-test: `test_object_detection.py`
 - [x] 4.6 Stage 6: Snap to Standards (`snap_to_standards.py`)
 - [x] 4.6-test: `test_snap_to_standards.py`
 - [x] 4.7 Stage 7: Floor Plan Generation (`floor_plan_gen.py`)
@@ -121,3 +121,4 @@
 | 2.1-test, 2.2-test, 4.1-test, 4.3–4.9-test | df318dd | 2026-02-06 |
 | 3.2-test, 3.3-test, 3.4-test, 3.5-test | ea296a9 | 2026-02-06 |
 | 5.1, 5.2, 5.4 (integration + compatibility tests) | — | 2026-02-06 |
+| 4.2-test, 4.5-test (depth estimation + object detection tests) | — | 2026-02-06 |
