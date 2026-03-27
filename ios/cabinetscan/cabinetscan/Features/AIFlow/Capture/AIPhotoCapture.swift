@@ -3,9 +3,10 @@
 //  cabinetscan
 //
 //  Created by Dev Agent on 2026-01-26.
+//  Rewritten to capture photos from ARFrame.capturedImage.
 //
 
-import AVFoundation
+import ARKit
 import UIKit
 
 // MARK: - Photo Capture Errors
@@ -62,99 +63,43 @@ struct PhotoCaptureResult {
 
 // MARK: - AI Photo Capture Service
 
-/// Service for capturing high-resolution photos with ARKit pose data.
-/// Per Story 2.5 - Task 3
+/// Service for capturing high-resolution photos from ARFrame pixel buffers.
+/// Replaces the AVCapturePhotoOutput-based capture with synchronous ARFrame snapshots.
 ///
 /// **Usage:**
-/// 1. Create with AVCaptureSession and AIARSessionManager
-/// 2. Call `capturePhoto()` to capture a photo
+/// 1. Create with AIARSessionManager
+/// 2. Call `capturePhoto()` to grab current ARFrame and convert to image
 /// 3. Photo is automatically saved to disk and returned with pose
 class AIPhotoCapture: NSObject {
 
     // MARK: - Properties
 
-    /// Photo output for capturing still images
-    private let photoOutput = AVCapturePhotoOutput()
-
-    /// AR session manager for pose data
+    /// AR session manager for session and pose data
     private weak var sessionManager: AIARSessionManager?
-
-    /// Capture session reference
-    private weak var captureSession: AVCaptureSession?
 
     /// Whether a capture is in progress
     private var captureInProgress = false
 
-    /// Continuation for async capture with timeout protection
-    private var captureContinuation: CheckedContinuation<UIImage, Error>?
-
-    /// Timeout for photo capture (5 seconds)
-    private let captureTimeout: TimeInterval = 5.0
-
-    /// Timer for capture timeout
-    private var captureTimeoutTask: Task<Void, Never>?
-
-    /// Photo settings for high-quality capture
-    private var photoSettings: AVCapturePhotoSettings {
-        let settings = AVCapturePhotoSettings()
-        // Enable high resolution if available
-        if photoOutput.isHighResolutionCaptureEnabled {
-            settings.isHighResolutionPhotoEnabled = true
-        }
-        return settings
-    }
-
     // MARK: - Initialization
 
-    /// Initialize with capture session and AR session manager
-    /// - Parameters:
-    ///   - captureSession: The AVCaptureSession to add photo output to
-    ///   - sessionManager: The AR session manager for pose data
-    init(captureSession: AVCaptureSession, sessionManager: AIARSessionManager) {
-        self.captureSession = captureSession
+    /// Initialize with AR session manager
+    /// - Parameter sessionManager: The AR session manager for frame and pose data
+    init(sessionManager: AIARSessionManager) {
         self.sessionManager = sessionManager
         super.init()
-
-        configurePhotoOutput(session: captureSession)
-        print("[AIPhotoCapture] Initialized with session and AR manager")
-    }
-
-    // MARK: - Configuration
-
-    /// Configure photo output on the capture session
-    private func configurePhotoOutput(session: AVCaptureSession) {
-        // Check if we can add the output
-        guard session.canAddOutput(photoOutput) else {
-            print("[AIPhotoCapture] Cannot add photo output to session")
-            return
-        }
-
-        session.beginConfiguration()
-
-        // Configure for high quality
-        photoOutput.isHighResolutionCaptureEnabled = true
-        photoOutput.maxPhotoQualityPrioritization = .quality
-
-        // Add output
-        session.addOutput(photoOutput)
-
-        session.commitConfiguration()
-
-        print("[AIPhotoCapture] Photo output configured - high resolution enabled")
+        print("[AIPhotoCapture] Initialized with AR session manager")
     }
 
     // MARK: - Public Methods
 
-    /// Capture a high-resolution photo with current ARKit pose
+    /// Capture a high-resolution photo from the current ARFrame
     /// - Returns: PhotoCaptureResult with URL, image, thumbnail, and pose
     /// - Throws: PhotoCaptureError if capture fails
     func capturePhoto() async throws -> PhotoCaptureResult {
-        // Check if capture session is running
-        guard let session = captureSession, session.isRunning else {
+        guard let manager = sessionManager else {
             throw PhotoCaptureError.sessionNotRunning
         }
 
-        // Check if capture is already in progress
         guard !captureInProgress else {
             throw PhotoCaptureError.captureInProgress
         }
@@ -162,30 +107,26 @@ class AIPhotoCapture: NSObject {
         captureInProgress = true
         defer { captureInProgress = false }
 
-        // Get pose at capture time (before waiting for photo)
-        let pose = sessionManager?.getCurrentPose()
+        // Get current frame from AR session
+        guard let frame = manager.arSession.currentFrame else {
+            throw PhotoCaptureError.noImageData
+        }
+
+        // Get pose at capture time
+        let pose = manager.getCurrentPose()
         let captureTimestamp = Date().timeIntervalSince1970
 
-        // Capture photo using continuation with timeout protection
-        let image = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<UIImage, Error>) in
-            self.captureContinuation = continuation
+        // Convert CVPixelBuffer → UIImage
+        let pixelBuffer = frame.capturedImage
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
 
-            // Set up timeout to prevent orphaned continuations
-            self.captureTimeoutTask = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64((self?.captureTimeout ?? 5.0) * 1_000_000_000))
-                await MainActor.run {
-                    if let cont = self?.captureContinuation {
-                        self?.captureContinuation = nil
-                        cont.resume(throwing: PhotoCaptureError.captureTimedOut)
-                    }
-                }
-            }
-
-            // Capture on main thread (AVCapturePhotoOutput requirement)
-            DispatchQueue.main.async {
-                self.photoOutput.capturePhoto(with: self.photoSettings, delegate: self)
-            }
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
+            throw PhotoCaptureError.noImageData
         }
+
+        // Apply .right orientation for portrait (ARKit frames are landscape)
+        let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
 
         // Save to disk
         let url = try savePhotoToDisk(image)
@@ -273,48 +214,8 @@ class AIPhotoCapture: NSObject {
 
     // MARK: - Cleanup
 
-    /// Remove photo output from session
+    /// No-op — no AVCaptureSession resources to clean up
     func cleanup() {
-        guard let session = captureSession else { return }
-
-        session.beginConfiguration()
-        session.removeOutput(photoOutput)
-        session.commitConfiguration()
-
-        print("[AIPhotoCapture] Photo output removed from session")
-    }
-}
-
-// MARK: - AVCapturePhotoCaptureDelegate
-
-extension AIPhotoCapture: AVCapturePhotoCaptureDelegate {
-
-    func photoOutput(
-        _ output: AVCapturePhotoOutput,
-        didFinishProcessingPhoto photo: AVCapturePhoto,
-        error: Error?
-    ) {
-        // Cancel timeout task since we received a response
-        captureTimeoutTask?.cancel()
-        captureTimeoutTask = nil
-
-        // Handle error
-        if let error = error {
-            captureContinuation?.resume(throwing: error)
-            captureContinuation = nil
-            return
-        }
-
-        // Get image data
-        guard let imageData = photo.fileDataRepresentation(),
-              let image = UIImage(data: imageData) else {
-            captureContinuation?.resume(throwing: PhotoCaptureError.noImageData)
-            captureContinuation = nil
-            return
-        }
-
-        // Resume with image
-        captureContinuation?.resume(returning: image)
-        captureContinuation = nil
+        print("[AIPhotoCapture] Cleanup (no-op)")
     }
 }

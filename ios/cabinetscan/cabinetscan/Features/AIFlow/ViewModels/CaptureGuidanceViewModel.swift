@@ -7,7 +7,7 @@
 
 import SwiftUI
 import Combine
-import AVFoundation
+import CoreVideo
 
 // MARK: - Guidance Preferences (ADR-005)
 
@@ -318,11 +318,9 @@ class CaptureGuidanceViewModel: ObservableObject, AIVideoCaptureFrameDelegate {
 
     // MARK: - AIVideoCaptureFrameDelegate
 
-    nonisolated func videoCapture(_ capture: AIVideoCapture, didOutputSampleBuffer sampleBuffer: CMSampleBuffer) {
+    nonisolated func videoCapture(_ capture: AIVideoCapture, didOutputPixelBuffer pixelBuffer: CVPixelBuffer, timestamp: TimeInterval) {
         // Forward to quality analyzer (runs on its own analysis queue)
-        Task { @MainActor in
-            qualityAnalyzer.processSampleBuffer(sampleBuffer)
-        }
+        qualityAnalyzer.processPixelBuffer(pixelBuffer)
     }
 
     // MARK: - Toast Management

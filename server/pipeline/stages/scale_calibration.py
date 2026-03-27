@@ -5,10 +5,18 @@ Cross-validates across multiple references for confidence scoring.
 """
 
 import numpy as np
+import torch
 from dataclasses import dataclass
 
 from .depth_estimation import DepthFrame
 from ..utils.errors import ScaleCalibrationError
+
+
+def _ensure_numpy(arr) -> np.ndarray:
+    """Ensure a value is a numpy ndarray (defensive against leaked CUDA tensors)."""
+    if isinstance(arr, torch.Tensor):
+        return arr.detach().cpu().numpy()
+    return np.asarray(arr)
 
 
 # Standard kitchen references (in inches)
@@ -46,18 +54,22 @@ class ScaleCalibrator:
         self,
         depth_frames: list[DepthFrame],
         detected_objects: list[dict] | None = None,
+        has_arkit_planes: bool = False,
     ) -> CalibrationResult:
         """Calibrate scale using detected reference objects.
 
         Args:
             depth_frames: Frames with metric depth maps
             detected_objects: Optional pre-detected objects with bounding boxes
+            has_arkit_planes: Whether ARKit plane data is available (already metric)
 
         Returns:
             CalibrationResult with scale factor and confidence
         """
         if not depth_frames:
             raise ScaleCalibrationError("No depth frames provided")
+
+        print(f"[ScaleCalibrator] {len(depth_frames)} depth frames, detected_objects={'yes' if detected_objects else 'no'}, has_arkit_planes={has_arkit_planes}", flush=True)
 
         # Collect scale estimates from multiple references
         scale_estimates: list[tuple[float, str]] = []
@@ -71,6 +83,18 @@ class ScaleCalibrator:
                 scale_estimates.append((scale, ref_name))
 
         if not scale_estimates:
+            # If ARKit planes are available, they're already in metric space —
+            # use scale_factor=1.0 with medium confidence
+            if has_arkit_planes:
+                print(f"[ScaleCalibrator] No reference objects, using ARKit planes (scale=1.0, confidence=medium)", flush=True)
+                return CalibrationResult(
+                    scale_factor=1.0,
+                    confidence="medium",
+                    reference_used="arkit_planes",
+                    cross_validation_score=0.5,
+                    references_found=[],
+                )
+
             # Fallback: use median room depth as rough scale
             # Assumes typical kitchen depth of ~10 feet
             median_depth = np.median([df.median_depth for df in depth_frames])
@@ -134,8 +158,8 @@ class ScaleCalibrator:
             if obj.get("label", "").lower().replace(" ", "_") == ref_name:
                 bbox = obj.get("bbox")  # [x1, y1, x2, y2]
                 if bbox and len(depth_frames) > 0:
-                    # Get depth in the bbox region
-                    depth_map = depth_frames[0].depth_map
+                    # Get depth in the bbox region (defensive against CUDA tensors)
+                    depth_map = _ensure_numpy(depth_frames[0].depth_map)
                     x1, y1, x2, y2 = [int(v) for v in bbox]
                     region = depth_map[y1:y2, x1:x2]
                     if region.size > 0:

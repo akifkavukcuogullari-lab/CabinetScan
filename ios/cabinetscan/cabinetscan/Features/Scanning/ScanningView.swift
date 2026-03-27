@@ -839,7 +839,10 @@ struct ScanningView: View {
             videoFormat: videoData != nil ? "mp4" : nil,
             visualizationPhotoUrls: nil,  // LiDAR flow doesn't use visualization photos
             scanMethod: nil,  // LiDAR flow: nil (Story 5.4)
-            aiMetadata: nil   // LiDAR flow: nil (Story 5.4)
+            aiMetadata: nil,  // LiDAR flow: nil (Story 5.4)
+            posesUrl: nil,
+            planesUrl: nil,
+            processingJobId: nil
         )
     }
 

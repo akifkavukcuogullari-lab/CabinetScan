@@ -151,6 +151,10 @@ struct MeasurementData: Codable {
     // AI Flow specific fields (Story 5.4)
     let scanMethod: ScanMethod?
     let aiMetadata: AIMetadata?
+    // AI Flow capture data references
+    let posesUrl: String?
+    let planesUrl: String?
+    let processingJobId: String?
 
     enum CodingKeys: String, CodingKey {
         case measurements
@@ -174,6 +178,9 @@ struct MeasurementData: Codable {
         case visualizationPhotoUrls = "visualization_photo_urls"
         case scanMethod = "scan_method"
         case aiMetadata = "ai_metadata"
+        case posesUrl = "poses_url"
+        case planesUrl = "planes_url"
+        case processingJobId = "processing_job_id"
     }
 }
 

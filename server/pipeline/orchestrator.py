@@ -124,7 +124,9 @@ class PipelineOrchestrator:
             stage_start = time.time()
             if on_progress:
                 on_progress(cumulative_progress, "Calibrating scale...")
-            calibration = self.scale_calibrator.calibrate(depth_frames)
+            calibration = self.scale_calibrator.calibrate(
+                depth_frames, has_arkit_planes=bool(input.planes_json)
+            )
             stage_timings["scale_calibration"] = int((time.time() - stage_start) * 1000)
             report("scale_calibration")
 
@@ -140,7 +142,7 @@ class PipelineOrchestrator:
             stage_start = time.time()
             if on_progress:
                 on_progress(cumulative_progress, "Detecting cabinets and appliances...")
-            objects = self.object_detector.detect(depth_frames, calibration)
+            objects = self.object_detector.detect(depth_frames, calibration, poses=input.poses_json)
             stage_timings["object_detection"] = int((time.time() - stage_start) * 1000)
             report("object_detection")
 
@@ -188,4 +190,7 @@ class PipelineOrchestrator:
         except PipelineError:
             raise
         except Exception as e:
+            import traceback
+            print(f"[Orchestrator] UNEXPECTED ERROR: {e}", flush=True)
+            traceback.print_exc()
             raise PipelineError("orchestrator", f"Unexpected error: {e}")

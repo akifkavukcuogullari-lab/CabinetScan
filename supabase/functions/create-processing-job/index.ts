@@ -69,8 +69,13 @@ serve(async (req: Request) => {
     const runpodEndpointId = Deno.env.get('RUNPOD_ENDPOINT_ID')
     const runpodApiKey = Deno.env.get('RUNPOD_API_KEY')
 
+    let runpodTriggered = false
+    let runpodError: string | null = null
+    let runpodJobId: string | null = null
+
     if (runpodEndpointId && runpodApiKey) {
       try {
+        console.log(`Triggering RunPod endpoint: ${runpodEndpointId}`)
         const runpodResponse = await fetch(
           `https://api.runpod.ai/v2/${runpodEndpointId}/run`,
           {
@@ -91,20 +96,35 @@ serve(async (req: Request) => {
           }
         )
 
-        if (!runpodResponse.ok) {
-          console.error('RunPod trigger failed:', runpodResponse.status, await runpodResponse.text())
-          // Job stays queued — can be retried or picked up by polling worker
+        const runpodBody = await runpodResponse.text()
+        console.log(`RunPod response: ${runpodResponse.status} ${runpodBody}`)
+
+        if (runpodResponse.ok) {
+          runpodTriggered = true
+          try {
+            const parsed = JSON.parse(runpodBody)
+            runpodJobId = parsed.id || null
+          } catch { /* ignore parse error */ }
+        } else {
+          runpodError = `RunPod ${runpodResponse.status}: ${runpodBody}`
+          console.error('RunPod trigger failed:', runpodError)
         }
       } catch (triggerErr) {
-        console.error('RunPod trigger error:', triggerErr)
-        // Non-fatal: job remains queued for retry
+        runpodError = `RunPod trigger error: ${triggerErr}`
+        console.error(runpodError)
       }
+    } else {
+      runpodError = 'RUNPOD_ENDPOINT_ID or RUNPOD_API_KEY not configured'
+      console.error(runpodError)
     }
 
     return new Response(
       JSON.stringify({
         job_id: job.id,
         status: 'queued',
+        runpod_triggered: runpodTriggered,
+        runpod_job_id: runpodJobId,
+        runpod_error: runpodError,
       }),
       {
         status: 201,

@@ -33,7 +33,7 @@ class FrameExtractor:
     # SSIM threshold for deduplication (above this = too similar)
     SSIM_THRESHOLD = 0.95
     # Output frame limits
-    MIN_FRAMES = 30
+    MIN_FRAMES = 10
     MAX_FRAMES = 120
 
     def extract(
@@ -63,12 +63,20 @@ class FrameExtractor:
 
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        duration = total_frames / fps if fps > 0 else 0
+
+        print(f"[FrameExtractor] Video: {video_path.name}, {width}x{height}, {fps:.1f}fps, {total_frames} frames, {duration:.1f}s", flush=True)
+        print(f"[FrameExtractor] Poses: {len(poses) if poses else 0}", flush=True)
+
         if fps <= 0 or total_frames <= 0:
             cap.release()
             raise FrameExtractionError("Invalid video metadata")
 
         # Calculate frame interval for target FPS
         frame_interval = max(1, int(fps / self.EXTRACT_FPS))
+        print(f"[FrameExtractor] Target {self.EXTRACT_FPS} FPS -> sampling every {frame_interval} frames", flush=True)
 
         frames: list[ExtractedFrame] = []
         frame_idx = 0
@@ -99,14 +107,18 @@ class FrameExtractor:
 
         cap.release()
 
+        print(f"[FrameExtractor] Sharp frames (blur >= {self.MIN_BLUR_SCORE}): {len(frames)}", flush=True)
+
         # Deduplicate similar frames
+        before_dedup = len(frames)
         frames = self._deduplicate(frames)
+        print(f"[FrameExtractor] After dedup: {len(frames)} (removed {before_dedup - len(frames)})", flush=True)
 
         # Enforce frame limits
         if len(frames) > self.MAX_FRAMES:
-            # Keep evenly spaced frames
             indices = np.linspace(0, len(frames) - 1, self.MAX_FRAMES, dtype=int)
             frames = [frames[i] for i in indices]
+            print(f"[FrameExtractor] Capped to {self.MAX_FRAMES} frames", flush=True)
 
         if len(frames) < self.MIN_FRAMES:
             raise FrameExtractionError(
@@ -114,6 +126,7 @@ class FrameExtractor:
                 "Video may be too short or too blurry."
             )
 
+        print(f"[FrameExtractor] Final: {len(frames)} frames, shapes: {frames[0].image.shape}", flush=True)
         return frames
 
     def _compute_blur_score(self, frame: np.ndarray) -> float:

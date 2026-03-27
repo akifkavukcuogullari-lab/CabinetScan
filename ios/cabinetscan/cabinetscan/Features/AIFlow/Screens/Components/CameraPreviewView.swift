@@ -3,76 +3,32 @@
 //  cabinetscan
 //
 //  Created by Dev Agent on 2026-01-25.
+//  Rewritten to use ARSCNView for AR session camera preview.
 //
 
 import SwiftUI
-import AVFoundation
+import ARKit
+import SceneKit
 
-/// SwiftUI wrapper for AVCaptureVideoPreviewLayer.
-/// Used to display camera preview during AI flow video capture.
-/// Per Story 2.2 AC6 - Task 6.1, 6.2, 6.3
+/// SwiftUI wrapper for ARSCNView.
+/// Displays the AR camera feed during AI flow capture.
+/// Replaces the previous AVCaptureVideoPreviewLayer-based preview.
 struct AIVideoCameraPreviewView: UIViewRepresentable {
-    /// The video capture service providing the preview layer
-    let videoCapture: AIVideoCapture?
+    /// The ARSession to display
+    let session: ARSession
 
-    func makeUIView(context: Context) -> CameraPreviewUIView {
-        let view = CameraPreviewUIView()
-        view.videoCapture = videoCapture
+    func makeUIView(context: Context) -> ARSCNView {
+        let view = ARSCNView()
+        view.session = session
+        view.automaticallyUpdatesLighting = false
+        // Render only the camera feed, no scene content
+        view.scene = SCNScene()
+        view.backgroundColor = .black
         return view
     }
 
-    func updateUIView(_ uiView: CameraPreviewUIView, context: Context) {
-        uiView.videoCapture = videoCapture
-    }
-}
-
-/// UIView subclass for camera preview.
-/// Manages the AVCaptureVideoPreviewLayer lifecycle.
-class CameraPreviewUIView: UIView {
-    /// Preview layer from video capture
-    private var previewLayer: AVCaptureVideoPreviewLayer?
-
-    /// Video capture service
-    var videoCapture: AIVideoCapture? {
-        didSet {
-            updatePreviewLayer()
-        }
-    }
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = .black
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        previewLayer?.frame = bounds
-    }
-
-    private func updatePreviewLayer() {
-        // Remove existing layer
-        previewLayer?.removeFromSuperlayer()
-
-        // Add new layer if video capture is available
-        if let videoCapture = videoCapture {
-            let layer = videoCapture.previewLayer
-            layer.frame = bounds
-            layer.videoGravity = .resizeAspectFill
-
-            // Lock to portrait orientation (Task 6.3)
-            if let connection = layer.connection {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                }
-            }
-
-            self.layer.addSublayer(layer)
-            previewLayer = layer
-        }
+    func updateUIView(_ uiView: ARSCNView, context: Context) {
+        // Session is set once at creation; no updates needed
     }
 }
 

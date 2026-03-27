@@ -7,7 +7,7 @@
 
 import SwiftUI
 import Combine
-import AVFoundation
+import simd
 
 // MARK: - Captured Photo Item
 
@@ -118,9 +118,6 @@ class PhotoCaptureViewModel: ObservableObject {
     /// Angle tracker for diversity guidance
     private let angleTracker: AIAngleTracker
 
-    /// Capture session for camera
-    private var captureSession: AVCaptureSession?
-
     /// Capture data manager for persistence (Story 2.6)
     private var dataManager: AICaptureDataManager?
 
@@ -136,11 +133,9 @@ class PhotoCaptureViewModel: ObservableObject {
     /// Initialize with required dependencies
     /// - Parameters:
     ///   - sessionManager: AR session manager for pose tracking
-    ///   - captureSession: AVCaptureSession from video capture (optional, will create if nil)
     ///   - dataManager: Capture data manager for persistence (Story 2.6)
-    init(sessionManager: AIARSessionManager, captureSession: AVCaptureSession? = nil, dataManager: AICaptureDataManager? = nil) {
+    init(sessionManager: AIARSessionManager, dataManager: AICaptureDataManager? = nil) {
         self.sessionManager = sessionManager
-        self.captureSession = captureSession
         self.dataManager = dataManager
         self.qualityAnalyzer = AIQualityAnalyzer()
         self.angleTracker = AIAngleTracker()
@@ -155,11 +150,9 @@ class PhotoCaptureViewModel: ObservableObject {
 
     // MARK: - Setup
 
-    /// Setup photo capture with capture session
-    /// - Parameter session: The AVCaptureSession to use
-    func setupPhotoCapture(with session: AVCaptureSession) {
-        self.captureSession = session
-        self.photoCapture = AIPhotoCapture(captureSession: session, sessionManager: sessionManager)
+    /// Setup photo capture using ARSession-based capture
+    func setupPhotoCapture() {
+        self.photoCapture = AIPhotoCapture(sessionManager: sessionManager)
 
         // Setup tracking recovery observer (Story 6.7)
         setupTrackingRecoveryObserver()

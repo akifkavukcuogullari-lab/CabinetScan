@@ -106,6 +106,42 @@ class TestPipelineOutputFormat:
         assert mj["total_linear_ft"] > 0
         assert mj["wall_count"] == 3
 
+    def test_dashboard_wall_format(self, floor_plan_result):
+        """Dashboard InteractiveFloorPlan expects start/end as {x, z} dicts in feet."""
+        walls = floor_plan_result.measurements_json["measurements"]["walls"]
+        assert len(walls) == 3
+
+        wall0 = walls[0]
+        # start/end must be dicts with x, z keys
+        assert isinstance(wall0["start"], dict)
+        assert "x" in wall0["start"] and "z" in wall0["start"]
+        assert isinstance(wall0["end"], dict)
+        assert "x" in wall0["end"] and "z" in wall0["end"]
+
+        # Must have dashboard-required fields
+        assert "width_ft" in wall0
+        assert "height_ft" in wall0
+        assert "thickness_ft" in wall0
+        assert "linear_ft" in wall0
+        assert "position" in wall0
+
+    def test_dashboard_room_bounds(self, floor_plan_result):
+        """Dashboard expects measurements.room with bounding box."""
+        room = floor_plan_result.measurements_json["measurements"]["room"]
+        assert "min_x" in room
+        assert "max_x" in room
+        assert "min_z" in room
+        assert "max_z" in room
+        assert "ceiling_height_ft" in room
+
+    def test_dashboard_cabinets_structure(self, floor_plan_result):
+        """Dashboard expects measurements.cabinets with upper/lower/wall_oven/pantry."""
+        cabinets = floor_plan_result.measurements_json["measurements"]["cabinets"]
+        assert isinstance(cabinets, dict)
+        for key in ("upper", "lower", "wall_oven", "pantry"):
+            assert key in cabinets
+            assert isinstance(cabinets[key], list)
+
 
 class TestVLMValidationIntegration:
     """Verify VLM validation output format matches iOS expectations."""
@@ -163,7 +199,7 @@ class TestWallDetectionFromARKitPlanes:
                 "id": "plane-1",
                 "alignment": "vertical",
                 "center": [0, 1.0, 0],
-                "extent": [3.0, 2.5],
+                "extent": [3.0, 0, 2.5],
                 "transform": [
                     [1, 0, 0, 0],
                     [0, 1, 0, 0],
@@ -175,7 +211,7 @@ class TestWallDetectionFromARKitPlanes:
                 "id": "plane-2",
                 "alignment": "vertical",
                 "center": [1.5, 1.0, -2.0],
-                "extent": [2.5, 2.5],
+                "extent": [2.5, 0, 2.5],
                 "transform": [
                     [0, 0, 1, 0],
                     [0, 1, 0, 0],
@@ -188,18 +224,87 @@ class TestWallDetectionFromARKitPlanes:
         result = detector.detect(planes_json=planes_json)
 
         assert isinstance(result, WallDetectionResult)
-        assert result.wall_count >= 0
-        assert result.total_linear_feet >= 0
+        assert result.wall_count >= 1
+        assert result.total_linear_feet > 0
         # Wall lengths should be in inches (internal) and feet (total)
         for wall in result.walls:
             assert wall.length_inches > 0
             assert wall.length_meters > 0
+
+    def test_plane_2_at_correct_position(self):
+        """Plane-2 with transform[3]=[1.5, 0, -2.0, 1] should be at (1.5, -2.0), not (0, 0)."""
+        detector = WallDetector()
+        planes_json = [
+            {
+                "id": "plane-2",
+                "alignment": "vertical",
+                "center": [1.5, 1.0, -2.0],
+                "extent": [2.5, 0, 2.5],
+                "transform": [
+                    [0, 0, 1, 0],    # col 0: X-axis direction
+                    [0, 1, 0, 0],    # col 1
+                    [-1, 0, 0, 0],   # col 2
+                    [1.5, 0, -2.0, 1],  # col 3: translation
+                ],
+            },
+        ]
+
+        result = detector.detect(planes_json=planes_json)
+        assert result.wall_count == 1
+
+        wall = result.walls[0]
+        mid_x = (wall.start[0] + wall.end[0]) / 2
+        mid_z = (wall.start[1] + wall.end[1]) / 2
+        # Midpoint should be at translation (1.5, -2.0), not (0, 0)
+        assert mid_x == pytest.approx(1.5, abs=0.01)
+        assert mid_z == pytest.approx(-2.0, abs=0.01)
 
     def test_empty_planes_produce_zero_walls(self):
         detector = WallDetector()
         result = detector.detect(planes_json=[])
         assert result.wall_count == 0
         assert result.total_linear_feet == 0
+
+    def test_dashboard_format_from_arkit_planes(self):
+        """Full chain: ARKit planes -> wall detection -> floor plan -> dashboard format."""
+        detector = WallDetector()
+        planes_json = [
+            {
+                "id": "wall-north",
+                "alignment": "vertical",
+                "center": [0, 1.2, 0],
+                "extent": [3.0, 0, 2.4],
+                "transform": [
+                    [1, 0, 0, 0],
+                    [0, 1, 0, 0],
+                    [0, 0, 1, 0],
+                    [0, 0, 0, 1],
+                ],
+            },
+        ]
+
+        walls = detector.detect(planes_json=planes_json)
+        snapped = SnapResult(snapped_objects=[], flagged_count=0, total_snapped=0)
+        calibration = CalibrationResult(
+            scale_factor=1.0, confidence="medium",
+            reference_used="arkit_planes", cross_validation_score=0.5,
+            references_found=[],
+        )
+
+        gen = FloorPlanGenerator()
+        result = gen.generate(walls, snapped, calibration)
+        mj = result.measurements_json
+
+        # Validate dashboard-compatible format
+        assert "measurements" in mj
+        assert "room" in mj["measurements"]
+        assert "walls" in mj["measurements"]
+        assert "cabinets" in mj["measurements"]
+
+        if mj["measurements"]["walls"]:
+            wall0 = mj["measurements"]["walls"][0]
+            assert isinstance(wall0["start"], dict)
+            assert "x" in wall0["start"]
 
 
 class TestStageWeightsForProgressReporting:
@@ -223,7 +328,7 @@ class TestEndToEndStageChain:
     """Test a realistic chain of stages with compatible input/output."""
 
     def test_wall_detection_to_floor_plan(self):
-        """WallDetectionResult → FloorPlanGenerator produces valid output."""
+        """WallDetectionResult -> FloorPlanGenerator produces valid output."""
         # Stage 4: Wall detection
         walls = WallDetectionResult(
             walls=[
@@ -266,6 +371,12 @@ class TestEndToEndStageChain:
         assert result.floor_plan_png[:4] == b"\x89PNG"
         assert result.measurements_json["wall_count"] == 2
         assert result.measurements_json["total_linear_ft"] == pytest.approx(17.72, rel=0.01)
+
+        # Verify dashboard format
+        m = result.measurements_json["measurements"]
+        assert isinstance(m["walls"][0]["start"], dict)
+        assert "room" in m
+        assert "cabinets" in m
 
         # Stage 8: VLM validation (non-blocking)
         validator = VLMValidator(api_key=None)

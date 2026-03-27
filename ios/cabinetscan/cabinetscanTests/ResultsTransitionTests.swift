@@ -303,7 +303,10 @@ final class ResultsTransitionTests: XCTestCase {
                 scaleFactor: 1.0,
                 coveragePercentage: 85.0,
                 warnings: nil
-            )
+            ),
+            posesUrl: nil,
+            planesUrl: nil,
+            processingJobId: nil
         )
     }
 

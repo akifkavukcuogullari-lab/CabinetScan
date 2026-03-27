@@ -56,7 +56,11 @@
       "Bash(find:*)",
       "Bash(xcodebuild -project cabinetscan.xcodeproj -scheme cabinetscan -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -quiet build)",
       "Bash(xcodebuild test -project cabinetscan.xcodeproj -scheme cabinetscan -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:cabinetscanTests/AIPipelineOrchestratorTests/testOrchestratorInitialState)",
-      "Bash(xcodebuild:*)"
+      "Bash(xcodebuild:*)",
+      "WebFetch(domain:replicate.com)",
+      "Bash(git check-ignore:*)",
+      "Bash(/opt/homebrew/bin/python3.13 -m pip install:*)",
+      "Bash(/opt/homebrew/bin/python3.13 -m pytest:*)"
     ],
     "deny": [],
     "ask": []

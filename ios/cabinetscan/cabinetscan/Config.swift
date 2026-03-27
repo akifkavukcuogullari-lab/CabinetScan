@@ -41,35 +41,35 @@ enum Config {
     private static let fallbackQAURL = "https://wnyrnpeabhxdqvcpofmb.supabase.co"
     private static let fallbackQAKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndueXJucGVhYmh4ZHF2Y3BvZm1iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNDYzNTgsImV4cCI6MjA3OTgyMjM1OH0.OOangh4u0sy7oHFQl1pFv6ldNPlN201uY774gpyQlHc"
 
-    static var supabaseURL: String {
+    static let supabaseURL: String = {
         // First try to get from Info.plist (set via xcconfig)
         if let url = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String,
            !url.isEmpty,
            !url.contains("$(") { // Ensure variable was actually substituted
-            logInfo("🌐 Using Supabase URL from Info.plist: \(url)")
+            print("🌐 Using Supabase URL from Info.plist: \(url)")
             return url
         }
 
         #if DEBUG
         // For local development on physical device, use your Mac's IP
         if let devIP = localDevIP {
-            logInfo("🔧 Using local dev IP: \(devIP)")
+            print("🔧 Using local dev IP: \(devIP)")
             return "http://\(devIP):54321"
         }
 
         // Fallback to QA for debug builds
-        logInfo("⚠️ Info.plist missing SUPABASE_URL, using QA fallback")
+        print("⚠️ Info.plist missing SUPABASE_URL, using QA fallback")
         return fallbackQAURL
         #else
         // Production fallback - check IS_QA_BUILD flag
         let isQA = Bundle.main.object(forInfoDictionaryKey: "IS_QA_BUILD") as? String == "YES"
         let url = isQA ? fallbackQAURL : fallbackProductionURL
-        logError("⚠️ Info.plist missing SUPABASE_URL, using \(isQA ? "QA" : "Production") fallback: \(url)")
+        print("⚠️ Info.plist missing SUPABASE_URL, using \(isQA ? "QA" : "Production") fallback: \(url)")
         return url
         #endif
-    }
+    }()
 
-    static var supabaseAnonKey: String {
+    static let supabaseAnonKey: String = {
         // First try to get from Info.plist (set via xcconfig)
         if let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String,
            !key.isEmpty,
@@ -79,15 +79,15 @@ enum Config {
 
         #if DEBUG
         // Fallback to QA for debug builds
-        logInfo("⚠️ Info.plist missing SUPABASE_ANON_KEY, using QA fallback")
+        print("⚠️ Info.plist missing SUPABASE_ANON_KEY, using QA fallback")
         return fallbackQAKey
         #else
         // Production fallback - check IS_QA_BUILD flag
         let isQA = Bundle.main.object(forInfoDictionaryKey: "IS_QA_BUILD") as? String == "YES"
-        logError("⚠️ Info.plist missing SUPABASE_ANON_KEY, using \(isQA ? "QA" : "Production") fallback")
+        print("⚠️ Info.plist missing SUPABASE_ANON_KEY, using \(isQA ? "QA" : "Production") fallback")
         return isQA ? fallbackQAKey : fallbackProductionKey
         #endif
-    }
+    }()
 
     // MARK: - App Configuration
 

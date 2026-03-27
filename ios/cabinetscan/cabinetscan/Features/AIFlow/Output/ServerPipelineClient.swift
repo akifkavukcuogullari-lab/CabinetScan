@@ -81,6 +81,17 @@ struct ServerPipelineResult {
     let pipelineVersion: String?
 }
 
+// MARK: - Submit Job Result
+
+/// Contains the job ID and all uploaded URLs from the submission process.
+struct SubmitJobResult {
+    let jobId: String
+    let videoData: AIUploadedVideoData
+    let photoUrls: [String]
+    let posesUrl: String
+    let planesUrl: String
+}
+
 // MARK: - Server Pipeline Client
 
 /// Handles uploading capture packages to Supabase storage and managing server processing jobs.
@@ -156,13 +167,13 @@ actor ServerPipelineClient {
     ///   - showroomCode: Showroom code for storage paths
     ///   - showroomId: Showroom UUID for job context
     ///   - onProgress: Progress callback (stage message)
-    /// - Returns: Job ID from server
+    /// - Returns: SubmitJobResult with job ID and uploaded URLs
     func submitJob(
         package: CapturePackage,
         showroomCode: String,
         showroomId: String,
         onProgress: @MainActor @Sendable (String) -> Void
-    ) async throws -> String {
+    ) async throws -> SubmitJobResult {
         resetCancellation()
 
         let captureId = UUID().uuidString
@@ -225,7 +236,13 @@ actor ServerPipelineClient {
         )
 
         print("[ServerPipelineClient] Job created: \(jobId)")
-        return jobId
+        return SubmitJobResult(
+            jobId: jobId,
+            videoData: videoData,
+            photoUrls: photoURLs,
+            posesUrl: posesURL,
+            planesUrl: planesURL
+        )
     }
 
     // MARK: - Poll for Results
@@ -309,6 +326,16 @@ actor ServerPipelineClient {
         guard let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
               let jobId = json["job_id"] as? String else {
             throw ServerPipelineError.jobCreationFailed("Invalid response from server")
+        }
+
+        // Log RunPod trigger diagnostics
+        let runpodTriggered = json["runpod_triggered"] as? Bool ?? false
+        let runpodJobId = json["runpod_job_id"] as? String
+        let runpodError = json["runpod_error"] as? String
+        if runpodTriggered {
+            print("[ServerPipelineClient] RunPod triggered successfully, runpod_job_id: \(runpodJobId ?? "nil")")
+        } else {
+            print("[ServerPipelineClient] WARNING: RunPod NOT triggered - \(runpodError ?? "unknown reason")")
         }
 
         return jobId
@@ -412,7 +439,11 @@ actor ServerPipelineClient {
                 case 200, 201:
                     return data
                 case 404:
-                    throw ServerPipelineError.resultsFetchFailed("Job not found")
+                    if method == "POST" {
+                        throw ServerPipelineError.jobCreationFailed("Edge function not found: \(name)")
+                    } else {
+                        throw ServerPipelineError.resultsFetchFailed("Job not found")
+                    }
                 default:
                     let errorMessage = parseErrorMessage(from: data) ?? "Server error (code: \(httpResponse.statusCode))"
                     if method == "POST" {

@@ -50,6 +50,12 @@ interface ProjectSubmission {
     video_format?: string
     // Visualization photos (multiple angles - up to 5 photos)
     visualization_photo_urls?: string[]
+    // AI Flow specific fields
+    scan_method?: 'lidar' | 'ai_flow'
+    ai_metadata?: Record<string, unknown>
+    poses_url?: string
+    planes_url?: string
+    processing_job_id?: string
   }
   selections: Array<{
     category_id: string
@@ -807,6 +813,23 @@ serve(async (req) => {
         measurementData.video_resolution = submission.measurements.video_resolution
         measurementData.video_format = submission.measurements.video_format || 'mp4'
         measurementData.video_uploaded_at = new Date().toISOString()
+      }
+
+      // Add AI flow specific fields if provided
+      if (submission.measurements.scan_method) {
+        measurementData.scan_method = submission.measurements.scan_method
+      }
+      if (submission.measurements.ai_metadata) {
+        measurementData.ai_metadata = submission.measurements.ai_metadata
+      }
+      if (submission.measurements.poses_url) {
+        measurementData.poses_url = submission.measurements.poses_url
+      }
+      if (submission.measurements.planes_url) {
+        measurementData.planes_url = submission.measurements.planes_url
+      }
+      if (submission.measurements.processing_job_id) {
+        measurementData.processing_job_id = submission.measurements.processing_job_id
       }
 
       // Add visualization photos if provided

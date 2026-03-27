@@ -52,7 +52,10 @@ final class ServerResultAdapterTests: XCTestCase {
             videoDurationSeconds: 60,
             videoSizeBytes: 10_000_000,
             videoResolution: "1920x1080",
-            photoUrls: ["https://example.com/photo1.jpg", "https://example.com/photo2.jpg"]
+            photoUrls: ["https://example.com/photo1.jpg", "https://example.com/photo2.jpg"],
+            posesUrl: nil,
+            planesUrl: nil,
+            processingJobId: nil
         )
     }
 

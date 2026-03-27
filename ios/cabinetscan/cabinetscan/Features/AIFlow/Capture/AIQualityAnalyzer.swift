@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import AVFoundation
 import Accelerate
 import Combine
 import CoreVideo
@@ -421,8 +420,8 @@ class AIQualityAnalyzer: NSObject, ObservableObject {
     /// Circuit breaker threshold (30ms per ADR-001)
     private let circuitBreakerThreshold: TimeInterval = 0.030
 
-    /// Number of frames to skip after circuit breaker trips (ADR-001)
-    private let circuitBreakerSkipCount = 2
+    /// Minimum number of frames to skip after circuit breaker trips (ADR-001)
+    private let circuitBreakerMinSkipCount = 2
 
     // MARK: - Properties
 
@@ -452,6 +451,10 @@ class AIQualityAnalyzer: NSObject, ObservableObject {
 
     /// Lock for thread-safe state access
     private let stateLock = NSLock()
+
+    /// Whether an analysis block is queued or running on analysisQueue.
+    /// Prevents queueing multiple closures that each hold a locked ARKit pixel buffer.
+    private var _isAnalysisInProgress = false
 
     // MARK: - Story 2.4 Properties
 
@@ -493,6 +496,7 @@ class AIQualityAnalyzer: NSObject, ObservableObject {
         isAnalyzing = true
         frameCount = 0
         skipCount = 0
+        _isAnalysisInProgress = false
         lastPublishedState = .acceptable
         debouncedBlurBad = false
         debouncedBrightnessBad = false
@@ -516,6 +520,7 @@ class AIQualityAnalyzer: NSObject, ObservableObject {
     func stopAnalysis() {
         stateLock.lock()
         isAnalyzing = false
+        _isAnalysisInProgress = false
         stateLock.unlock()
 
         print("[AIQualityAnalyzer] Analysis stopped")
@@ -575,9 +580,10 @@ class AIQualityAnalyzer: NSObject, ObservableObject {
         )
     }
 
-    /// Process a video frame for quality analysis
-    /// - Parameter sampleBuffer: The video sample buffer to analyze
-    func processSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
+    /// Process a pixel buffer for quality analysis.
+    /// Called from AIVideoCaptureFrameDelegate with ARFrame pixel buffers.
+    /// - Parameter pixelBuffer: The pixel buffer to analyze (must be locked by caller or from ARFrame)
+    func processPixelBuffer(_ pixelBuffer: CVPixelBuffer) {
         stateLock.lock()
         guard isAnalyzing else {
             stateLock.unlock()
@@ -600,22 +606,34 @@ class AIQualityAnalyzer: NSObject, ObservableObject {
             stateLock.unlock()
             return
         }
-        stateLock.unlock()
 
-        // Get pixel buffer
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+        // Skip if a previous analysis is still queued/running — prevents
+        // backing up locked ARKit pixel buffers on the serial analysisQueue.
+        guard !_isAnalysisInProgress else {
+            stateLock.unlock()
             return
         }
+        _isAnalysisInProgress = true
+        stateLock.unlock()
 
         let startTime = CFAbsoluteTimeGetCurrent()
 
+        // Lock pixel buffer synchronously before dispatching to analysis queue
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+
         // Perform analysis on dedicated queue (ADR-003)
         analysisQueue.async { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else {
+                CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
+                return
+            }
 
-            // Lock pixel buffer for reading
-            CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-            defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+            defer {
+                CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
+                self.stateLock.lock()
+                self._isAnalysisInProgress = false
+                self.stateLock.unlock()
+            }
 
             // Analyze quality
             let rawBlurVariance = self.calculateBlurScore(pixelBuffer: pixelBuffer)
@@ -627,13 +645,15 @@ class AIQualityAnalyzer: NSObject, ObservableObject {
             let smoothedBlur = self.blurWindow.add(rawBlurVariance)
             let smoothedBrightness = self.brightnessWindow.add(histogramStats.mean)
 
-            // Circuit breaker: if >30ms, skip next 2 analyses (ADR-001)
+            // Adaptive circuit breaker: skip frames proportional to analysis time (ADR-001)
+            // At 60fps, a 500ms analysis should skip ~30 frames (0.5s) not just 2
             if elapsed > self.circuitBreakerThreshold {
+                let framesToSkip = max(self.circuitBreakerMinSkipCount, Int(elapsed * 60))
                 self.stateLock.lock()
-                self.skipCount = self.circuitBreakerSkipCount
+                self.skipCount = framesToSkip
                 self.stateLock.unlock()
                 self.runningStats.recordCircuitBreakerTrip()
-                print("[AIQualityAnalyzer] Circuit breaker tripped - analysis took \(Int(elapsed * 1000))ms, skipping next \(self.circuitBreakerSkipCount) frames")
+                print("[AIQualityAnalyzer] Circuit breaker tripped - analysis took \(Int(elapsed * 1000))ms, skipping next \(framesToSkip) frames")
             }
 
             // Determine quality issues using histogram-based evaluation
@@ -668,9 +688,10 @@ class AIQualityAnalyzer: NSObject, ObservableObject {
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
 
-        // For performance, analyze a center crop (1/4 of image)
-        let analysisWidth = width / 2
-        let analysisHeight = height / 2
+        // For performance, analyze a center crop (1/16 of image)
+        // 1/4 width x 1/4 height is sufficient for Laplacian variance blur detection
+        let analysisWidth = width / 4
+        let analysisHeight = height / 4
         let offsetX = (width - analysisWidth) / 2
         let offsetY = (height - analysisHeight) / 2
 
@@ -1163,14 +1184,3 @@ class AIQualityAnalyzer: NSObject, ObservableObject {
     }
 }
 
-// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
-
-extension AIQualityAnalyzer: AVCaptureVideoDataOutputSampleBufferDelegate {
-    func captureOutput(
-        _ output: AVCaptureOutput,
-        didOutput sampleBuffer: CMSampleBuffer,
-        from connection: AVCaptureConnection
-    ) {
-        processSampleBuffer(sampleBuffer)
-    }
-}

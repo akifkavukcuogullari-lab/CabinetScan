@@ -49,11 +49,7 @@ struct AIFlowEntryPoint: View {
                         coordinator.onVideoCaptureBack()
                         viewModel.backToIntro()
                     },
-                    onComplete: { captureData, videoCapture in
-                        // Store video capture for session sharing with photo capture
-                        if let videoCapture = videoCapture {
-                            coordinator.setVideoCapture(videoCapture)
-                        }
+                    onComplete: { captureData in
                         coordinator.onVideoCaptureComplete(captureData)
                         viewModel.advanceToNextStep()
                     }
@@ -61,42 +57,18 @@ struct AIFlowEntryPoint: View {
 
             case .photoCapture:
                 // Photo capture - Story 2.5
-                if let videoCapture = coordinator.videoCapture {
-                    PhotoCaptureView(
-                        sessionManager: coordinator.arSessionManager,
-                        captureSession: videoCapture.captureSession,
-                        dataManager: coordinator.captureDataManager,
-                        onBack: {
-                            coordinator.onPhotoCaptureBack()
-                            viewModel.currentStep = .videoCapture
-                        },
-                        onComplete: { photos in
-                            coordinator.onPhotoCaptureComplete(photos)
-                            viewModel.advanceToNextStep()
-                        }
-                    )
-                } else {
-                    // Fallback if video capture not available
-                    VStack(spacing: 20) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 60))
-                            .foregroundStyle(.orange)
-
-                        Text("Camera Error")
-                            .font(.title2.bold())
-
-                        Text("Video capture session not available")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-
-                        Button("Back to Video Capture") {
-                            coordinator.onPhotoCaptureBack()
-                            viewModel.currentStep = .videoCapture
-                        }
-                        .buttonStyle(.bordered)
+                PhotoCaptureView(
+                    sessionManager: coordinator.arSessionManager,
+                    dataManager: coordinator.captureDataManager,
+                    onBack: {
+                        coordinator.onPhotoCaptureBack()
+                        viewModel.currentStep = .videoCapture
+                    },
+                    onComplete: { photos in
+                        coordinator.onPhotoCaptureComplete(photos)
+                        viewModel.advanceToNextStep()
                     }
-                    .padding()
-                }
+                )
 
             case .processing:
                 ProcessingView(

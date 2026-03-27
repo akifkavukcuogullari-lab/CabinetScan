@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AVFoundation
 
 /// Photo capture screen for AI flow.
 /// Allows user to capture 5 detail photos from different angles.
@@ -24,9 +23,6 @@ struct PhotoCaptureView: View {
     /// AR session manager (passed from video capture)
     let sessionManager: AIARSessionManager
 
-    /// Capture session from video capture (shared)
-    let captureSession: AVCaptureSession
-
     /// View model for photo capture state
     @StateObject private var viewModel: PhotoCaptureViewModel
 
@@ -40,25 +36,21 @@ struct PhotoCaptureView: View {
     /// Initialize with AR session manager, data manager, and callbacks
     /// - Parameters:
     ///   - sessionManager: The AR session manager for pose tracking
-    ///   - captureSession: The capture session from video capture
     ///   - dataManager: The capture data manager for persistence (Issue #7 fix - required)
     ///   - onBack: Callback when user taps back
     ///   - onComplete: Callback when photos are captured and user continues
     init(
         sessionManager: AIARSessionManager,
-        captureSession: AVCaptureSession,
         dataManager: AICaptureDataManager,
         onBack: @escaping () -> Void,
         onComplete: @escaping ([AICapturedPhoto]) -> Void
     ) {
         self.sessionManager = sessionManager
-        self.captureSession = captureSession
         self.dataManager = dataManager
         self.onBack = onBack
         self.onComplete = onComplete
         _viewModel = StateObject(wrappedValue: PhotoCaptureViewModel(
             sessionManager: sessionManager,
-            captureSession: captureSession,
             dataManager: dataManager
         ))
     }
@@ -108,7 +100,7 @@ struct PhotoCaptureView: View {
             }
         }
         .onAppear {
-            viewModel.setupPhotoCapture(with: captureSession)
+            viewModel.setupPhotoCapture()
         }
         .onDisappear {
             viewModel.cleanup()
@@ -159,8 +151,7 @@ struct PhotoCaptureView: View {
 
     @ViewBuilder
     private var cameraPreview: some View {
-        // Reuse the existing camera preview component
-        CameraSessionPreviewView(session: captureSession)
+        AIVideoCameraPreviewView(session: sessionManager.arSession)
     }
 
     // MARK: - Top Bar (AC1)
@@ -375,84 +366,11 @@ struct PhotoCaptureView: View {
     }
 }
 
-// MARK: - Camera Session Preview View
-
-/// UIViewRepresentable for AVCaptureSession preview
-private struct CameraSessionPreviewView: UIViewRepresentable {
-    let session: AVCaptureSession
-
-    func makeUIView(context: Context) -> PreviewContainerView {
-        print("[CameraSessionPreviewView] makeUIView called")
-        print("[CameraSessionPreviewView] session.isRunning=\(session.isRunning)")
-        print("[CameraSessionPreviewView] session.inputs.count=\(session.inputs.count)")
-        print("[CameraSessionPreviewView] session.outputs.count=\(session.outputs.count)")
-
-        let view = PreviewContainerView()
-        view.backgroundColor = .black
-        view.session = session
-
-        // Start session if not running
-        if !session.isRunning {
-            print("[CameraSessionPreviewView] Session not running, starting...")
-            DispatchQueue.global(qos: .userInitiated).async {
-                session.startRunning()
-                print("[CameraSessionPreviewView] Session started")
-            }
-        }
-
-        return view
-    }
-
-    func updateUIView(_ uiView: PreviewContainerView, context: Context) {
-        // Session might have changed
-        if uiView.session !== session {
-            uiView.session = session
-        }
-    }
-}
-
-/// Custom UIView that automatically sizes preview layer on layout
-private class PreviewContainerView: UIView {
-    private var previewLayer: AVCaptureVideoPreviewLayer?
-
-    var session: AVCaptureSession? {
-        didSet {
-            if session !== oldValue {
-                setupPreviewLayer()
-            }
-        }
-    }
-
-    private func setupPreviewLayer() {
-        // Remove old layer
-        previewLayer?.removeFromSuperlayer()
-        previewLayer = nil
-
-        guard let session = session else { return }
-
-        let layer = AVCaptureVideoPreviewLayer(session: session)
-        layer.videoGravity = .resizeAspectFill
-        layer.frame = bounds
-        self.layer.addSublayer(layer)
-        previewLayer = layer
-
-        print("[PreviewContainerView] Preview layer setup, bounds=\(bounds)")
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        // Update preview layer frame whenever view resizes
-        previewLayer?.frame = bounds
-        print("[PreviewContainerView] layoutSubviews, bounds=\(bounds)")
-    }
-}
-
 // MARK: - Preview
 
 #Preview {
     PhotoCaptureView(
         sessionManager: AIARSessionManager(),
-        captureSession: AVCaptureSession(),
         dataManager: AICaptureDataManager(),
         onBack: { print("Back") },
         onComplete: { photos in print("Complete with \(photos.count) photos") }

@@ -18,6 +18,9 @@ struct UploadContext {
     let videoSizeBytes: Int64
     let videoResolution: String
     let photoUrls: [String]
+    let posesUrl: String?
+    let planesUrl: String?
+    let processingJobId: String?
 }
 
 // MARK: - Server Result Adapter
@@ -85,7 +88,10 @@ struct ServerResultAdapter {
             videoFormat: "mp4",
             visualizationPhotoUrls: uploadContext.photoUrls,
             scanMethod: .aiFlow,
-            aiMetadata: aiMetadata
+            aiMetadata: aiMetadata,
+            posesUrl: uploadContext.posesUrl,
+            planesUrl: uploadContext.planesUrl,
+            processingJobId: uploadContext.processingJobId
         )
     }
 

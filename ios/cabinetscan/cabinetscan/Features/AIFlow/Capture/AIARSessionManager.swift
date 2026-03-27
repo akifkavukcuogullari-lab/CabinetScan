@@ -10,6 +10,14 @@ import ARKit
 import Combine
 import simd
 
+// MARK: - AI AR Frame Delegate
+
+/// Protocol for receiving ARFrame updates from the AR session.
+/// Used by AIVideoCapture to record frames via AVAssetWriter.
+protocol AIARFrameDelegate: AnyObject {
+    func arSessionManager(_ manager: AIARSessionManager, didUpdateFrame frame: ARFrame)
+}
+
 // MARK: - AI AR Session Manager
 
 /// Manages ARKit session for camera pose tracking during AI flow capture.
@@ -62,10 +70,18 @@ class AIARSessionManager: NSObject, ObservableObject {
     /// Per Story 6.7 - Task 1.3
     let trackingRecoveryPublisher = PassthroughSubject<TrackingRecoveryState, Never>()
 
+    // MARK: - Frame Delegate
+
+    /// Delegate for receiving ARFrame updates (one consumer at a time)
+    weak var frameDelegate: AIARFrameDelegate?
+
     // MARK: - ARKit Session
 
     /// The ARKit session instance
     private let session = ARSession()
+
+    /// Read-only access to the ARSession for ARSCNView preview
+    var arSession: ARSession { session }
 
     /// Dedicated delegate queue for ARKit callbacks (ADR-003)
     private let delegateQueue = DispatchQueue(label: "com.cabinetscan.arkit.delegate", qos: .userInteractive)
@@ -698,6 +714,9 @@ extension AIARSessionManager: ARSessionDelegate {
                 }
             }
         }
+
+        // Deliver frame to delegate (for video recording / quality analysis)
+        frameDelegate?.arSessionManager(self, didUpdateFrame: frame)
     }
 
     // MARK: - Anchor Handling (Server Pipeline V2 — Plane Detection)

@@ -39,9 +39,13 @@ class WallDetector:
     # Angle snapping tolerance (degrees)
     SNAP_ANGLE_TOLERANCE = 15.0
     # Minimum wall length to keep (meters)
-    MIN_WALL_LENGTH = 0.3  # ~12 inches
+    MIN_WALL_LENGTH = 0.8  # ~31 inches — filters small vertical surfaces
+    # Minimum wall height to keep (meters) — filters cabinet faces (~0.9m)
+    MIN_WALL_HEIGHT = 1.5  # ~5 feet — real walls are typically 2.0-2.5m
     # Distance threshold for merging collinear segments (meters)
     MERGE_DISTANCE = 0.3
+    # Perpendicular distance for parallel wall deduplication (meters)
+    PARALLEL_DISTANCE = 0.3
 
     def detect(self, planes_json: list[dict]) -> WallDetectionResult:
         """Detect walls from ARKit plane data.
@@ -74,8 +78,11 @@ class WallDetector:
         # Merge collinear segments
         merged = self._merge_collinear(snapped)
 
+        # Deduplicate parallel overlapping walls (keep longest)
+        deduped = self._deduplicate_parallel(merged)
+
         # Filter short segments
-        walls = [w for w in merged if w.length_meters >= self.MIN_WALL_LENGTH]
+        walls = [w for w in deduped if w.length_meters >= self.MIN_WALL_LENGTH]
 
         # Find corners
         corners = self._find_corners(walls)
@@ -93,46 +100,58 @@ class WallDetector:
         )
 
     def _planes_to_walls(self, planes: list[dict]) -> list[WallSegment]:
-        """Convert ARKit vertical planes to wall segments."""
+        """Convert ARKit vertical planes to wall segments.
+
+        ARKit exports column-major 4x4 transform matrices:
+          transform[col][row]
+        Translation is in column 3: transform[3][0]=tx, transform[3][2]=tz
+        Local X-axis (wall direction) is column 0: transform[0][0], transform[0][2]
+        """
         walls = []
         for plane in planes:
             transform = plane.get("transform", [])
-            center = plane.get("center", [0, 0, 0])
             extent = plane.get("extent", [0, 0, 0])
 
             if not transform or len(transform) < 4:
                 continue
 
-            # Extract position from 4x4 transform matrix
-            # transform[i][3] = translation for row i
-            tx = transform[0][3] if len(transform[0]) > 3 else 0
-            tz = transform[2][3] if len(transform[2]) > 3 else 0
-
-            # Wall extent along its primary axis
-            wall_width = extent[0] if len(extent) > 0 else 0  # width in meters
+            # ARKit extent: [width, 0, height] — extent[1] is always 0 (depth/thickness)
+            wall_width = extent[0] if len(extent) > 0 else 0
+            wall_height = extent[2] if len(extent) > 2 else 0
 
             if wall_width <= 0:
                 continue
 
-            # Compute orientation from transform rotation
-            # The plane normal is the Y-axis of the transform
-            angle = math.atan2(transform[0][0], transform[0][2]) if len(transform[0]) > 2 else 0
+            # Filter by height — real walls are 2.0-2.5m, cabinet faces ~0.9m
+            if wall_height < self.MIN_WALL_HEIGHT:
+                continue
+
+            # Extract translation from column 3 (column-major)
+            tx = transform[3][0] if len(transform[3]) > 0 else 0
+            tz = transform[3][2] if len(transform[3]) > 2 else 0
+
+            # Wall direction from column 0 (local X-axis), normalized
+            dir_x = transform[0][0] if len(transform[0]) > 0 else 1
+            dir_z = transform[0][2] if len(transform[0]) > 2 else 0
+            dir_len = math.sqrt(dir_x * dir_x + dir_z * dir_z)
+            if dir_len > 0:
+                dir_x /= dir_len
+                dir_z /= dir_len
+
+            # Compute orientation angle from direction vector
+            angle = math.atan2(dir_x, dir_z)
             angle_deg = math.degrees(angle)
 
-            # Compute start/end points
+            # Compute start/end points: center +/- half_width along direction
             half_w = wall_width / 2.0
-            dx = half_w * math.cos(angle)
-            dz = half_w * math.sin(angle)
-
-            start = (tx - dx, tz - dz)
-            end = (tx + dx, tz + dz)
-            length = wall_width
+            start = (tx - half_w * dir_x, tz - half_w * dir_z)
+            end = (tx + half_w * dir_x, tz + half_w * dir_z)
 
             walls.append(WallSegment(
                 start=start,
                 end=end,
-                length_meters=length,
-                length_inches=length / 0.0254,
+                length_meters=wall_width,
+                length_inches=wall_width / 0.0254,
                 orientation=angle_deg,
                 source="arkit_plane",
             ))
@@ -210,6 +229,60 @@ class WallDetector:
             merged.append(current)
 
         return merged
+
+    def _deduplicate_parallel(self, walls: list[WallSegment]) -> list[WallSegment]:
+        """Remove parallel overlapping walls, keeping the longest in each cluster.
+
+        ARKit often detects 2-3 overlapping planes for the same physical wall.
+        Group walls by orientation, then within each group find walls that are
+        close in perpendicular distance and keep only the longest.
+        """
+        if len(walls) <= 1:
+            return walls
+
+        # Group by snapped orientation
+        groups: dict[float, list[WallSegment]] = {}
+        for wall in walls:
+            key = round(wall.orientation / 90) * 90 % 360
+            groups.setdefault(key, []).append(wall)
+
+        result: list[WallSegment] = []
+        for _orientation, group in groups.items():
+            # Sort by length descending so we keep the longest
+            group.sort(key=lambda w: w.length_meters, reverse=True)
+            kept: list[WallSegment] = []
+
+            for wall in group:
+                # Check if this wall is parallel and close to an already-kept wall
+                is_duplicate = False
+                for existing in kept:
+                    perp_dist = self._perpendicular_distance(wall, existing)
+                    if perp_dist <= self.PARALLEL_DISTANCE:
+                        is_duplicate = True
+                        break
+                if not is_duplicate:
+                    kept.append(wall)
+
+            result.extend(kept)
+
+        return result
+
+    @staticmethod
+    def _perpendicular_distance(w1: WallSegment, w2: WallSegment) -> float:
+        """Compute perpendicular distance between midpoints of two parallel walls."""
+        mid1 = ((w1.start[0] + w1.end[0]) / 2, (w1.start[1] + w1.end[1]) / 2)
+        mid2 = ((w2.start[0] + w2.end[0]) / 2, (w2.start[1] + w2.end[1]) / 2)
+
+        # Direction of w1
+        dx = w1.end[0] - w1.start[0]
+        dz = w1.end[1] - w1.start[1]
+        length = math.sqrt(dx * dx + dz * dz)
+        if length == 0:
+            return math.sqrt((mid1[0] - mid2[0]) ** 2 + (mid1[1] - mid2[1]) ** 2)
+
+        # Perpendicular = component of (mid2 - mid1) orthogonal to wall direction
+        nx, nz = -dz / length, dx / length  # normal vector
+        return abs((mid2[0] - mid1[0]) * nx + (mid2[1] - mid1[1]) * nz)
 
     def _find_corners(self, walls: list[WallSegment]) -> list[tuple[float, float]]:
         """Find corner points where walls meet."""

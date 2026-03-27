@@ -263,6 +263,8 @@ class VideoCaptureViewModel: ObservableObject {
                 dataManager.cleanupOldSessions(keepLatest: 3)
 
                 try videoCapture?.prepare()
+                // Wire frame delivery: ARSession → AIVideoCapture
+                sessionManager.frameDelegate = videoCapture
                 try await videoCapture?.startRecording()
 
                 // Trigger haptic feedback (AC1)
@@ -352,6 +354,7 @@ class VideoCaptureViewModel: ObservableObject {
     /// Cancel recording and clean up
     func cancelRecording() {
         timerCancellable?.cancel()
+        sessionManager.frameDelegate = nil
         videoCapture?.cancelRecording()
         dataManager.cancelSession()
 
@@ -420,8 +423,9 @@ class VideoCaptureViewModel: ObservableObject {
             return
         }
 
-        // Update state
+        // Stop frame delivery and update state
         await MainActor.run {
+            sessionManager.frameDelegate = nil
             recordingState = .stopped
             showTrackingFailedSheet = false
         }
@@ -532,6 +536,9 @@ class VideoCaptureViewModel: ObservableObject {
         print("[VideoCaptureViewModel] Starting finalizeRecording...")
 
         do {
+            // Stop frame delivery before finalization
+            await MainActor.run { self.sessionManager.frameDelegate = nil }
+
             // Overall timeout for entire finalization process (45 seconds)
             let result = try await withOverallTimeout(seconds: 45) {
                 // Step 1: Stop recording and get video URL

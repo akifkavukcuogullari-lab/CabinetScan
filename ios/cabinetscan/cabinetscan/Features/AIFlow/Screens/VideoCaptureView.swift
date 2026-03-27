@@ -25,8 +25,8 @@ struct VideoCaptureView: View {
     /// Callback when user wants to go back to intro
     let onBack: () -> Void
 
-    /// Callback when recording is complete (includes video capture for session sharing)
-    let onComplete: (AICaptureSessionData, AIVideoCapture?) -> Void
+    /// Callback when recording is complete
+    let onComplete: (AICaptureSessionData) -> Void
 
     /// View model for video capture state
     @StateObject private var viewModel: VideoCaptureViewModel
@@ -60,12 +60,12 @@ struct VideoCaptureView: View {
     ///   - sessionManager: The AR session manager for pose tracking
     ///   - dataManager: The capture data manager for persistence (Issue #7 fix - required)
     ///   - onBack: Callback when user taps back
-    ///   - onComplete: Callback when recording completes with capture data and video capture
+    ///   - onComplete: Callback when recording completes with capture data
     init(
         sessionManager: AIARSessionManager,
         dataManager: AICaptureDataManager,
         onBack: @escaping () -> Void,
-        onComplete: @escaping (AICaptureSessionData, AIVideoCapture?) -> Void
+        onComplete: @escaping (AICaptureSessionData) -> Void
     ) {
         self.onBack = onBack
         self.onComplete = onComplete
@@ -134,8 +134,7 @@ struct VideoCaptureView: View {
         .onChange(of: viewModel.isRecordingFinalized) { _, isFinalized in
             if isFinalized, let data = viewModel.captureData {
                 guidanceViewModel.markScanCompleted()
-                // Pass video capture to completion handler for session sharing with photo capture
-                onComplete(data, viewModel.videoCapture)
+                onComplete(data)
             }
         }
         .onChange(of: viewModel.showMaxDurationToast) { _, show in
@@ -182,7 +181,7 @@ struct VideoCaptureView: View {
     private var cameraPreviewLayer: some View {
         ZStack {
             // Camera preview - zoom gesture only enabled during recording
-            AIVideoCameraPreviewView(videoCapture: viewModel.videoCapture)
+            AIVideoCameraPreviewView(session: viewModel.sessionManager.arSession)
                 .gesture(viewModel.recordingState == .recording ? zoomGesture : nil)
 
             // Loading overlay when camera not ready
@@ -514,6 +513,6 @@ struct VideoCaptureView: View {
         sessionManager: AIARSessionManager(),
         dataManager: AICaptureDataManager(),
         onBack: { print("Back") },
-        onComplete: { _, _ in print("Complete") }
+        onComplete: { _ in print("Complete") }
     )
 }

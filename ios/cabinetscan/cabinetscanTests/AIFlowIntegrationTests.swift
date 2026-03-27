@@ -84,7 +84,10 @@ final class AIFlowIntegrationTests: XCTestCase {
                 "https://storage.example.com/demo/ai_photo_1.jpg",
                 "https://storage.example.com/demo/ai_photo_2.jpg",
                 "https://storage.example.com/demo/ai_photo_3.jpg",
-            ]
+            ],
+            posesUrl: nil,
+            planesUrl: nil,
+            processingJobId: nil
         )
     }
 
@@ -431,7 +434,10 @@ final class AIFlowIntegrationTests: XCTestCase {
             videoDurationSeconds: 0,
             videoSizeBytes: 0,
             videoResolution: "unknown",
-            photoUrls: []
+            photoUrls: [],
+            posesUrl: nil,
+            planesUrl: nil,
+            processingJobId: nil
         )
 
         let adapter = ServerResultAdapter()

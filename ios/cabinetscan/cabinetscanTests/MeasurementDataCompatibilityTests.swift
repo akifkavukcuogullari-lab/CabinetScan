@@ -38,7 +38,10 @@ final class MeasurementDataCompatibilityTests: XCTestCase {
             videoFormat: "mp4",
             visualizationPhotoUrls: ["photo1.jpg", "photo2.jpg"],
             scanMethod: .lidar,
-            aiMetadata: nil
+            aiMetadata: nil,
+            posesUrl: nil,
+            planesUrl: nil,
+            processingJobId: nil
         )
     }
 
@@ -67,7 +70,10 @@ final class MeasurementDataCompatibilityTests: XCTestCase {
             videoDurationSeconds: 60,
             videoSizeBytes: 15_000_000,
             videoResolution: "1920x1080",
-            photoUrls: ["photo1.jpg", "photo2.jpg"]
+            photoUrls: ["photo1.jpg", "photo2.jpg"],
+            posesUrl: nil,
+            planesUrl: nil,
+            processingJobId: nil
         )
         return adapter.convert(result: result, uploadContext: context)
     }

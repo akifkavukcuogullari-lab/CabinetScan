@@ -112,16 +112,6 @@ class AIFlowCoordinator: ObservableObject, AIFlowCoordinatorProtocol {
         return manager
     }()
 
-    // MARK: - Video Capture (for photo capture session sharing)
-
-    /// Video capture instance - stored to share capture session with photo capture
-    private(set) var videoCapture: AIVideoCapture?
-
-    /// Set video capture instance (called from VideoCaptureView)
-    func setVideoCapture(_ capture: AIVideoCapture) {
-        self.videoCapture = capture
-    }
-
     // MARK: - Capture Data Manager (Story 2.6)
 
     /// Shared capture data manager for session persistence
@@ -233,8 +223,12 @@ class AIFlowCoordinator: ObservableObject, AIFlowCoordinatorProtocol {
         let package = try buildCapturePackage(showroomId: showroomId)
         processingProgress = 0.05
 
+        // Stop AR session — pose/plane data is captured in the package
+        arSessionManager.stopSession()
+        print("[AIFlowCoordinator] AR session stopped after package built")
+
         // 2. Upload files and create job
-        let jobId = try await pipelineClient.submitJob(
+        let submitResult = try await pipelineClient.submitJob(
             package: package,
             showroomCode: showroomCode,
             showroomId: showroomId
@@ -242,11 +236,11 @@ class AIFlowCoordinator: ObservableObject, AIFlowCoordinatorProtocol {
             self?.uploadStatus = status
         }
         processingProgress = 0.3
-        print("[AIFlowCoordinator] Job submitted: \(jobId)")
+        print("[AIFlowCoordinator] Job submitted: \(submitResult.jobId)")
 
         // 3. Poll for results
         uploadStatus = "Processing scan on server..."
-        let result = try await pipelineClient.pollForResults(jobId: jobId) { [weak self] progress, stage in
+        let result = try await pipelineClient.pollForResults(jobId: submitResult.jobId) { [weak self] progress, stage in
             // Map server progress (0-1) to our progress range (0.3-0.9)
             self?.processingProgress = 0.3 + (progress * 0.6)
             self?.uploadStatus = stage
@@ -257,12 +251,15 @@ class AIFlowCoordinator: ObservableObject, AIFlowCoordinatorProtocol {
         // 4. Convert to MeasurementData
         uploadStatus = "Finalizing measurements..."
         let uploadContext = UploadContext(
-            videoUrl: captureSessionData?.videoURL?.absoluteString ?? "",
-            videoThumbnailUrl: nil,
-            videoDurationSeconds: Int(captureSessionData?.metadata?.videoDuration ?? 0),
-            videoSizeBytes: 0,
-            videoResolution: "unknown",
-            photoUrls: []
+            videoUrl: submitResult.videoData.videoUrl,
+            videoThumbnailUrl: submitResult.videoData.thumbnailUrl,
+            videoDurationSeconds: submitResult.videoData.durationSeconds,
+            videoSizeBytes: submitResult.videoData.sizeBytes,
+            videoResolution: submitResult.videoData.resolution,
+            photoUrls: submitResult.photoUrls,
+            posesUrl: submitResult.posesUrl,
+            planesUrl: submitResult.planesUrl,
+            processingJobId: submitResult.jobId
         )
 
         let adapter = ServerResultAdapter()
@@ -289,16 +286,19 @@ class AIFlowCoordinator: ObservableObject, AIFlowCoordinatorProtocol {
         processingProgress = min(max(progress, 0.0), 1.0)
     }
 
-    /// Transition to error state
+    /// Transition to error state and stop AR session
     func setError(_ error: Error) {
         captureState = .error(error)
+        arSessionManager.stopSession()
     }
 
     /// Reset to initial state
     func reset() {
         captureState = .idle
         processingProgress = 0.0
+        uploadStatus = nil
         captureSessionData = nil
+        arSessionManager.stopSession()
         print("[AIFlowCoordinator] Reset to initial state")
     }
 

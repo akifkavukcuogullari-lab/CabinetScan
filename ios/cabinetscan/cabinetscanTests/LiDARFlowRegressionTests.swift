@@ -304,7 +304,10 @@ final class LiDARFlowRegressionTests: XCTestCase {
             videoFormat: "mp4",
             visualizationPhotoUrls: ["photo1.jpg", "photo2.jpg"],
             scanMethod: .lidar,
-            aiMetadata: nil
+            aiMetadata: nil,
+            posesUrl: nil,
+            planesUrl: nil,
+            processingJobId: nil
         )
     }
 }
