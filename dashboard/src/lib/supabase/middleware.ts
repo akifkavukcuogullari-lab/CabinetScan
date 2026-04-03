@@ -39,7 +39,8 @@ export async function updateSession(request: NextRequest) {
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login') ||
                       request.nextUrl.pathname.startsWith('/register')
   const isDashboardRoute = request.nextUrl.pathname.startsWith('/admin') ||
-                           request.nextUrl.pathname.startsWith('/showroom')
+                           request.nextUrl.pathname.startsWith('/showroom') ||
+                           request.nextUrl.pathname.startsWith('/designer')
 
   if (!user && isDashboardRoute) {
     // Redirect unauthenticated users to login

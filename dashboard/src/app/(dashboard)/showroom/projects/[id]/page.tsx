@@ -29,6 +29,10 @@ import {
 import { WebhookPayloadViewer } from '@/components/webhook/WebhookPayloadViewer'
 import { QuoteEmailSection } from '@/components/quote/QuoteEmailSection'
 import { ChatHistorySection } from '@/components/project/ChatHistorySection'
+import { DesignRequestButton } from '@/components/design/DesignRequestButton'
+import { DesignStatusCard } from '@/components/design/DesignStatusCard'
+import { DesignFilesSection } from '@/components/design/DesignFilesSection'
+import { DesignChatWrapper } from '@/components/design/DesignChatWrapper'
 
 interface ProjectDetailPageProps {
   params: Promise<{ id: string }>
@@ -139,6 +143,21 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     .eq('showroom_id', showroomUser.showroom_id)
 
   const hasPriceCatalog = (priceCatalogCount ?? 0) > 0
+
+  // Fetch design request for this project
+  const { data: designRequest } = await supabase
+    .from('design_requests')
+    .select('*, designers(full_name)')
+    .eq('project_id', project.id)
+    .single()
+
+  // Get showroom user info for design chat
+  const { data: currentShowroomUser } = await supabase
+    .from('showroom_users')
+    .select('id, full_name')
+    .eq('user_id', user.id)
+    .eq('showroom_id', showroomUser.showroom_id)
+    .single()
 
   const statusColors: Record<string, string> = {
     draft: 'bg-gray-100 text-gray-800',
@@ -523,7 +542,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         </div>
 
         {/* Right Column - Sidebar */}
-        <div className="lg:sticky lg:top-6 lg:self-start min-w-0">
+        <div className="lg:sticky lg:top-6 lg:self-start min-w-0 space-y-4">
           <ProjectSidebarWrapper
             project={project}
             measurement={measurement}
@@ -539,6 +558,36 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             onCreateQuote={createQuote}
             onDeleteProject={deleteProject}
           />
+
+          {/* Design Request Section */}
+          {!designRequest ? (
+            <DesignRequestButton
+              projectId={project.id}
+              showroomId={showroomUser.showroom_id}
+              hasExistingRequest={false}
+            />
+          ) : (
+            <>
+              <DesignStatusCard
+                designRequest={designRequest}
+                designerName={(designRequest as any)?.designers?.full_name}
+              />
+
+              {/* Design Chat - always visible for showroom side as a shared notepad */}
+              {currentShowroomUser && (
+                <DesignChatWrapper
+                  designRequestId={designRequest.id}
+                  currentUserId={currentShowroomUser.id}
+                  currentUserName={currentShowroomUser.full_name}
+                />
+              )}
+
+              {/* Design Files - available once delivered or later */}
+              {['delivered', 'approved', 'revision_requested', 'completed'].includes(designRequest.status) && (
+                <DesignFilesSection designRequestId={designRequest.id} />
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>

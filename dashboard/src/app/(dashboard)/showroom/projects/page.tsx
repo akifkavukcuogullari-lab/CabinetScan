@@ -34,6 +34,7 @@ import {
   ArrowUpDown,
   Lock,
   TrendingUp,
+  Paintbrush,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -60,6 +61,29 @@ const statusColors: Record<string, string> = {
   completed: 'bg-green-100 text-green-800',
 }
 
+function DesignStatusBadge({ status }: { status: string }) {
+  const config: Record<string, { label: string; className: string }> = {
+    pending: { label: 'Design Requested', className: 'bg-orange-100 text-orange-700 border-orange-200' },
+    accepted: { label: 'In Design', className: 'bg-blue-100 text-blue-700 border-blue-200' },
+    in_progress: { label: 'In Design', className: 'bg-blue-100 text-blue-700 border-blue-200' },
+    delivered: { label: 'Design Delivered', className: 'bg-purple-100 text-purple-700 border-purple-200' },
+    approved: { label: 'Design Approved', className: 'bg-green-100 text-green-700 border-green-200' },
+    revision_requested: { label: 'Revision Requested', className: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+    completed: { label: 'Design Complete', className: 'bg-green-100 text-green-700 border-green-200' },
+    canceled: { label: 'Design Canceled', className: 'bg-gray-100 text-gray-600 border-gray-200' },
+  }
+
+  const entry = config[status]
+  if (!entry || status === 'canceled') return null
+
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${entry.className}`}>
+      <Paintbrush className="h-3 w-3" />
+      {entry.label}
+    </span>
+  )
+}
+
 export default function ProjectsPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -67,6 +91,7 @@ export default function ProjectsPage() {
 
   const [loading, setLoading] = useState(true)
   const [projects, setProjects] = useState<any[]>([])
+  const [designStatuses, setDesignStatuses] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
 
   // Check if ANY plan limit is exceeded (blocks new projects)
@@ -130,12 +155,29 @@ export default function ProjectsPage() {
         .from('projects')
         .select('*')
         .eq('showroom_id', showroomUser.showroom_id)
-        .order('submitted_at', { ascending: false })
+        .order('created_at', { ascending: false })
 
       if (fetchError) {
         setError(fetchError.message)
       } else {
         setProjects(data || [])
+
+        // Fetch design request statuses for all projects
+        if (data && data.length > 0) {
+          const projectIds = data.map((p: any) => p.id)
+          const { data: designRequests } = await supabase
+            .from('design_requests')
+            .select('project_id, status')
+            .in('project_id', projectIds)
+
+          if (designRequests) {
+            const statusMap: Record<string, string> = {}
+            designRequests.forEach((dr: any) => {
+              statusMap[dr.project_id] = dr.status
+            })
+            setDesignStatuses(statusMap)
+          }
+        }
       }
       setLoading(false)
     }
@@ -226,8 +268,8 @@ export default function ProjectsPage() {
           compare = (a.customer_email || '').localeCompare(b.customer_email || '')
           break
         case 'date':
-          const dateA = a.submitted_at ? new Date(a.submitted_at).getTime() : 0
-          const dateB = b.submitted_at ? new Date(b.submitted_at).getTime() : 0
+          const dateA = new Date(a.submitted_at || a.created_at).getTime()
+          const dateB = new Date(b.submitted_at || b.created_at).getTime()
           compare = dateA - dateB
           break
         case 'status':
@@ -414,12 +456,10 @@ export default function ProjectsPage() {
                             <code className="font-mono">{project.reference_number}</code>
                             <span>|</span>
                             <span>
-                              {project.submitted_at
-                                ? new Date(project.submitted_at).toLocaleDateString('en-US', {
+                              {new Date(project.submitted_at || project.created_at).toLocaleDateString('en-US', {
                                     month: 'short',
                                     day: 'numeric'
-                                  })
-                                : '-'}
+                                  })}
                             </span>
                           </div>
                         </div>
@@ -432,6 +472,13 @@ export default function ProjectsPage() {
                       <div className="text-sm text-gray-600 truncate">
                         {project.customer_email}
                       </div>
+
+                      {/* Design Status Indicator */}
+                      {designStatuses[project.id] && (
+                        <div className="mt-2">
+                          <DesignStatusBadge status={designStatuses[project.id]} />
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </Link>
@@ -490,6 +537,7 @@ export default function ProjectsPage() {
                           <ArrowUpDown className="h-4 w-4" />
                         </div>
                       </TableHead>
+                      <TableHead>Design</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -521,6 +569,11 @@ export default function ProjectsPage() {
                           <Badge className={statusColors[project.status]}>
                             {project.status.replace('_', ' ')}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {designStatuses[project.id] && (
+                            <DesignStatusBadge status={designStatuses[project.id]} />
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

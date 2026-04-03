@@ -74,6 +74,8 @@ interface ProjectSubmission {
     terms_url?: string
     privacy_url?: string
   }
+  source?: string;           // 'ios_customer' | 'ios_staff' | 'dashboard'
+  created_by_user_id?: string; // UUID of the staff member who created this project
 }
 
 // Generate a unique reference number
@@ -446,6 +448,8 @@ async function buildWebhookPayload(
       postbackUrl: showroom.webhook_url || null,
     },
     device_info: submission.device_info || null,
+    source: submission.source || 'ios_customer',
+    created_by_user_id: submission.created_by_user_id || null,
   }
 }
 
@@ -763,6 +767,9 @@ serve(async (req) => {
         consent_agreed_at: submission.consent?.agreed_at,
         consent_terms_url: submission.consent?.terms_url,
         consent_privacy_url: submission.consent?.privacy_url,
+        // Staff app source tracking
+        source: submission.source || 'ios_customer',
+        created_by_user_id: submission.created_by_user_id || null,
       })
       .select()
       .single()

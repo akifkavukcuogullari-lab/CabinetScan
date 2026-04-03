@@ -48,3 +48,18 @@ ios/CabinetScan.xcodeproj/project.xcworkspace/xcuserdata/
 ios/build/
 *.xcuserstate
 DerivedData/
+
+# Claude Code
+.claude/
+
+# BMAD
+_bmad/
+bmad-output/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/

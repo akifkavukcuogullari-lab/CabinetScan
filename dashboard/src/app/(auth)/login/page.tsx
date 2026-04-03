@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { formatError, logError, FormattedError } from '@/lib/errors'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -70,12 +71,15 @@ function formatAuthError(errorMessage: string): FormattedError {
   }
 }
 
+type LoginRole = 'showroom' | 'designer'
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<FormattedError | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loginRole, setLoginRole] = useState<LoginRole>('showroom')
   const router = useRouter()
   const supabase = createClient()
 
@@ -101,6 +105,61 @@ export default function LoginPage() {
         return
       }
 
+      // Designer login flow
+      if (loginRole === 'designer') {
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+
+        const { data: designerUser, error: designerError } = await supabase
+          .from('designers')
+          .select('id, is_active')
+          .eq('user_id', authUser?.id)
+          .single()
+
+        if (designerError && designerError.code !== 'PGRST116') {
+          logError(designerError, { context: 'checkDesignerRole', email })
+        }
+
+        if (designerUser && designerUser.is_active) {
+          toast.success('Welcome back!', {
+            description: 'Redirecting to your project pool...',
+          })
+          router.push('/designer/pool')
+          return
+        }
+
+        if (designerUser && !designerUser.is_active) {
+          const inactiveError: FormattedError = {
+            title: 'Account Deactivated',
+            message: 'Your designer account has been deactivated.',
+            suggestion: 'Please contact support to reactivate your account.',
+            isRetryable: false,
+          }
+          setError(inactiveError)
+          toast.error(inactiveError.title, {
+            description: inactiveError.message,
+          })
+          await supabase.auth.signOut()
+          setLoading(false)
+          return
+        }
+
+        // No designer account found
+        const noDesignerError: FormattedError = {
+          title: 'No Designer Account',
+          message: 'No designer account found for this email.',
+          suggestion: 'If you are a showroom owner, switch to the Showroom tab to sign in.',
+          isRetryable: false,
+        }
+        setError(noDesignerError)
+        toast.error(noDesignerError.title, {
+          description: noDesignerError.message,
+        })
+        await supabase.auth.signOut()
+        setLoading(false)
+        return
+      }
+
+      // Showroom/Admin login flow (existing logic)
       // Check if user is admin or showroom owner
       const { data: admin, error: adminError } = await supabase
         .from('admins')
@@ -262,6 +321,34 @@ export default function LoginPage() {
         </CardHeader>
         <form onSubmit={handleLogin} aria-label="Sign in form">
           <CardContent className="space-y-4">
+            {/* Role selector tabs */}
+            <div className="flex rounded-lg bg-gray-100 p-1">
+              <button
+                type="button"
+                onClick={() => { setLoginRole('showroom'); if (error) setError(null) }}
+                className={cn(
+                  'flex-1 py-2 px-3 text-sm font-medium rounded-md transition-all',
+                  loginRole === 'showroom'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                )}
+              >
+                Showroom
+              </button>
+              <button
+                type="button"
+                onClick={() => { setLoginRole('designer'); if (error) setError(null) }}
+                className={cn(
+                  'flex-1 py-2 px-3 text-sm font-medium rounded-md transition-all',
+                  loginRole === 'designer'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                )}
+              >
+                Designer
+              </button>
+            </div>
+
             {error && (
               <div
                 className="p-4 rounded-lg bg-red-50 border border-red-200"
