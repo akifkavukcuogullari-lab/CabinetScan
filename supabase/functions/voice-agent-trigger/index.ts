@@ -333,16 +333,7 @@ serve(async (req) => {
     // 15. Interpolate system prompt
     const interpolatedPrompt = interpolate(systemPrompt, templateVars)
 
-    // 16. Build Vapi tools array
-    const vapiTools: unknown[] = []
-    if (vaSettings.scheduling_link) {
-      const sendLinkTool = JSON.parse(JSON.stringify(SEND_LINK_TOOL_DEFINITION))
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')
-      sendLinkTool.server.url = `${supabaseUrl}/functions/v1/voice-agent-send-link`
-      vapiTools.push(sendLinkTool)
-    }
-
-    // 17. Calculate scheduledAt for delayed triggers
+    // 16. Calculate scheduledAt for delayed triggers
     let scheduledAt: string | undefined
     if (vaSettings.trigger_mode === 'delayed' && vaSettings.delay_minutes > 0) {
       const scheduled = new Date()
@@ -350,11 +341,10 @@ serve(async (req) => {
       scheduledAt = scheduled.toISOString()
     }
 
-    // 18. Initiate Vapi call
+    // 17. Initiate Vapi call (tools are handled via serverUrl webhook, not inline)
     const callResult = await initiateVapiCall({
       customerPhone: payload.customer.phone_normalized,
       systemPrompt: interpolatedPrompt,
-      tools: vapiTools,
       scheduledAt,
     })
 

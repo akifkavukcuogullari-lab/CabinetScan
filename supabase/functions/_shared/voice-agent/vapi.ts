@@ -52,9 +52,23 @@ export async function initiateVapiCall(options: InitiateCallOptions): Promise<In
       return { success: false, error: 'Vapi API key not configured' }
     }
 
-    if (!vapiPhoneNumberId) {
+    if (!vapiPhoneNumberId || vapiPhoneNumberId.trim().length === 0) {
       console.error('[VOICE_CALL] vapi_phone_number_id not configured in platform_settings')
-      return { success: false, error: 'Vapi phone number ID not configured' }
+      return { success: false, error: 'Vapi phone number ID not configured. Set it in Admin → Voice Agent settings.' }
+    }
+
+    // Ensure phone number is E.164 format
+    let formattedPhone = customerPhone.trim()
+    if (!formattedPhone.startsWith('+')) {
+      // Assume US number if no country code
+      formattedPhone = formattedPhone.replace(/\D/g, '') // strip non-digits
+      if (formattedPhone.length === 10) {
+        formattedPhone = `+1${formattedPhone}`
+      } else if (formattedPhone.length === 11 && formattedPhone.startsWith('1')) {
+        formattedPhone = `+${formattedPhone}`
+      } else {
+        formattedPhone = `+${formattedPhone}`
+      }
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
@@ -62,30 +76,31 @@ export async function initiateVapiCall(options: InitiateCallOptions): Promise<In
       ? `${supabaseUrl}/functions/v1/voice-agent-webhook`
       : ''
 
+    const assistantConfig: Record<string, unknown> = {
+      model: {
+        provider: 'openai',
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt,
+          },
+        ],
+      },
+      voice: {
+        provider: '11labs',
+        voiceId: '21m00Tcm4TlvDq8ikWAM',
+      },
+      firstMessage: firstMessage || 'Hi, this is the scheduling assistant. How are you today?',
+      serverUrl,
+    }
+
     const requestBody: Record<string, unknown> = {
-      phoneNumberId: vapiPhoneNumberId,
+      phoneNumberId: vapiPhoneNumberId.trim(),
       customer: {
-        number: customerPhone,
+        number: formattedPhone,
       },
-      assistant: {
-        model: {
-          provider: 'openai',
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'system',
-              content: systemPrompt,
-            },
-          ],
-        },
-        voice: {
-          provider: '11labs',
-          voiceId: '21m00Tcm4TlvDq8ikWAM',
-        },
-        firstMessage: firstMessage || 'Hi, this is the scheduling assistant. How are you today?',
-        serverUrl,
-        tools: tools || [],
-      },
+      assistant: assistantConfig,
     }
 
     if (scheduledAt) {
