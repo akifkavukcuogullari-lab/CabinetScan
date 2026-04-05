@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default function PrivacyPage() {
-  const lastUpdated = "January 4, 2025";
+  const lastUpdated = "April 5, 2026";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -108,6 +108,7 @@ export default function PrivacyPage() {
               <li><strong>Quote Generation:</strong> To share your room data with the showroom so they can provide you with quotes</li>
               <li><strong>Service Improvement:</strong> To analyze usage patterns and improve our scanning technology</li>
               <li><strong>Legal Compliance:</strong> To comply with legal obligations and protect our rights</li>
+              <li><strong>SMS Communications:</strong> We may use your phone number to send you appointment reminders, pre-call notifications, post-call follow-ups, and promotional messages via SMS on behalf of cabinet showrooms. Message and data rates may apply. You can opt out at any time by replying STOP.</li>
             </ul>
           </section>
 
