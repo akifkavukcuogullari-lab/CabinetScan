@@ -54,23 +54,23 @@
 ### Agent D: Edge Functions
 | # | Task | File | Est. Lines | Actual Lines | Status |
 |---|------|------|-----------|-------------|--------|
-| D1 | Trigger function | `supabase/functions/voice-agent-trigger/index.ts` | ~250 | — | `[ ]` |
-| D2 | Webhook function | `supabase/functions/voice-agent-webhook/index.ts` | ~200 | — | `[ ]` |
-| D3 | Send link function | `supabase/functions/voice-agent-send-link/index.ts` | ~80 | — | `[ ]` |
-| D4 | Flow processor (cron) | `supabase/functions/voice-agent-flow-processor/index.ts` | ~200 | — | `[ ]` |
-| D5 | Modify submit-project | `supabase/functions/submit-project/index.ts` (+~40 lines) | ~40 | — | `[ ]` |
-| | **Agent D Total** | **4 new + 1 modified** | **~770** | **—** | |
+| D1 | Trigger function | `supabase/functions/voice-agent-trigger/index.ts` | ~250 | 319 | `[x]` |
+| D2 | Webhook function | `supabase/functions/voice-agent-webhook/index.ts` | ~200 | 418 | `[x]` |
+| D3 | Send link function | `supabase/functions/voice-agent-send-link/index.ts` | ~80 | 165 | `[x]` |
+| D4 | Flow processor (cron) | `supabase/functions/voice-agent-flow-processor/index.ts` | ~200 | 409 | `[x]` |
+| D5 | Modify submit-project | `supabase/functions/submit-project/index.ts` (+~40 lines) | ~40 | 74 | `[x]` |
+| | **Agent D Total** | **4 new + 1 modified** | **~770** | **1385** | `[x]` |
 
 ### Agent E: Dashboard Pages
 | # | Task | File | Est. Lines | Actual Lines | Status |
 |---|------|------|-----------|-------------|--------|
-| E1 | Admin voice-agent page | `dashboard/src/app/(dashboard)/admin/voice-agent/page.tsx` | ~400 | — | `[ ]` |
-| E2 | Showroom voice-agent page (3 tabs) | `dashboard/src/app/(dashboard)/showroom/voice-agent/page.tsx` | ~600 | — | `[ ]` |
-| E3 | VoiceAgentLogCard | `dashboard/src/components/voice-agent/VoiceAgentLogCard.tsx` | ~150 | — | `[ ]` |
-| E4 | TriggerCallButton | `dashboard/src/components/voice-agent/TriggerCallButton.tsx` | ~80 | — | `[ ]` |
-| E5 | Modify showroom project detail | `dashboard/src/app/(dashboard)/showroom/projects/[id]/page.tsx` (+~30 lines) | ~30 | — | `[ ]` |
-| E6 | Modify admin/designer project detail | (if applicable, +~30 lines) | ~30 | — | `[ ]` |
-| | **Agent E Total** | **4 new + 2 modified** | **~1290** | **—** | |
+| E1 | Admin voice-agent page | `dashboard/src/app/(dashboard)/admin/voice-agent/page.tsx` | ~400 | 576 | `[x]` |
+| E2 | Showroom voice-agent page (3 tabs) | `dashboard/src/app/(dashboard)/showroom/voice-agent/page.tsx` | ~600 | 857 | `[x]` |
+| E3 | VoiceAgentLogCard | `dashboard/src/components/voice-agent/VoiceAgentLogCard.tsx` | ~150 | 227 | `[x]` |
+| E4 | TriggerCallButton | `dashboard/src/components/voice-agent/TriggerCallButton.tsx` | ~80 | 94 | `[x]` |
+| E5 | Modify showroom project detail | `dashboard/src/app/(dashboard)/showroom/projects/[id]/page.tsx` (+~30 lines) | ~30 | ~30 | `[x]` |
+| E6 | Modify admin/designer project detail | designer projects/[id]/page.tsx (+~20 lines) | ~30 | ~20 | `[x]` |
+| | **Agent E Total** | **4 new + 2 modified** | **~1290** | **~1804** | `[x]` |
 
 ---
 
@@ -112,8 +112,8 @@
 | 1 | A: Database & Types | 3 | ~420 | 519 | `[x]` |
 | 1 | B: Shared Libraries | 5 | ~420 | 744 | `[x]` |
 | 1 | C: Flow Builder | 9 | ~630 | 674 | `[x]` |
-| 2 | D: Edge Functions | 5 | ~770 | — | `[ ]` |
-| 2 | E: Dashboard Pages | 6 | ~1290 | — | `[ ]` |
+| 2 | D: Edge Functions | 5 | ~770 | 1385 | `[x]` |
+| 2 | E: Dashboard Pages | 6 | ~1290 | ~1804 | `[x]` |
 | 3 | F: Integration | 3 | ~70 | — | `[ ]` |
 | 3 | G: Tests | 14 | ~1550 | — | `[ ]` |
 | | **TOTAL** | **45 files** | **~5150** | **—** | |
