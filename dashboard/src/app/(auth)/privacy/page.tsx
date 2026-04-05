@@ -244,9 +244,10 @@ export default function PrivacyPage() {
             <p className="text-gray-600 leading-relaxed">
               If you have any questions about this Privacy Policy or our data practices, please contact us:
             </p>
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-1">
               <p className="text-gray-700"><strong>NEXTLYN LLC</strong></p>
               <p className="text-gray-600">Email: <a href="mailto:contact@nextlyn.ai" className="text-blue-600 hover:underline">contact@nextlyn.ai</a></p>
+              <p className="text-gray-600">Phone: <a href="tel:+18569795500" className="text-blue-600 hover:underline">(856) 979-5500</a></p>
               <p className="text-gray-600">Website: <a href="https://nextlyn.ai" className="text-blue-600 hover:underline">https://nextlyn.ai</a></p>
             </div>
           </section>
