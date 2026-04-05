@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { supabaseAdmin } from '../_shared/supabase.ts'
 import { sendEmail, generateProjectNotificationEmailHtml } from '../_shared/email.ts'
+import { calculateDistance } from '../_shared/voice-agent/distance.ts'
 
 const DASHBOARD_URL = Deno.env.get('DASHBOARD_URL') || 'https://cabinetscan.nextlyn.ai'
 
@@ -787,6 +788,46 @@ serve(async (req) => {
       )
     }
 
+    // Calculate distance from customer to showroom (fire-and-forget, don't block submission)
+    logTiming('Before distance calculation')
+    try {
+      const customerAddr = [
+        submission.end_client?.address || submission.customer.address_line1,
+        submission.customer.city,
+        submission.customer.state,
+        submission.customer.zip_code,
+      ].filter(Boolean).join(', ')
+
+      const showroomAddr = [
+        showroom.address_line1,
+        showroom.city,
+        showroom.state,
+        showroom.postal_code,
+      ].filter(Boolean).join(', ')
+
+      if (customerAddr && showroomAddr) {
+        const distResult = await calculateDistance({
+          customerAddress: customerAddr,
+          showroomAddress: showroomAddr,
+        })
+
+        if (distResult) {
+          await supabaseAdmin
+            .from('projects')
+            .update({
+              distance_miles: distResult.distanceMiles,
+              drive_time_minutes: distResult.driveTimeMinutes,
+            })
+            .eq('id', project.id)
+
+          console.log(`[SUBMIT] Distance calculated: ${distResult.distanceMiles} mi, ${distResult.driveTimeMinutes} min`)
+        }
+      }
+    } catch (distErr) {
+      console.error('[SUBMIT] Distance calculation failed (non-blocking):', distErr)
+    }
+    logTiming('After distance calculation')
+
     // Create measurements if provided
     logTiming('Before measurements')
     if (submission.measurements?.roomplan_data) {
@@ -1055,6 +1096,16 @@ serve(async (req) => {
           })
       }
     }
+
+    // Distance calculation (async, non-blocking)
+    fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/calculate-project-distance`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ project_id: project.id }),
+    }).catch(err => console.error('[DISTANCE] Trigger error:', err))
 
     // Voice Agent trigger (async, non-blocking)
     try {
