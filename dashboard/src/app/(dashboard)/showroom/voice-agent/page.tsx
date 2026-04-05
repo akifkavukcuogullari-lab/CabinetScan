@@ -128,6 +128,12 @@ export default function ShowroomVoiceAgentPage() {
   const [delayMinutes, setDelayMinutes] = useState(15)
   const [distanceThreshold, setDistanceThreshold] = useState(30)
   const [schedulingLink, setSchedulingLink] = useState('')
+  const [agentName, setAgentName] = useState('')
+  const [llmProvider, setLlmProvider] = useState('')
+  const [llmModel, setLlmModel] = useState('')
+  const [voiceProvider, setVoiceProvider] = useState('')
+  const [voiceId, setVoiceId] = useState('')
+  const [agentFirstMessage, setAgentFirstMessage] = useState('')
   const [generalSaving, setGeneralSaving] = useState(false)
 
   // Prompts tab state
@@ -248,6 +254,12 @@ export default function ShowroomVoiceAgentPage() {
           setDelayMinutes(s.delay_minutes)
           setDistanceThreshold(s.distance_threshold_miles)
           setSchedulingLink(s.scheduling_link || '')
+          setAgentName((s as any).agent_name || '')
+          setLlmProvider((s as any).llm_provider || '')
+          setLlmModel((s as any).llm_model || '')
+          setVoiceProvider((s as any).voice_provider || '')
+          setVoiceId((s as any).voice_id || '')
+          setAgentFirstMessage((s as any).first_message || '')
 
           setSmsTemplates({
             near_homeowner: s.near_homeowner_sms_template || '',
@@ -288,6 +300,12 @@ export default function ShowroomVoiceAgentPage() {
             delay_minutes: delayMinutes,
             distance_threshold_miles: distanceThreshold,
             scheduling_link: schedulingLink || null,
+            agent_name: agentName || null,
+            llm_provider: llmProvider || null,
+            llm_model: llmModel || null,
+            voice_provider: voiceProvider || null,
+            voice_id: voiceId || null,
+            first_message: agentFirstMessage || null,
             updated_at: new Date().toISOString(),
           },
           { onConflict: 'showroom_id' }
@@ -584,6 +602,100 @@ export default function ShowroomVoiceAgentPage() {
                   </code>{' '}
                   in templates.
                 </p>
+              </div>
+
+              <Separator />
+
+              {/* AI Agent Configuration */}
+              <div className="space-y-4">
+                <div>
+                  <Label className="font-semibold text-base">AI Agent Configuration</Label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Customize your AI agent&apos;s voice, model, and personality. Leave blank to use platform defaults.
+                    Browse available voices at{' '}
+                    <a href="https://docs.vapi.ai/quickstart/phone/outbound#voice-configuration" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                      Vapi Voice Library
+                    </a>
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Agent Name</Label>
+                    <Input
+                      value={agentName}
+                      onChange={(e) => setAgentName(e.target.value)}
+                      placeholder="scheduling assistant"
+                    />
+                    <p className="text-xs text-gray-400">Name the AI uses to introduce itself</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>First Message</Label>
+                    <Input
+                      value={agentFirstMessage}
+                      onChange={(e) => setAgentFirstMessage(e.target.value)}
+                      placeholder="Hi, this is the scheduling assistant. How are you today?"
+                    />
+                    <p className="text-xs text-gray-400">What the AI says when the call connects</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>LLM Provider</Label>
+                    <select
+                      value={llmProvider}
+                      onChange={(e) => setLlmProvider(e.target.value)}
+                      className="w-full border rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Platform Default</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="groq">Groq</option>
+                      <option value="together-ai">Together AI</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>LLM Model</Label>
+                    <Input
+                      value={llmModel}
+                      onChange={(e) => setLlmModel(e.target.value)}
+                      placeholder="gpt-4o"
+                    />
+                    <p className="text-xs text-gray-400">e.g., gpt-4o, gpt-4o-mini, claude-3-5-sonnet</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Voice Provider</Label>
+                    <select
+                      value={voiceProvider}
+                      onChange={(e) => setVoiceProvider(e.target.value)}
+                      className="w-full border rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Platform Default</option>
+                      <option value="11labs">ElevenLabs</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="deepgram">Deepgram</option>
+                      <option value="playht">PlayHT</option>
+                      <option value="lmnt">LMNT</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Voice ID</Label>
+                    <Input
+                      value={voiceId}
+                      onChange={(e) => setVoiceId(e.target.value)}
+                      placeholder="21m00Tcm4TlvDq8ikWAM"
+                    />
+                    <p className="text-xs text-gray-400">
+                      Voice ID from your provider.{' '}
+                      <a href="https://docs.vapi.ai/quickstart/phone/outbound#voice-configuration" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                        Browse voices →
+                      </a>
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <Separator />

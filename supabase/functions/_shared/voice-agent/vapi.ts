@@ -6,8 +6,14 @@ interface InitiateCallOptions {
   customerPhone: string
   systemPrompt: string
   firstMessage?: string
-  tools?: unknown[]
   scheduledAt?: string
+  // Per-showroom overrides (NULL = use platform default)
+  showroomLlmProvider?: string | null
+  showroomLlmModel?: string | null
+  showroomVoiceProvider?: string | null
+  showroomVoiceId?: string | null
+  showroomAgentName?: string | null
+  showroomFirstMessage?: string | null
 }
 
 interface InitiateCallResult {
@@ -32,7 +38,9 @@ async function getPlatformSetting(key: string): Promise<string | null> {
 }
 
 export async function initiateVapiCall(options: InitiateCallOptions): Promise<InitiateCallResult> {
-  const { customerPhone, systemPrompt, firstMessage, tools, scheduledAt } = options
+  const { customerPhone, systemPrompt, firstMessage, scheduledAt,
+    showroomLlmProvider, showroomLlmModel, showroomVoiceProvider,
+    showroomVoiceId, showroomAgentName, showroomFirstMessage } = options
 
   console.log('[VOICE_CALL] Preparing to initiate Vapi call', {
     customerPhone,
@@ -81,10 +89,20 @@ export async function initiateVapiCall(options: InitiateCallOptions): Promise<In
       ? `${supabaseUrl}/functions/v1/voice-agent-webhook`
       : ''
 
+    // Cascade: showroom override → platform default → hardcoded fallback
+    const finalLlmProvider = showroomLlmProvider || llmProvider || 'openai'
+    const finalLlmModel = showroomLlmModel || llmModel || 'gpt-4o'
+    const finalVoiceProvider = showroomVoiceProvider || voiceProvider || '11labs'
+    const finalVoiceId = showroomVoiceId || voiceId || '21m00Tcm4TlvDq8ikWAM'
+    const agentName = showroomAgentName || 'scheduling assistant'
+    const finalFirstMessage = firstMessage || showroomFirstMessage || defaultFirstMessage || `Hi, this is the ${agentName}. How are you today?`
+
+    console.log('[VOICE_CALL] Agent config:', { llm: `${finalLlmProvider}/${finalLlmModel}`, voice: `${finalVoiceProvider}/${finalVoiceId}`, agentName })
+
     const assistantConfig: Record<string, unknown> = {
       model: {
-        provider: llmProvider || 'openai',
-        model: llmModel || 'gpt-4o',
+        provider: finalLlmProvider,
+        model: finalLlmModel,
         messages: [
           {
             role: 'system',
@@ -93,10 +111,10 @@ export async function initiateVapiCall(options: InitiateCallOptions): Promise<In
         ],
       },
       voice: {
-        provider: voiceProvider || '11labs',
-        voiceId: voiceId || '21m00Tcm4TlvDq8ikWAM',
+        provider: finalVoiceProvider,
+        voiceId: finalVoiceId,
       },
-      firstMessage: firstMessage || defaultFirstMessage || 'Hi, this is the scheduling assistant. How are you today?',
+      firstMessage: finalFirstMessage,
       serverUrl,
     }
 

@@ -346,6 +346,13 @@ serve(async (req) => {
       customerPhone: payload.customer.phone_normalized,
       systemPrompt: interpolatedPrompt,
       scheduledAt,
+      // Per-showroom AI agent overrides (NULL = use platform defaults)
+      showroomLlmProvider: (vaSettings as any).llm_provider || null,
+      showroomLlmModel: (vaSettings as any).llm_model || null,
+      showroomVoiceProvider: (vaSettings as any).voice_provider || null,
+      showroomVoiceId: (vaSettings as any).voice_id || null,
+      showroomAgentName: (vaSettings as any).agent_name || null,
+      showroomFirstMessage: (vaSettings as any).first_message || null,
     })
 
     if (callResult.success) {
