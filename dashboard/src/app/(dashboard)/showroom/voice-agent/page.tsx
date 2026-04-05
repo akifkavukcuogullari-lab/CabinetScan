@@ -613,7 +613,7 @@ export default function ShowroomVoiceAgentPage() {
                   <p className="text-xs text-gray-500 mt-1">
                     Customize your AI agent&apos;s voice, model, and personality. Leave blank to use platform defaults.
                     Browse available voices at{' '}
-                    <a href="https://docs.vapi.ai/quickstart/phone/outbound#voice-configuration" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                    <a href="https://elevenlabs.io/voice-library" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                       Vapi Voice Library
                     </a>
                   </p>
@@ -690,7 +690,7 @@ export default function ShowroomVoiceAgentPage() {
                     />
                     <p className="text-xs text-gray-400">
                       Voice ID from your provider.{' '}
-                      <a href="https://docs.vapi.ai/quickstart/phone/outbound#voice-configuration" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                      <a href="https://elevenlabs.io/voice-library" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                         Browse voices →
                       </a>
                     </p>
