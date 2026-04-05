@@ -79,29 +79,29 @@
 ### Agent F: Integration & Wiring
 | # | Task | File | Est. Lines | Actual Lines | Status |
 |---|------|------|-----------|-------------|--------|
-| F1 | Subscription gate | `dashboard/src/lib/subscription.ts` (+voiceAgent feature) | ~10 | — | `[ ]` |
-| F2 | Navigation links | (sidebar/nav component — TBD) | ~20 | — | `[ ]` |
-| F3 | useVoiceAgentEnabled hook | `dashboard/src/hooks/useVoiceAgentEnabled.ts` | ~40 | — | `[ ]` |
-| | **Agent F Total** | **1 new + 2 modified** | **~70** | **—** | |
+| F1 | Subscription gate | `dashboard/src/lib/subscription.ts` (+voiceAgent feature) | ~10 | ~10 | `[x]` |
+| F2 | Navigation links | `dashboard/src/components/shared/sidebar.tsx` | ~20 | ~10 | `[x]` |
+| F3 | useVoiceAgentEnabled hook | `dashboard/src/hooks/useVoiceAgentEnabled.ts` | ~40 | 47 | `[x]` |
+| | **Agent F Total** | **1 new + 2 modified** | **~70** | **~67** | `[x]` |
 
 ### Agent G: Tests
 | # | Task | File | Est. Lines | Actual Lines | Status |
 |---|------|------|-----------|-------------|--------|
-| G1 | template.test.ts | `voice-agent/tests/unit/template.test.ts` | ~100 | — | `[ ]` |
-| G2 | distance.test.ts | `voice-agent/tests/unit/distance.test.ts` | ~80 | — | `[ ]` |
-| G3 | constants.test.ts | `voice-agent/tests/unit/constants.test.ts` | ~60 | — | `[ ]` |
-| G4 | outcome-mapping.test.ts | `voice-agent/tests/unit/outcome-mapping.test.ts` | ~80 | — | `[ ]` |
-| G5 | trigger-flow.test.ts | `voice-agent/tests/functional/trigger-flow.test.ts` | ~150 | — | `[ ]` |
-| G6 | webhook-processing.test.ts | `voice-agent/tests/functional/webhook-processing.test.ts` | ~120 | — | `[ ]` |
-| G7 | flow-processor.test.ts | `voice-agent/tests/functional/flow-processor.test.ts` | ~150 | — | `[ ]` |
-| G8 | send-link-tool.test.ts | `voice-agent/tests/functional/send-link-tool.test.ts` | ~60 | — | `[ ]` |
-| G9 | end-to-end.test.ts | `voice-agent/tests/integration/end-to-end.test.ts` | ~200 | — | `[ ]` |
-| G10 | database.test.ts | `voice-agent/tests/integration/database.test.ts` | ~120 | — | `[ ]` |
-| G11 | feature-gating.test.ts | `voice-agent/tests/integration/feature-gating.test.ts` | ~80 | — | `[ ]` |
-| G12 | flow-builder.test.tsx | `voice-agent/tests/dashboard/flow-builder.test.tsx` | ~150 | — | `[ ]` |
-| G13 | settings-page.test.tsx | `voice-agent/tests/dashboard/settings-page.test.tsx` | ~120 | — | `[ ]` |
-| G14 | log-card.test.tsx | `voice-agent/tests/dashboard/log-card.test.tsx` | ~80 | — | `[ ]` |
-| | **Agent G Total** | **14 files** | **~1550** | **—** | |
+| G1 | template.test.ts | `dashboard/src/__tests__/voice-agent/unit/template.test.ts` | ~100 | 318 | `[x]` |
+| G2 | distance.test.ts | `dashboard/src/__tests__/voice-agent/unit/distance.test.ts` | ~80 | 66 | `[x]` |
+| G3 | constants.test.ts | `dashboard/src/__tests__/voice-agent/unit/constants.test.ts` | ~60 | 144 | `[x]` |
+| G4 | outcome-mapping.test.ts | `dashboard/src/__tests__/voice-agent/unit/outcome-mapping.test.ts` | ~80 | 157 | `[x]` |
+| G5 | trigger-flow.test.ts | `dashboard/src/__tests__/voice-agent/functional/trigger-flow.test.ts` | ~150 | 244 | `[x]` |
+| G6 | webhook-processing.test.ts | `dashboard/src/__tests__/voice-agent/functional/webhook-processing.test.ts` | ~120 | 241 | `[x]` |
+| G7 | flow-processor.test.ts | `dashboard/src/__tests__/voice-agent/functional/flow-processor.test.ts` | ~150 | 296 | `[x]` |
+| G8 | send-link-tool.test.ts | `dashboard/src/__tests__/voice-agent/functional/send-link-tool.test.ts` | ~60 | 165 | `[x]` |
+| G9 | end-to-end.test.ts | `dashboard/src/__tests__/voice-agent/integration/end-to-end.test.ts` | ~200 | 346 | `[x]` |
+| G10 | database.test.ts | `dashboard/src/__tests__/voice-agent/integration/database.test.ts` | ~120 | 301 | `[x]` |
+| G11 | feature-gating.test.ts | `dashboard/src/__tests__/voice-agent/integration/feature-gating.test.ts` | ~80 | 216 | `[x]` |
+| G12 | flow-builder.test.tsx | `dashboard/src/__tests__/voice-agent/dashboard/flow-builder.test.tsx` | ~150 | 228 | `[x]` |
+| G13 | settings-page.test.tsx | `dashboard/src/__tests__/voice-agent/dashboard/settings-page.test.tsx` | ~120 | 307 | `[x]` |
+| G14 | log-card.test.tsx | `dashboard/src/__tests__/voice-agent/dashboard/log-card.test.tsx` | ~80 | 340 | `[x]` |
+| | **Agent G Total** | **14 files** | **~1550** | **3369** | `[x]` |
 
 ---
 
@@ -114,9 +114,9 @@
 | 1 | C: Flow Builder | 9 | ~630 | 674 | `[x]` |
 | 2 | D: Edge Functions | 5 | ~770 | 1385 | `[x]` |
 | 2 | E: Dashboard Pages | 6 | ~1290 | ~1804 | `[x]` |
-| 3 | F: Integration | 3 | ~70 | — | `[ ]` |
-| 3 | G: Tests | 14 | ~1550 | — | `[ ]` |
-| | **TOTAL** | **45 files** | **~5150** | **—** | |
+| 3 | F: Integration | 3 | ~70 | ~67 | `[x]` |
+| 3 | G: Tests | 14 | ~1550 | 3369 | `[x]` |
+| | **TOTAL** | **45 files** | **~5150** | **~8562** | `[x]` |
 
 ---
 
