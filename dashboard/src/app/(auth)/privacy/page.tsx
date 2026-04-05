@@ -2,8 +2,8 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 export const metadata = {
-  title: "Privacy Policy - CabinetScan",
-  description: "Privacy Policy for CabinetScan 3D room scanning platform",
+  title: "Privacy Policy - CabinetScan by Nextlyn",
+  description: "Privacy Policy for CabinetScan 3D room scanning platform by NEXTLYN LLC",
 };
 
 export default function PrivacyPage() {

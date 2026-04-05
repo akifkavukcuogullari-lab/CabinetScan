@@ -2,8 +2,8 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 export const metadata = {
-  title: "Terms of Service - CabinetScan",
-  description: "Terms of Service for CabinetScan 3D room scanning platform",
+  title: "Terms of Service - CabinetScan by Nextlyn",
+  description: "Terms of Service for CabinetScan 3D room scanning platform by NEXTLYN LLC",
 };
 
 export default function TermsPage() {
