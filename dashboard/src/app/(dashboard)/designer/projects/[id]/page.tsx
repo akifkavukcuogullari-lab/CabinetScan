@@ -19,9 +19,11 @@ import {
   Image as ImageIcon,
   Video,
   PenTool,
+  Phone,
 } from 'lucide-react'
 import { PhotoLightbox } from '@/components/project/PhotoLightbox'
 import { WhiteboardGallery } from '@/components/project/WhiteboardGallery'
+import { VoiceAgentLogCard } from '@/components/voice-agent/VoiceAgentLogCard'
 
 interface DesignerProjectDetailPageProps {
   params: Promise<{ id: string }>
@@ -104,6 +106,17 @@ export default async function DesignerProjectDetailPage({ params }: DesignerProj
     .select('*')
     .eq('project_id', project.id)
     .order('created_at', { ascending: true })
+
+  // Check if voice agent is globally enabled
+  const { data: voiceAgentSetting } = await supabase
+    .from('platform_settings')
+    .select('value')
+    .eq('key', 'voice_agent_globally_enabled')
+    .limit(1)
+
+  const voiceAgentEnabled = voiceAgentSetting && voiceAgentSetting.length > 0
+    ? voiceAgentSetting[0].value === 'true'
+    : false
 
   // Extract measurement data
   const measurement = measurements && measurements.length > 0 ? measurements[0] : null
@@ -290,6 +303,22 @@ export default async function DesignerProjectDetailPage({ params }: DesignerProj
               </div>
               <CardContent className="p-4">
                 <WhiteboardGallery whiteboards={whiteboards} />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Voice Agent (read-only for designers) */}
+          {voiceAgentEnabled && (
+            <Card>
+              <div className="px-4 py-3 border-b bg-gray-50/50 flex items-center gap-2">
+                <Phone className="h-4 w-4 text-gray-500" />
+                <h3 className="font-semibold text-sm">Voice Agent Activity</h3>
+              </div>
+              <CardContent className="p-4">
+                <VoiceAgentLogCard
+                  projectId={project.id}
+                  showroomId={project.showroom_id}
+                />
               </CardContent>
             </Card>
           )}

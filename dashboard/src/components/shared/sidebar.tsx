@@ -28,6 +28,7 @@ import {
   Moon,
   Sun,
   TrendingUp,
+  Phone,
 } from 'lucide-react'
 import { NotificationBell } from '@/components/design/NotificationBell'
 import { useTheme } from 'next-themes'
@@ -64,6 +65,7 @@ const adminLinks: NavLink[] = [
   { href: '/admin/showrooms', label: 'Showrooms', icon: Building2 },
   { href: '/admin/categories', label: 'Categories', icon: LayoutGrid },
   { href: '/admin/designers', label: 'Designers', icon: PenTool },
+  { href: '/admin/voice-agent', label: 'Voice Agent', icon: Phone },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ]
 
@@ -72,6 +74,7 @@ const showroomLinks: NavLink[] = [
   { href: '/showroom/customers', label: 'Customers', icon: Users },
   { href: '/showroom/products', label: 'Products', icon: Package },
   { href: '/showroom/branding', label: 'Branding', icon: Palette },
+  { href: '/showroom/voice-agent', label: 'Voice Agent', icon: Phone },
   { href: '/showroom/billing', label: 'Billing', icon: CreditCard },
   { href: '/showroom/settings', label: 'Settings', icon: Settings },
 ]
