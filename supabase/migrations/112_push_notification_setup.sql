@@ -20,9 +20,13 @@ CREATE INDEX IF NOT EXISTS idx_device_tokens_push_lookup
 
 -- Allow showroom staff to update their project measurements (e.g., adding photos to scan row).
 -- This does NOT affect CabinetScan — the customer app never updates measurements.
-CREATE POLICY project_measurements_update ON project_measurements FOR UPDATE
-    USING (EXISTS (SELECT 1 FROM projects p WHERE p.id = project_measurements.project_id AND has_showroom_access(p.showroom_id)))
-    WITH CHECK (EXISTS (SELECT 1 FROM projects p WHERE p.id = project_measurements.project_id AND has_showroom_access(p.showroom_id)));
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'project_measurements_update' AND tablename = 'project_measurements') THEN
+    CREATE POLICY project_measurements_update ON project_measurements FOR UPDATE
+      USING (EXISTS (SELECT 1 FROM projects p WHERE p.id = project_measurements.project_id AND has_showroom_access(p.showroom_id)))
+      WITH CHECK (EXISTS (SELECT 1 FROM projects p WHERE p.id = project_measurements.project_id AND has_showroom_access(p.showroom_id)));
+  END IF;
+END $$;
 
 -- ============================================
 -- TRIGGER: Send push notification on new design_notifications

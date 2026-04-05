@@ -18,8 +18,10 @@ import {
   FileText,
   Image as ImageIcon,
   Video,
+  PenTool,
 } from 'lucide-react'
-import { PhotoLightbox } from './PhotoLightbox'
+import { PhotoLightbox } from '@/components/project/PhotoLightbox'
+import { WhiteboardGallery } from '@/components/project/WhiteboardGallery'
 
 interface DesignerProjectDetailPageProps {
   params: Promise<{ id: string }>
@@ -96,6 +98,13 @@ export default async function DesignerProjectDetailPage({ params }: DesignerProj
 
   const hasUploadedFiles = (designFiles?.length ?? 0) > 0
 
+  // Fetch whiteboards
+  const { data: whiteboards } = await supabase
+    .from('project_whiteboards')
+    .select('*')
+    .eq('project_id', project.id)
+    .order('created_at', { ascending: true })
+
   // Extract measurement data
   const measurement = measurements && measurements.length > 0 ? measurements[0] : null
   const hasFloorPlanData = measurement?.measurements?.walls?.length > 0 || measurement?.measurements?.room
@@ -109,7 +118,7 @@ export default async function DesignerProjectDetailPage({ params }: DesignerProj
       }
       if (m.visualization_photo_urls && Array.isArray(m.visualization_photo_urls)) {
         for (const photoUrl of m.visualization_photo_urls) {
-          photos.push({ url: photoUrl, label: 'Visualization Photo' })
+          photos.push({ url: photoUrl, label: `Photo ${photos.length + 1}` })
         }
       }
     }
@@ -265,6 +274,22 @@ export default async function DesignerProjectDetailPage({ params }: DesignerProj
                     </video>
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Whiteboards Section */}
+          {whiteboards && whiteboards.length > 0 && (
+            <Card>
+              <div className="px-4 py-3 border-b bg-gray-50/50 flex items-center gap-2">
+                <PenTool className="h-4 w-4 text-gray-500" />
+                <h3 className="font-semibold text-sm">Whiteboards</h3>
+                <Badge variant="secondary" className="text-xs ml-auto">
+                  {whiteboards.length}
+                </Badge>
+              </div>
+              <CardContent className="p-4">
+                <WhiteboardGallery whiteboards={whiteboards} />
               </CardContent>
             </Card>
           )}

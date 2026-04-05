@@ -580,6 +580,44 @@ export type Database = {
           updated_at?: string
         }
       }
+      project_whiteboards: {
+        Row: {
+          id: string
+          project_id: string
+          entry_type: 'drawing' | 'photo'
+          title: string | null
+          drawing_data_url: string | null
+          thumbnail_url: string | null
+          photo_url: string | null
+          created_by_showroom_user_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          entry_type: 'drawing' | 'photo'
+          title?: string | null
+          drawing_data_url?: string | null
+          thumbnail_url?: string | null
+          photo_url?: string | null
+          created_by_showroom_user_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          entry_type?: 'drawing' | 'photo'
+          title?: string | null
+          drawing_data_url?: string | null
+          thumbnail_url?: string | null
+          photo_url?: string | null
+          created_by_showroom_user_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
       project_selections: {
         Row: {
           id: string

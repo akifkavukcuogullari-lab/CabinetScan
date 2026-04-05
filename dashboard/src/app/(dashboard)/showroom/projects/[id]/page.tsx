@@ -24,7 +24,10 @@ import {
   Layers,
   FileCode,
   FileText,
-  Lock
+  Lock,
+  PenTool,
+  Image as ImageIcon,
+  Video,
 } from 'lucide-react'
 import { WebhookPayloadViewer } from '@/components/webhook/WebhookPayloadViewer'
 import { QuoteEmailSection } from '@/components/quote/QuoteEmailSection'
@@ -33,6 +36,8 @@ import { DesignRequestButton } from '@/components/design/DesignRequestButton'
 import { DesignStatusCard } from '@/components/design/DesignStatusCard'
 import { DesignFilesSection } from '@/components/design/DesignFilesSection'
 import { DesignChatWrapper } from '@/components/design/DesignChatWrapper'
+import { WhiteboardGallery } from '@/components/project/WhiteboardGallery'
+import { PhotoLightbox } from '@/components/project/PhotoLightbox'
 
 interface ProjectDetailPageProps {
   params: Promise<{ id: string }>
@@ -75,6 +80,19 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
 
   if (error || !project) {
     notFound()
+  }
+
+  // Get customer address
+  let customerAddress: string | null = null
+  if (project.customer_id) {
+    const { data: customer } = await supabase
+      .from('customers')
+      .select('address_line1, end_client_address')
+      .eq('id', project.customer_id)
+      .single()
+    if (customer) {
+      customerAddress = customer.end_client_address || customer.address_line1 || null
+    }
   }
 
   // Get measurements
@@ -159,9 +177,18 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     .eq('showroom_id', showroomUser.showroom_id)
     .single()
 
+  // Get whiteboards
+  const { data: whiteboards } = await supabase
+    .from('project_whiteboards')
+    .select('*')
+    .eq('project_id', id)
+    .order('created_at', { ascending: true })
+
   const statusColors: Record<string, string> = {
     draft: 'bg-gray-100 text-gray-800',
     submitted: 'bg-blue-100 text-blue-800',
+    design_requested: 'bg-indigo-100 text-indigo-800',
+    design_completed: 'bg-teal-100 text-teal-800',
     in_review: 'bg-yellow-100 text-yellow-800',
     quoted: 'bg-purple-100 text-purple-800',
     accepted: 'bg-green-100 text-green-800',
@@ -306,104 +333,61 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
 
     const supabase = await createClient()
 
-    // Get project with file URLs to delete from storage
-    const { data: projectData } = await supabase
-      .from('projects')
-      .select('scan_file_url, preview_image_url, video_url')
-      .eq('id', id)
-      .single()
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('Not authenticated')
 
-    // Get measurements with file URLs
-    const { data: measurementsData } = await supabase
-      .from('project_measurements')
-      .select('usdz_file_url, video_url, preview_image_url, visualization_photo_urls')
-      .eq('project_id', id)
-
-    // Collect all storage paths to delete
-    const storagePaths: string[] = []
-
-    // Helper to extract path from URL
-    const extractPath = (url: string | null | undefined, bucket: string) => {
-      if (!url) return null
-      const match = url.match(new RegExp(`/storage/v1/object/public/${bucket}/(.+)`))
-      return match ? match[1] : null
-    }
-
-    // Project files
-    if (projectData?.scan_file_url) {
-      const path = extractPath(projectData.scan_file_url, 'scans')
-      if (path) storagePaths.push(`scans/${path}`)
-    }
-    if (projectData?.preview_image_url) {
-      const path = extractPath(projectData.preview_image_url, 'scans')
-      if (path) storagePaths.push(`scans/${path}`)
-    }
-    if (projectData?.video_url) {
-      const path = extractPath(projectData.video_url, 'scans')
-      if (path) storagePaths.push(`scans/${path}`)
-    }
-
-    // Measurement files
-    if (measurementsData) {
-      for (const m of measurementsData) {
-        if (m.usdz_file_url) {
-          const path = extractPath(m.usdz_file_url, 'scans')
-          if (path) storagePaths.push(`scans/${path}`)
-        }
-        if (m.video_url) {
-          const path = extractPath(m.video_url, 'scans')
-          if (path) storagePaths.push(`scans/${path}`)
-        }
-        if (m.preview_image_url) {
-          const path = extractPath(m.preview_image_url, 'scans')
-          if (path) storagePaths.push(`scans/${path}`)
-        }
-        if (m.visualization_photo_urls && Array.isArray(m.visualization_photo_urls)) {
-          for (const photoUrl of m.visualization_photo_urls) {
-            const path = extractPath(photoUrl, 'scans')
-            if (path) storagePaths.push(`scans/${path}`)
-          }
-        }
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/delete-project`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ project_id: id }),
       }
-    }
+    )
 
-    // Delete files from storage (scans bucket)
-    if (storagePaths.length > 0) {
-      const pathsOnly = storagePaths.map(p => p.replace('scans/', ''))
-      console.log(`[DELETE PROJECT] Attempting to delete ${pathsOnly.length} files from storage:`, pathsOnly)
-
-      const { data: deleteResult, error: storageError } = await supabase.storage.from('scans').remove(pathsOnly)
-
-      if (storageError) {
-        console.error('[DELETE PROJECT] Storage delete error:', storageError)
-        // Continue with database deletion even if storage fails
-        // The files may need manual cleanup
-      } else {
-        console.log(`[DELETE PROJECT] Successfully deleted ${deleteResult?.length || 0} files from storage`)
-      }
-    }
-
-    // Delete related database records (cascade should handle most, but be explicit)
-    await supabase.from('quote_emails').delete().eq('project_id', id)
-    await supabase.from('project_addon_selections').delete().eq('project_id', id)
-    await supabase.from('project_selections').delete().eq('project_id', id)
-    await supabase.from('project_measurements').delete().eq('project_id', id)
-
-    // Finally delete the project
-    const { error } = await supabase.from('projects').delete().eq('id', id)
-
-    if (error) {
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }))
       console.error('Error deleting project:', error)
-      throw new Error('Failed to delete project')
+      throw new Error(error.error || 'Failed to delete project')
     }
-
-    // Redirect will happen on client side
   }
 
   // Extract scan data
   const measurement = measurements && measurements.length > 0 ? measurements[0] : null
   const hasFloorPlanData = measurement?.measurements?.walls?.length > 0 || measurement?.measurements?.room
   const hasScanData = hasFloorPlanData
+
+  // Collect photos from measurements
+  const photos: { url: string; label: string }[] = []
+  if (measurements) {
+    for (const m of measurements) {
+      if (m.preview_image_url) {
+        photos.push({ url: m.preview_image_url, label: 'Floor Plan Preview' })
+      }
+      if (m.visualization_photo_urls && Array.isArray(m.visualization_photo_urls)) {
+        for (const photoUrl of m.visualization_photo_urls) {
+          photos.push({ url: photoUrl, label: `Photo ${photos.length + 1}` })
+        }
+      }
+    }
+  }
+
+  // Collect videos from measurements
+  const videos: { url: string; thumbnail?: string | null; label: string }[] = []
+  if (measurements) {
+    for (const m of measurements) {
+      if (m.video_url) {
+        videos.push({
+          url: m.video_url,
+          thumbnail: m.video_thumbnail_url || null,
+          label: m.room_name || 'Room Video',
+        })
+      }
+    }
+  }
 
   return (
     <div className="max-w-full space-y-6">
@@ -419,8 +403,8 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             <h1 className="text-xl font-bold truncate">
               {project.customer_first_name} {project.customer_last_name}
             </h1>
-            <Badge className={statusColors[project.status]}>
-              {project.status.replace('_', ' ')}
+            <Badge className={statusColors[project.status] || 'bg-gray-100 text-gray-800'}>
+              {project.status.replaceAll('_', ' ')}
             </Badge>
           </div>
           <p className="text-sm text-gray-500">
@@ -489,6 +473,48 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             </Card>
           )}
 
+          {/* Photos Section */}
+          {photos.length > 0 && (
+            <Card>
+              <div className="px-4 py-3 border-b bg-gray-50/50 flex items-center gap-2">
+                <ImageIcon className="h-4 w-4 text-gray-500" />
+                <h3 className="font-semibold text-sm">Photos</h3>
+                <Badge variant="secondary" className="text-xs ml-auto">
+                  {photos.length}
+                </Badge>
+              </div>
+              <CardContent className="p-4">
+                <PhotoLightbox photos={photos} />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Videos Section */}
+          {videos.length > 0 && (
+            <Card>
+              <div className="px-4 py-3 border-b bg-gray-50/50 flex items-center gap-2">
+                <Video className="h-4 w-4 text-gray-500" />
+                <h3 className="font-semibold text-sm">Videos</h3>
+              </div>
+              <CardContent className="p-4 space-y-4">
+                {videos.map((v, idx) => (
+                  <div key={idx} className="space-y-1.5">
+                    <p className="text-sm font-medium text-gray-700">{v.label}</p>
+                    <video
+                      controls
+                      className="w-full rounded-lg bg-black max-h-[400px]"
+                      poster={v.thumbnail || undefined}
+                      preload="metadata"
+                    >
+                      <source src={v.url} />
+                      Your browser does not support the video tag.
+                    </video>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Expandable Sections */}
           <div className="space-y-3">
             {/* Room Measurements */}
@@ -538,13 +564,35 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                 </AccordionItem>
               </Accordion>
             )}
+
+            {/* Whiteboards */}
+            {whiteboards && whiteboards.length > 0 && (
+              <Accordion type="single" collapsible defaultValue="whiteboards">
+                <AccordionItem value="whiteboards" className="border rounded-lg px-4">
+                  <AccordionTrigger className="hover:no-underline py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-orange-100 rounded-lg">
+                        <PenTool className="h-4 w-4 text-orange-600" />
+                      </div>
+                      <div className="text-left">
+                        <h3 className="font-semibold text-gray-900">Whiteboards</h3>
+                        <p className="text-xs text-gray-500">{whiteboards.length} item{whiteboards.length === 1 ? '' : 's'}</p>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-1 pb-4">
+                    <WhiteboardGallery whiteboards={whiteboards} />
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            )}
           </div>
         </div>
 
         {/* Right Column - Sidebar */}
         <div className="lg:sticky lg:top-6 lg:self-start min-w-0 space-y-4">
           <ProjectSidebarWrapper
-            project={project}
+            project={{ ...project, customer_address: customerAddress }}
             measurement={measurement}
             canExportDxf={canExportDxf}
             visualizeKitchenEnabled={showroom?.visualize_kitchen_enabled ?? false}

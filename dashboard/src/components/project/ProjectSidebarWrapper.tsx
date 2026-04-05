@@ -25,6 +25,7 @@ interface Project {
   customer_last_name: string
   customer_email: string
   customer_phone?: string
+  customer_address?: string | null
   submitted_at?: string
   reviewed_at?: string
   completed_at?: string
