@@ -817,11 +817,8 @@ function FlowBuilderWrapper({
   flow: PostCallFlow
   onChange: (flow: PostCallFlow) => void
 }) {
-  const [FlowBuilderComponent, setFlowBuilderComponent] = useState<React.ComponentType<{
-    flow: { nodes: unknown[]; edges: unknown[] }
-    onChange: (flow: { nodes: unknown[]; edges: unknown[] }) => void
-    readOnly?: boolean
-  }> | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [FlowBuilderComponent, setFlowBuilderComponent] = useState<React.ComponentType<any> | null>(null)
 
   useEffect(() => {
     import('@/components/voice-agent/FlowBuilder')
@@ -829,7 +826,7 @@ function FlowBuilderWrapper({
         setFlowBuilderComponent(() => mod.FlowBuilder)
       })
       .catch(() => {
-        // FlowBuilder not available yet (Wave 1 may not be merged)
+        // FlowBuilder not available yet
         console.warn('FlowBuilder component not available')
       })
   }, [])
