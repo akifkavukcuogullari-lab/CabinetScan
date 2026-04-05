@@ -7,17 +7,17 @@
 
 -- Add source column to track project origin
 ALTER TABLE projects
-ADD COLUMN source TEXT NOT NULL DEFAULT 'ios_customer';
+ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'ios_customer';
 
 -- Add created_by_user_id to track which staff member created the project
 ALTER TABLE projects
-ADD COLUMN created_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+ADD COLUMN IF NOT EXISTS created_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
 
 -- Index for filtering projects by source within a showroom
-CREATE INDEX idx_projects_showroom_source ON projects(showroom_id, source);
+CREATE INDEX IF NOT EXISTS idx_projects_showroom_source ON projects(showroom_id, source);
 
 -- Partial index on created_by_user_id (only index rows where it's set)
-CREATE INDEX idx_projects_created_by_user ON projects(created_by_user_id)
+CREATE INDEX IF NOT EXISTS idx_projects_created_by_user ON projects(created_by_user_id)
     WHERE created_by_user_id IS NOT NULL;
 
 -- Documentation
