@@ -893,11 +893,8 @@ function FlowBuilderWrapper({
   flow: PostCallFlow
   onChange: (flow: PostCallFlow) => void
 }) {
-  const [FlowBuilderComponent, setFlowBuilderComponent] = useState<React.ComponentType<{
-    flow: { nodes: unknown[]; edges: unknown[] }
-    onChange: (flow: { nodes: unknown[]; edges: unknown[] }) => void
-    readOnly?: boolean
-  }> | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [FlowBuilderComponent, setFlowBuilderComponent] = useState<React.ComponentType<any> | null>(null)
 
   useEffect(() => {
     import('@/components/voice-agent/FlowBuilder')

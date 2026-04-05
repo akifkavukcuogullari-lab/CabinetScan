@@ -12,7 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Loader2, Search, Phone as PhoneIcon } from 'lucide-react'
+import { Loader2, Search, Phone as PhoneIcon, Filter, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import type { VoiceAgentLog, SimplifiedOutcome } from '@/types/voice-agent'
 import { OUTCOME_COLORS, OUTCOME_LABELS } from '@/types/voice-agent'
 
@@ -64,6 +65,9 @@ export function VoiceAgentActivityList({
   const [loading, setLoading] = useState(true)
   const [projects, setProjects] = useState<ProjectWithLogs[]>([])
   const [search, setSearch] = useState('')
+  const [outcomeFilter, setOutcomeFilter] = useState<string>('all')
+  const [flowStatusFilter, setFlowStatusFilter] = useState<string>('all')
+  const [dateFilter, setDateFilter] = useState<string>('all')
 
   useEffect(() => {
     async function loadActivity() {
@@ -127,15 +131,53 @@ export function VoiceAgentActivityList({
     loadActivity()
   }, [supabase, showroomId])
 
+  const hasActiveFilters = outcomeFilter !== 'all' || flowStatusFilter !== 'all' || dateFilter !== 'all'
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return projects
-    const q = search.toLowerCase()
-    return projects.filter(
-      (p) =>
-        p.customer_name.toLowerCase().includes(q) ||
-        p.reference_number.toLowerCase().includes(q)
-    )
-  }, [projects, search])
+    let result = projects
+
+    // Search filter
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      result = result.filter(
+        (p) =>
+          p.customer_name.toLowerCase().includes(q) ||
+          p.reference_number.toLowerCase().includes(q)
+      )
+    }
+
+    // Outcome filter
+    if (outcomeFilter !== 'all') {
+      result = result.filter((p) => p.latest_outcome === outcomeFilter)
+    }
+
+    // Flow status filter
+    if (flowStatusFilter !== 'all') {
+      result = result.filter((p) => p.flow_status === flowStatusFilter)
+    }
+
+    // Date filter
+    if (dateFilter !== 'all') {
+      const now = new Date()
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const startOfYesterday = new Date(startOfToday.getTime() - 86400000)
+      const startOfWeek = new Date(startOfToday.getTime() - startOfToday.getDay() * 86400000)
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
+      result = result.filter((p) => {
+        const d = new Date(p.last_activity)
+        switch (dateFilter) {
+          case 'today': return d >= startOfToday
+          case 'yesterday': return d >= startOfYesterday && d < startOfToday
+          case 'this_week': return d >= startOfWeek
+          case 'this_month': return d >= startOfMonth
+          default: return true
+        }
+      })
+    }
+
+    return result
+  }, [projects, search, outcomeFilter, flowStatusFilter, dateFilter])
 
   if (loading) {
     return (
@@ -173,6 +215,76 @@ export function VoiceAgentActivityList({
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9"
         />
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 text-sm text-gray-500">
+          <Filter className="h-3.5 w-3.5" />
+          Filters:
+        </div>
+
+        <select
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className="text-sm border rounded-md px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Time</option>
+          <option value="today">Today</option>
+          <option value="yesterday">Yesterday</option>
+          <option value="this_week">This Week</option>
+          <option value="this_month">This Month</option>
+        </select>
+
+        <select
+          value={outcomeFilter}
+          onChange={(e) => setOutcomeFilter(e.target.value)}
+          className="text-sm border rounded-md px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Outcomes</option>
+          <option value="no_answer">No Answer</option>
+          <option value="line_busy">Line Busy</option>
+          <option value="voicemail">Voicemail</option>
+          <option value="ghosted">Ghosted</option>
+          <option value="interested">Interested</option>
+          <option value="not_interested">Not Interested</option>
+          <option value="link_sent">Link Sent</option>
+          <option value="callback_requested">Callback Requested</option>
+          <option value="hung_up_early">Hung Up Early</option>
+          <option value="technical_error">Technical Error</option>
+        </select>
+
+        <select
+          value={flowStatusFilter}
+          onChange={(e) => setFlowStatusFilter(e.target.value)}
+          className="text-sm border rounded-md px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Statuses</option>
+          <option value="active">Active</option>
+          <option value="waiting">Waiting</option>
+          <option value="completed">Completed</option>
+          <option value="stopped">Stopped</option>
+        </select>
+
+        {hasActiveFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-gray-500"
+            onClick={() => {
+              setOutcomeFilter('all')
+              setFlowStatusFilter('all')
+              setDateFilter('all')
+            }}
+          >
+            <X className="h-3 w-3 mr-1" />
+            Clear
+          </Button>
+        )}
+
+        <span className="text-xs text-gray-400 ml-auto">
+          {filtered.length} of {projects.length} projects
+        </span>
       </div>
 
       {/* Table */}
