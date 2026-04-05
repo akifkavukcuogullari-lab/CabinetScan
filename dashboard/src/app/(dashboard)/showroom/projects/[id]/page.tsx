@@ -29,6 +29,7 @@ import {
   Image as ImageIcon,
   Video,
   Phone,
+  Zap,
 } from 'lucide-react'
 import { WebhookPayloadViewer } from '@/components/webhook/WebhookPayloadViewer'
 import { QuoteEmailSection } from '@/components/quote/QuoteEmailSection'
@@ -553,35 +554,6 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
               assistantAvatarUrl={showroomAiSettings?.ai_assistant_avatar_url || null}
             />
 
-            {/* Voice Agent */}
-            {voiceAgentEnabled && (
-              <Accordion type="single" collapsible>
-                <AccordionItem value="voice-agent" className="border rounded-lg px-4">
-                  <AccordionTrigger className="hover:no-underline py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-green-100 rounded-lg">
-                        <Phone className="h-4 w-4 text-green-600" />
-                      </div>
-                      <div className="text-left">
-                        <h3 className="font-semibold text-gray-900">Voice Agent</h3>
-                      </div>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="pt-1 pb-4 space-y-4">
-                    <VoiceAgentLogCard
-                      projectId={project.id}
-                      showroomId={showroomUser.showroom_id}
-                    />
-                    <TriggerCallButton
-                      projectId={project.id}
-                      showroomId={showroomUser.showroom_id}
-                      customerPhone={project.customer_phone || ''}
-                    />
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            )}
-
             {/* Webhook Payload */}
             {project.webhook_payload && (
               <WebhookPayloadViewer payload={project.webhook_payload as Record<string, unknown>} />
@@ -650,21 +622,49 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             onDeleteProject={deleteProject}
           />
 
-          {/* Design Request Section */}
-          {!designRequest ? (
-            <DesignRequestButton
+          {/* Quick Actions */}
+          {(!designRequest || voiceAgentEnabled) && (
+            <Card>
+              <div className="px-4 py-3 border-b bg-gray-50/50 flex items-center gap-2">
+                <Zap className="h-4 w-4 text-amber-500" />
+                <h3 className="font-semibold text-sm">Quick Actions</h3>
+              </div>
+              <CardContent className="p-4 space-y-3">
+                {!designRequest && (
+                  <DesignRequestButton
+                    projectId={project.id}
+                    showroomId={showroomUser.showroom_id}
+                    hasExistingRequest={false}
+                  />
+                )}
+                {voiceAgentEnabled && (
+                  <TriggerCallButton
+                    projectId={project.id}
+                    showroomId={showroomUser.showroom_id}
+                    customerPhone={project.customer_phone || ''}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Voice Agent Activity Log */}
+          {voiceAgentEnabled && (
+            <VoiceAgentLogCard
               projectId={project.id}
               showroomId={showroomUser.showroom_id}
-              hasExistingRequest={false}
             />
-          ) : (
+          )}
+
+          {/* Design Status & Files */}
+          {designRequest && (
             <>
               <DesignStatusCard
                 designRequest={designRequest}
                 designerName={(designRequest as any)?.designers?.full_name}
               />
 
-              {/* Design Chat - always visible for showroom side as a shared notepad */}
+              {/* Design Chat */}
               {currentShowroomUser && (
                 <DesignChatWrapper
                   designRequestId={designRequest.id}
@@ -673,7 +673,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
                 />
               )}
 
-              {/* Design Files - available once delivered or later */}
+              {/* Design Files */}
               {['delivered', 'approved', 'revision_requested', 'completed'].includes(designRequest.status) && (
                 <DesignFilesSection designRequestId={designRequest.id} />
               )}
