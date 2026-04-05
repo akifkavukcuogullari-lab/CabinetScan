@@ -569,7 +569,7 @@ serve(async (req) => {
     logTiming('Before showroom query')
     const { data: showroom, error: showroomError } = await supabaseAdmin
       .from('showrooms')
-      .select('id, name, showroom_code, webhook_url, notification_emails, phone, email')
+      .select('id, name, showroom_code, webhook_url, notification_emails, phone, email, address_line1, city, state, postal_code')
       .eq('id', submission.showroom_id)
       .eq('is_active', true)
       .single()
@@ -1054,6 +1054,78 @@ serve(async (req) => {
             console.error('[EMAIL] Error fetching branding for notifications:', err)
           })
       }
+    }
+
+    // Voice Agent trigger (async, non-blocking)
+    try {
+      const { data: vaGlobal } = await supabaseAdmin
+        .from('platform_settings')
+        .select('value')
+        .eq('key', 'voice_agent_globally_enabled')
+        .single()
+
+      if (vaGlobal?.value === 'true') {
+        const { data: vaSettings } = await supabaseAdmin
+          .from('voice_agent_showroom_settings')
+          .select('enabled, trigger_mode')
+          .eq('showroom_id', submission.showroom_id)
+          .single()
+
+        if (vaSettings?.enabled && vaSettings.trigger_mode !== 'manual') {
+          const normalizedPhone = normalizePhone(submission.customer.phone)
+
+          fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/voice-agent-trigger`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              project_id: project.id,
+              showroom_id: submission.showroom_id,
+              customer: {
+                id: customerId,
+                first_name: submission.customer.first_name,
+                last_name: submission.customer.last_name,
+                phone_normalized: normalizedPhone,
+                email: submission.customer.email || null,
+                customer_type: submission.customer.customer_type || 'homeowner',
+                address_line1: submission.customer.address_line1 || null,
+                city: submission.customer.city || null,
+                state: submission.customer.state || null,
+                zip_code: submission.customer.zip_code || null,
+              },
+              end_client: submission.end_client || {
+                first_name: null,
+                last_name: null,
+                phone: null,
+                email: null,
+                address: null,
+              },
+              project: {
+                name: submission.project.name,
+                reference_number: referenceNumber,
+                notes: submission.project.notes || null,
+                status: 'submitted',
+                submitted_at: new Date().toISOString(),
+              },
+              showroom: {
+                name: showroom.name,
+                phone: showroom.phone || null,
+                email: showroom.email || null,
+                address_line1: (showroom as any).address_line1 || null,
+                city: (showroom as any).city || null,
+                state: (showroom as any).state || null,
+                postal_code: (showroom as any).postal_code || null,
+                showroom_code: showroom.showroom_code,
+              },
+              triggered_by: 'system',
+            }),
+          }).catch((err) => console.error('[VOICE_AGENT] Trigger error:', err))
+        }
+      }
+    } catch (err) {
+      console.error('[VOICE_AGENT] Settings check error:', err)
     }
 
     logTiming('Returning response')
