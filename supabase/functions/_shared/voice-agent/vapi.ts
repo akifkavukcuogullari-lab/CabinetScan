@@ -42,9 +42,14 @@ export async function initiateVapiCall(options: InitiateCallOptions): Promise<In
   })
 
   try {
-    const [vapiApiKey, vapiPhoneNumberId] = await Promise.all([
+    const [vapiApiKey, vapiPhoneNumberId, llmProvider, llmModel, voiceProvider, voiceId, defaultFirstMessage] = await Promise.all([
       getPlatformSetting('vapi_api_key'),
       getPlatformSetting('vapi_phone_number_id'),
+      getPlatformSetting('va_llm_provider'),
+      getPlatformSetting('va_llm_model'),
+      getPlatformSetting('va_voice_provider'),
+      getPlatformSetting('va_voice_id'),
+      getPlatformSetting('va_first_message'),
     ])
 
     if (!vapiApiKey) {
@@ -78,8 +83,8 @@ export async function initiateVapiCall(options: InitiateCallOptions): Promise<In
 
     const assistantConfig: Record<string, unknown> = {
       model: {
-        provider: 'openai',
-        model: 'gpt-4o',
+        provider: llmProvider || 'openai',
+        model: llmModel || 'gpt-4o',
         messages: [
           {
             role: 'system',
@@ -88,10 +93,10 @@ export async function initiateVapiCall(options: InitiateCallOptions): Promise<In
         ],
       },
       voice: {
-        provider: '11labs',
-        voiceId: '21m00Tcm4TlvDq8ikWAM',
+        provider: voiceProvider || '11labs',
+        voiceId: voiceId || '21m00Tcm4TlvDq8ikWAM',
       },
-      firstMessage: firstMessage || 'Hi, this is the scheduling assistant. How are you today?',
+      firstMessage: firstMessage || defaultFirstMessage || 'Hi, this is the scheduling assistant. How are you today?',
       serverUrl,
     }
 
