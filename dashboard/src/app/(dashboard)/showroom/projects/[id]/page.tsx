@@ -24,11 +24,14 @@ import {
   Layers,
   FileCode,
   FileText,
-  Lock
+  Lock,
+  Phone,
 } from 'lucide-react'
 import { WebhookPayloadViewer } from '@/components/webhook/WebhookPayloadViewer'
 import { QuoteEmailSection } from '@/components/quote/QuoteEmailSection'
 import { ChatHistorySection } from '@/components/project/ChatHistorySection'
+import { VoiceAgentLogCard } from '@/components/voice-agent/VoiceAgentLogCard'
+import { TriggerCallButton } from '@/components/voice-agent/TriggerCallButton'
 
 interface ProjectDetailPageProps {
   params: Promise<{ id: string }>
@@ -60,6 +63,17 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   // Check if DXF export is available based on plan
   const hasAutocadExport = hasFeature(showroom?.subscription_plan as SubscriptionPlan | null, 'autocadExport')
   const canExportDxf = hasAutocadExport
+
+  // Check if voice agent is globally enabled
+  const { data: voiceAgentSetting } = await supabase
+    .from('platform_settings')
+    .select('value')
+    .eq('key', 'voice_agent_globally_enabled')
+    .limit(1)
+
+  const voiceAgentEnabled = voiceAgentSetting && voiceAgentSetting.length > 0
+    ? voiceAgentSetting[0].value === 'true'
+    : false
 
   // Get project with measurements and selections
   const { data: project, error } = await supabase
@@ -493,6 +507,35 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
               assistantName={showroomAiSettings?.ai_assistant_name || 'Design Assistant'}
               assistantAvatarUrl={showroomAiSettings?.ai_assistant_avatar_url || null}
             />
+
+            {/* Voice Agent */}
+            {voiceAgentEnabled && (
+              <Accordion type="single" collapsible>
+                <AccordionItem value="voice-agent" className="border rounded-lg px-4">
+                  <AccordionTrigger className="hover:no-underline py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-100 rounded-lg">
+                        <Phone className="h-4 w-4 text-green-600" />
+                      </div>
+                      <div className="text-left">
+                        <h3 className="font-semibold text-gray-900">Voice Agent</h3>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-1 pb-4 space-y-4">
+                    <VoiceAgentLogCard
+                      projectId={project.id}
+                      showroomId={showroomUser.showroom_id}
+                    />
+                    <TriggerCallButton
+                      projectId={project.id}
+                      showroomId={showroomUser.showroom_id}
+                      customerPhone={project.customer_phone || ''}
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            )}
 
             {/* Webhook Payload */}
             {project.webhook_payload && (
