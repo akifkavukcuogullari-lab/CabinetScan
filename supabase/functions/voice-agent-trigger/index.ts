@@ -25,19 +25,95 @@ serve(async (req) => {
   }
 
   try {
-    const payload: VoiceAgentTriggerPayload = await req.json()
+    let payload: VoiceAgentTriggerPayload = await req.json()
     console.log('[VOICE_TRIGGER] Received payload', {
       project_id: payload.project_id,
       showroom_id: payload.showroom_id,
       triggered_by: payload.triggered_by,
     })
 
-    // 1. Validate payload
-    if (!payload.project_id || !payload.showroom_id || !payload.customer?.phone_normalized) {
+    // 1. Validate minimal fields
+    if (!payload.project_id || !payload.showroom_id) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: project_id, showroom_id, customer.phone_normalized' }),
+        JSON.stringify({ error: 'Missing required fields: project_id, showroom_id' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
+
+    // 1b. For manual triggers (or any call without full customer data), auto-fetch from DB
+    if (!payload.customer?.phone_normalized) {
+      console.log('[VOICE_TRIGGER] No customer data in payload, fetching from database...')
+
+      const { data: project, error: projErr } = await supabaseAdmin
+        .from('projects')
+        .select('*, customers(*)')
+        .eq('id', payload.project_id)
+        .single()
+
+      if (projErr || !project) {
+        return new Response(
+          JSON.stringify({ error: 'Project not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const customer = project.customers || {}
+      const customerPhone = customer.phone_normalized || customer.phone || project.customer_phone
+      if (!customerPhone) {
+        return new Response(
+          JSON.stringify({ error: 'No customer phone number available for this project' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const { data: showroom } = await supabaseAdmin
+        .from('showrooms')
+        .select('name, phone, email, address_line1, city, state, postal_code, showroom_code')
+        .eq('id', payload.showroom_id)
+        .single()
+
+      payload = {
+        project_id: payload.project_id,
+        showroom_id: payload.showroom_id,
+        triggered_by: payload.triggered_by || 'manual',
+        customer: {
+          id: customer.id || '',
+          first_name: customer.first_name || project.customer_first_name || '',
+          last_name: customer.last_name || project.customer_last_name || '',
+          phone_normalized: customerPhone,
+          email: customer.email || project.customer_email || null,
+          customer_type: customer.customer_type || 'homeowner',
+          address_line1: customer.address_line1 || null,
+          city: customer.city || null,
+          state: customer.state || null,
+          zip_code: customer.zip_code || null,
+        },
+        end_client: {
+          first_name: null,
+          last_name: null,
+          phone: null,
+          email: null,
+          address: null,
+        },
+        project: {
+          name: project.project_name || '',
+          reference_number: project.reference_number || '',
+          notes: project.project_notes || null,
+          status: project.status || 'submitted',
+          submitted_at: project.submitted_at || project.created_at || new Date().toISOString(),
+        },
+        showroom: {
+          name: showroom?.name || '',
+          phone: showroom?.phone || null,
+          email: showroom?.email || null,
+          address_line1: showroom?.address_line1 || null,
+          city: showroom?.city || null,
+          state: showroom?.state || null,
+          postal_code: showroom?.postal_code || null,
+          showroom_code: showroom?.showroom_code || '',
+        },
+      }
+      console.log('[VOICE_TRIGGER] Built payload from database for', customerPhone)
     }
 
     // 2. Check global enable
