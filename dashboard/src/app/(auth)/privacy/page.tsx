@@ -2,12 +2,12 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 export const metadata = {
-  title: "Privacy Policy - CabinetScan",
-  description: "Privacy Policy for CabinetScan 3D room scanning platform",
+  title: "Privacy Policy - CabinetScan by Nextlyn",
+  description: "Privacy Policy for CabinetScan 3D room scanning platform by NEXTLYN LLC",
 };
 
 export default function PrivacyPage() {
-  const lastUpdated = "January 4, 2025";
+  const lastUpdated = "April 5, 2026";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -108,6 +108,7 @@ export default function PrivacyPage() {
               <li><strong>Quote Generation:</strong> To share your room data with the showroom so they can provide you with quotes</li>
               <li><strong>Service Improvement:</strong> To analyze usage patterns and improve our scanning technology</li>
               <li><strong>Legal Compliance:</strong> To comply with legal obligations and protect our rights</li>
+              <li><strong>SMS Communications:</strong> We may use your phone number to send you appointment reminders, pre-call notifications, post-call follow-ups, and promotional messages via SMS on behalf of cabinet showrooms. Message and data rates may apply. You can opt out at any time by replying STOP.</li>
             </ul>
           </section>
 
@@ -243,9 +244,10 @@ export default function PrivacyPage() {
             <p className="text-gray-600 leading-relaxed">
               If you have any questions about this Privacy Policy or our data practices, please contact us:
             </p>
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-1">
               <p className="text-gray-700"><strong>NEXTLYN LLC</strong></p>
               <p className="text-gray-600">Email: <a href="mailto:contact@nextlyn.ai" className="text-blue-600 hover:underline">contact@nextlyn.ai</a></p>
+              <p className="text-gray-600">Phone: <a href="tel:+18569795500" className="text-blue-600 hover:underline">(856) 979-5500</a></p>
               <p className="text-gray-600">Website: <a href="https://nextlyn.ai" className="text-blue-600 hover:underline">https://nextlyn.ai</a></p>
             </div>
           </section>

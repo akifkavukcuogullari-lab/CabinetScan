@@ -505,7 +505,7 @@ export default function NewProductPage() {
               </CardContent>
             </Card>
 
-            {/* Color Variants - Only show for Cabinet Model category */}
+            {/* Color Variants - Only show for Cabinet Style category */}
             {isCabinetModel && (
               <Card>
                 <CardHeader>
@@ -516,7 +516,7 @@ export default function NewProductPage() {
                         Color Variants
                       </CardTitle>
                       <CardDescription>
-                        Add available colors for this cabinet model
+                        Add available colors for this cabinet style
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">

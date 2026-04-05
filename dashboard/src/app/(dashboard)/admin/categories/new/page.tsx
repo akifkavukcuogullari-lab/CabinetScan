@@ -116,7 +116,7 @@ export default function NewCategoryPage() {
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                placeholder="Cabinet Model"
+                placeholder="Cabinet Style"
                 required
               />
             </div>
@@ -128,7 +128,7 @@ export default function NewCategoryPage() {
                 name="slug"
                 value={formData.slug}
                 onChange={handleChange}
-                placeholder="cabinet-model"
+                placeholder="cabinet-style"
               />
               <p className="text-xs text-gray-500">
                 URL-friendly identifier. Auto-generated from name if left empty.

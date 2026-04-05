@@ -2,12 +2,12 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 export const metadata = {
-  title: "Terms of Service - CabinetScan",
-  description: "Terms of Service for CabinetScan 3D room scanning platform",
+  title: "Terms of Service - CabinetScan by Nextlyn",
+  description: "Terms of Service for CabinetScan 3D room scanning platform by NEXTLYN LLC",
 };
 
 export default function TermsPage() {
-  const lastUpdated = "January 4, 2025";
+  const lastUpdated = "April 5, 2026";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -55,6 +55,14 @@ export default function TermsPage() {
             <p className="text-gray-600 leading-relaxed mt-4">
               The Service uses Apple&apos;s RoomPlan framework to capture 3D room data. Accuracy of measurements
               depends on device capabilities, room conditions, and proper scanning technique.
+            </p>
+
+            <h3 className="text-lg font-medium text-gray-800 mt-6 mb-3">2.1 SMS Messaging Program</h3>
+            <p className="text-gray-600 leading-relaxed">
+              Nextlyn operates an SMS messaging program to send appointment reminders, scheduling links,
+              and promotional messages on behalf of participating cabinet showrooms. Message frequency varies.
+              Message and data rates may apply. To opt out, reply STOP. For help, reply HELP. For support,
+              contact <a href="mailto:contact@nextlyn.ai" className="text-blue-600 hover:underline">contact@nextlyn.ai</a>.
             </p>
           </section>
 
@@ -324,9 +332,10 @@ export default function TermsPage() {
             <p className="text-gray-600 leading-relaxed">
               If you have any questions about these Terms, please contact us:
             </p>
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-1">
               <p className="text-gray-700"><strong>NEXTLYN LLC</strong></p>
               <p className="text-gray-600">Email: <a href="mailto:contact@nextlyn.ai" className="text-blue-600 hover:underline">contact@nextlyn.ai</a></p>
+              <p className="text-gray-600">Phone: <a href="tel:+18569795500" className="text-blue-600 hover:underline">(856) 979-5500</a></p>
               <p className="text-gray-600">Website: <a href="https://nextlyn.ai" className="text-blue-600 hover:underline">https://nextlyn.ai</a></p>
             </div>
           </section>

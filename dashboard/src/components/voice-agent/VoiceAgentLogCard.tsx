@@ -3,13 +3,21 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { Loader2, MapPin, MessageSquare, Phone, Clock } from 'lucide-react'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet'
+import { Loader2, MapPin, MessageSquare, Phone, Clock, GitBranch } from 'lucide-react'
 import type { VoiceAgentLog, SimplifiedOutcome } from '@/types/voice-agent'
 import { OUTCOME_COLORS, OUTCOME_LABELS } from '@/types/voice-agent'
 
@@ -66,6 +74,17 @@ export function VoiceAgentLogCard({ projectId, showroomId }: VoiceAgentLogCardPr
   const supabase = createClient()
   const [logs, setLogs] = useState<VoiceAgentLog[]>([])
   const [loading, setLoading] = useState(true)
+  const [flowSheetOpen, setFlowSheetOpen] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [FlowDebuggerComponent, setFlowDebuggerComponent] = useState<React.ComponentType<any> | null>(null)
+
+  // Lazy-load FlowDebugger when sheet is opened
+  useEffect(() => {
+    if (!flowSheetOpen) return
+    import('@/components/voice-agent/VoiceAgentFlowDebugger')
+      .then((mod) => setFlowDebuggerComponent(() => mod.VoiceAgentFlowDebugger))
+      .catch(() => console.warn('FlowDebugger not available'))
+  }, [flowSheetOpen])
 
   useEffect(() => {
     async function loadLogs() {
@@ -106,6 +125,49 @@ export function VoiceAgentLogCard({ projectId, showroomId }: VoiceAgentLogCardPr
 
   return (
     <div className="space-y-3">
+      {/* View Flow Debug button */}
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setFlowSheetOpen(true)}
+          className="gap-2"
+        >
+          <GitBranch className="h-3.5 w-3.5" />
+          View Flow Debug
+        </Button>
+      </div>
+
+      {/* Flow Debugger Sheet */}
+      <Sheet open={flowSheetOpen} onOpenChange={setFlowSheetOpen}>
+        <SheetContent side="right" className="w-[90vw] sm:w-[80vw] sm:max-w-[80vw]">
+          <SheetHeader>
+            <SheetTitle>Flow Debugger</SheetTitle>
+            <SheetDescription>
+              Visual timeline of the voice agent flow for this project.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 overflow-auto mt-4">
+            {FlowDebuggerComponent ? (
+              <div className="h-[calc(100vh-140px)]">
+                <FlowDebuggerComponent
+                  projectId={projectId}
+                  showroomId={showroomId}
+                />
+              </div>
+            ) : (
+              <div className="h-[400px] border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center">
+                <div className="text-center text-gray-400">
+                  <GitBranch className="h-8 w-8 mx-auto mb-2" />
+                  <p className="text-sm font-medium">Flow Debugger</p>
+                  <p className="text-xs">Loading flow debugger...</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
       {logs.map((log) => (
         <div
           key={log.id}

@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../_shared/supabase.ts'
 interface ProductVariant {
   id: string
   name: string
+  sku: string | null
   color_code: string | null
   price: number | null
   price_coefficient: number
@@ -200,6 +201,7 @@ serve(async (req) => {
       variantsByProduct[v.product_id].push({
         id: v.id,
         name: v.name,
+        sku: v.sku,
         color_code: v.color_code,
         price: v.price,
         price_coefficient: v.price_coefficient || 1.0,

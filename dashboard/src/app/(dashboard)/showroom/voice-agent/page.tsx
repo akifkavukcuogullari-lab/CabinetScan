@@ -25,8 +25,11 @@ import {
   Settings,
   MessageSquare,
   GitBranch,
+  Activity,
+  ArrowLeft,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { VoiceAgentActivityList } from '@/components/voice-agent/VoiceAgentActivityList'
 import type { VoiceAgentShowroomSettings, PostCallFlow } from '@/types/voice-agent'
 
 // Default post-call flow
@@ -153,6 +156,18 @@ export default function ShowroomVoiceAgentPage() {
   // Master defaults for placeholders
   const [masterSmsDefault, setMasterSmsDefault] = useState('')
   const [masterPromptDefault, setMasterPromptDefault] = useState('')
+
+  // Activity tab state
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [FlowDebuggerComponent, setFlowDebuggerComponent] = useState<React.ComponentType<any> | null>(null)
+
+  // Lazy-load FlowDebugger (depends on React Flow)
+  useEffect(() => {
+    import('@/components/voice-agent/VoiceAgentFlowDebugger')
+      .then((mod) => setFlowDebuggerComponent(() => mod.VoiceAgentFlowDebugger))
+      .catch(() => console.warn('FlowDebugger not available'))
+  }, [])
 
   // Check platform-level enabled
   useEffect(() => {
@@ -438,7 +453,7 @@ export default function ShowroomVoiceAgentPage() {
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="general" className="gap-2">
             <Settings className="h-4 w-4" />
             General
@@ -450,6 +465,10 @@ export default function ShowroomVoiceAgentPage() {
           <TabsTrigger value="flow" className="gap-2">
             <GitBranch className="h-4 w-4" />
             Post-Call Flow
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="gap-2" onClick={() => setSelectedProjectId(null)}>
+            <Activity className="h-4 w-4" />
+            Activity
           </TabsTrigger>
         </TabsList>
 
@@ -801,6 +820,63 @@ export default function ShowroomVoiceAgentPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ---- Activity Tab ---- */}
+        <TabsContent value="activity">
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                {selectedProjectId ? (
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedProjectId(null)}
+                      className="gap-1 -ml-2"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Back to Activity
+                    </Button>
+                    <span>Flow Debugger</span>
+                  </div>
+                ) : (
+                  'Voice Agent Activity'
+                )}
+              </CardTitle>
+              {!selectedProjectId && (
+                <CardDescription>
+                  View all voice agent call activity across your projects. Click a row to
+                  inspect the flow.
+                </CardDescription>
+              )}
+            </CardHeader>
+            <CardContent>
+              {selectedProjectId ? (
+                FlowDebuggerComponent ? (
+                  <div className="h-[600px]">
+                    <FlowDebuggerComponent
+                      projectId={selectedProjectId}
+                      showroomId={showroomId!}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-[400px] border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center">
+                    <div className="text-center text-gray-400">
+                      <GitBranch className="h-8 w-8 mx-auto mb-2" />
+                      <p className="text-sm font-medium">Flow Debugger</p>
+                      <p className="text-xs">Loading flow debugger...</p>
+                    </div>
+                  </div>
+                )
+              ) : showroomId ? (
+                <VoiceAgentActivityList
+                  showroomId={showroomId}
+                  onSelectProject={setSelectedProjectId}
+                />
+              ) : null}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   )
@@ -817,8 +893,11 @@ function FlowBuilderWrapper({
   flow: PostCallFlow
   onChange: (flow: PostCallFlow) => void
 }) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [FlowBuilderComponent, setFlowBuilderComponent] = useState<React.ComponentType<any> | null>(null)
+  const [FlowBuilderComponent, setFlowBuilderComponent] = useState<React.ComponentType<{
+    flow: { nodes: unknown[]; edges: unknown[] }
+    onChange: (flow: { nodes: unknown[]; edges: unknown[] }) => void
+    readOnly?: boolean
+  }> | null>(null)
 
   useEffect(() => {
     import('@/components/voice-agent/FlowBuilder')
@@ -826,7 +905,7 @@ function FlowBuilderWrapper({
         setFlowBuilderComponent(() => mod.FlowBuilder)
       })
       .catch(() => {
-        // FlowBuilder not available yet
+        // FlowBuilder not available yet (Wave 1 may not be merged)
         console.warn('FlowBuilder component not available')
       })
   }, [])
