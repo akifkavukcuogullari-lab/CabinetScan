@@ -74,7 +74,7 @@ const showroomLinks: NavLink[] = [
   { href: '/showroom/customers', label: 'Customers', icon: Users },
   { href: '/showroom/products', label: 'Products', icon: Package },
   { href: '/showroom/branding', label: 'Branding', icon: Palette },
-  { href: '/showroom/voice-agent', label: 'Voice Agent', icon: Phone },
+  { href: '/showroom/voice-agent', label: 'Voice Agent', icon: Phone, requiredFeature: 'voiceAgent' },
   { href: '/showroom/billing', label: 'Billing', icon: CreditCard },
   { href: '/showroom/settings', label: 'Settings', icon: Settings },
 ]
