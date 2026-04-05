@@ -277,7 +277,7 @@ serve(async (req) => {
       .insert({
         showroom_id: payload.showroom_id,
         project_id: payload.project_id,
-        customer_id: payload.customer.id,
+        customer_id: payload.customer.id || null,
         customer_phone: payload.customer.phone_normalized,
         sms_status: 'pending',
         call_status: 'pending',
@@ -294,9 +294,9 @@ serve(async (req) => {
       .single()
 
     if (logError || !logRow) {
-      console.error('[VOICE_TRIGGER] Failed to create log row:', logError)
+      console.error('[VOICE_TRIGGER] Failed to create log row:', JSON.stringify(logError))
       return new Response(
-        JSON.stringify({ error: 'Failed to create voice agent log' }),
+        JSON.stringify({ error: 'Failed to create voice agent log', details: logError?.message || 'Unknown error' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
