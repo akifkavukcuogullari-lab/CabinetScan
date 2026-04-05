@@ -54,6 +54,9 @@ interface ProjectSidebarWrapperProps {
   canExportDxf?: boolean
   visualizeKitchenEnabled?: boolean
   hasPriceCatalog?: boolean
+  showroomId?: string
+  designRequest?: any
+  voiceAgentEnabled?: boolean
   onStatusChange: (status: string) => Promise<void>
   onCreateQuote?: () => Promise<void>
   onDeleteProject?: () => Promise<void>
@@ -65,6 +68,9 @@ export function ProjectSidebarWrapper({
   canExportDxf,
   visualizeKitchenEnabled = false,
   hasPriceCatalog = false,
+  showroomId,
+  designRequest,
+  voiceAgentEnabled = false,
   onStatusChange,
   onCreateQuote,
   onDeleteProject
@@ -268,6 +274,9 @@ export function ProjectSidebarWrapper({
         canExportDxf={canExportDxf}
         visualizeKitchenEnabled={visualizeKitchenEnabled}
         currentPlan={currentPlan}
+        showroomId={showroomId}
+        designRequest={designRequest}
+        voiceAgentEnabled={voiceAgentEnabled}
         onStatusChange={onStatusChange}
         onCreateQuote={handleCreateQuote}
         onVisualizeKitchen={handleVisualizeKitchen}

@@ -38,6 +38,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { DesignRequestButton } from '@/components/design/DesignRequestButton'
+import { TriggerCallButton } from '@/components/voice-agent/TriggerCallButton'
 
 interface Project {
   id: string
@@ -78,6 +80,9 @@ interface ProjectSidebarProps {
   canExportDxf?: boolean
   visualizeKitchenEnabled?: boolean
   currentPlan?: SubscriptionPlan | null
+  showroomId?: string
+  designRequest?: any
+  voiceAgentEnabled?: boolean
   onStatusChange?: (status: string) => void
   onCreateQuote?: () => void
   onVisualizeKitchen?: () => void
@@ -106,6 +111,9 @@ export function ProjectSidebar({
   canExportDxf = true,
   visualizeKitchenEnabled = false,
   currentPlan = null,
+  showroomId,
+  designRequest,
+  voiceAgentEnabled = false,
   onStatusChange,
   onCreateQuote,
   onVisualizeKitchen,
@@ -520,6 +528,24 @@ export function ProjectSidebar({
                 Visualize Kitchen
               </span>
             </Button>
+          )}
+
+          {/* Design Request */}
+          {showroomId && !designRequest && (
+            <DesignRequestButton
+              projectId={project.id}
+              showroomId={showroomId}
+              hasExistingRequest={false}
+            />
+          )}
+
+          {/* Voice Agent - Call Customer */}
+          {voiceAgentEnabled && showroomId && (
+            <TriggerCallButton
+              projectId={project.id}
+              showroomId={showroomId}
+              customerPhone={project.customer_phone || ''}
+            />
           )}
 
           {/* Delete Project */}

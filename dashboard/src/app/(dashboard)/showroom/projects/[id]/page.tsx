@@ -29,7 +29,6 @@ import {
   Image as ImageIcon,
   Video,
   Phone,
-  Zap,
 } from 'lucide-react'
 import { WebhookPayloadViewer } from '@/components/webhook/WebhookPayloadViewer'
 import { QuoteEmailSection } from '@/components/quote/QuoteEmailSection'
@@ -612,6 +611,9 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             canExportDxf={canExportDxf}
             visualizeKitchenEnabled={showroom?.visualize_kitchen_enabled ?? false}
             hasPriceCatalog={hasPriceCatalog}
+            showroomId={showroomUser.showroom_id}
+            designRequest={designRequest}
+            voiceAgentEnabled={voiceAgentEnabled}
             onStatusChange={async (status) => {
               'use server'
               const formData = new FormData()
@@ -621,32 +623,6 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             onCreateQuote={createQuote}
             onDeleteProject={deleteProject}
           />
-
-          {/* Quick Actions */}
-          {(!designRequest || voiceAgentEnabled) && (
-            <Card>
-              <div className="px-4 py-3 border-b bg-gray-50/50 flex items-center gap-2">
-                <Zap className="h-4 w-4 text-amber-500" />
-                <h3 className="font-semibold text-sm">Quick Actions</h3>
-              </div>
-              <CardContent className="p-4 space-y-3">
-                {!designRequest && (
-                  <DesignRequestButton
-                    projectId={project.id}
-                    showroomId={showroomUser.showroom_id}
-                    hasExistingRequest={false}
-                  />
-                )}
-                {voiceAgentEnabled && (
-                  <TriggerCallButton
-                    projectId={project.id}
-                    showroomId={showroomUser.showroom_id}
-                    customerPhone={project.customer_phone || ''}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          )}
 
           {/* Voice Agent Activity Log */}
           {voiceAgentEnabled && (
