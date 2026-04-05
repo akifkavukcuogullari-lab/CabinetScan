@@ -26,7 +26,7 @@ export function DesignRequestButton({
     <>
       <Button
         variant="outline"
-        className="w-full gap-2"
+        className="w-full justify-start gap-2"
         onClick={() => setModalOpen(true)}
       >
         <Paintbrush className="h-4 w-4" />

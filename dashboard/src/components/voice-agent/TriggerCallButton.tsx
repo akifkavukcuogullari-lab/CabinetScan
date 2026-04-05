@@ -78,10 +78,9 @@ export function TriggerCallButton({
   return (
     <Button
       variant="outline"
-      size="sm"
       onClick={handleTrigger}
       disabled={disabled || loading || !isPhoneValid}
-      className="gap-2"
+      className="w-full justify-start gap-2"
     >
       {loading ? (
         <Loader2 className="h-4 w-4 animate-spin" />
