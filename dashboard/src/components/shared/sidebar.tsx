@@ -22,6 +22,7 @@ import {
   CreditCard,
   Users,
   Lock,
+  Phone,
 } from 'lucide-react'
 
 type UserInfo =
@@ -48,6 +49,7 @@ interface NavLink {
 const adminLinks: NavLink[] = [
   { href: '/admin/showrooms', label: 'Showrooms', icon: Building2 },
   { href: '/admin/categories', label: 'Categories', icon: LayoutGrid },
+  { href: '/admin/voice-agent', label: 'Voice Agent', icon: Phone },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ]
 
@@ -56,6 +58,7 @@ const showroomLinks: NavLink[] = [
   { href: '/showroom/customers', label: 'Customers', icon: Users },
   { href: '/showroom/products', label: 'Products', icon: Package },
   { href: '/showroom/branding', label: 'Branding', icon: Palette },
+  { href: '/showroom/voice-agent', label: 'Voice Agent', icon: Phone, requiredFeature: 'voiceAgent' },
   { href: '/showroom/billing', label: 'Billing', icon: CreditCard },
   { href: '/showroom/settings', label: 'Settings', icon: Settings },
 ]
