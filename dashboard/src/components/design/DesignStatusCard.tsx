@@ -41,6 +41,7 @@ export interface DesignRequestData {
   estimated_completion_at: string | null
   rejection_reason: string | null
   showroom_id?: string
+  project_id?: string
   created_at: string
 }
 
