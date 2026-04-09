@@ -129,3 +129,9 @@ verify_jwt = false
 
 [functions.convert-usdz-to-glb]
 verify_jwt = false
+
+[functions.send-design-notification]
+verify_jwt = false
+
+[functions.send-push-notification]
+verify_jwt = false

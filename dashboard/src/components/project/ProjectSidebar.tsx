@@ -10,6 +10,7 @@ import {
   User,
   Mail,
   Phone,
+  MapPin,
   Download,
   Video,
   FileCode,
@@ -37,6 +38,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { DesignRequestButton } from '@/components/design/DesignRequestButton'
+import { TriggerCallButton } from '@/components/voice-agent/TriggerCallButton'
 
 interface Project {
   id: string
@@ -47,6 +50,7 @@ interface Project {
   customer_last_name: string
   customer_email: string
   customer_phone?: string
+  customer_address?: string | null
   submitted_at?: string
   reviewed_at?: string
   completed_at?: string
@@ -76,6 +80,9 @@ interface ProjectSidebarProps {
   canExportDxf?: boolean
   visualizeKitchenEnabled?: boolean
   currentPlan?: SubscriptionPlan | null
+  showroomId?: string
+  designRequest?: any
+  voiceAgentEnabled?: boolean
   onStatusChange?: (status: string) => void
   onCreateQuote?: () => void
   onVisualizeKitchen?: () => void
@@ -104,6 +111,9 @@ export function ProjectSidebar({
   canExportDxf = true,
   visualizeKitchenEnabled = false,
   currentPlan = null,
+  showroomId,
+  designRequest,
+  voiceAgentEnabled = false,
   onStatusChange,
   onCreateQuote,
   onVisualizeKitchen,
@@ -156,7 +166,7 @@ export function ProjectSidebar({
   const visualizationPhotos = measurement?.visualization_photo_urls || []
   const hasVisualizationPhotos = visualizationPhotos.length > 0
   const hasFloorPlanData = measurement?.measurements?.walls?.length > 0 || measurement?.measurements?.room
-  const hasDownloadableFiles = hasUsdzFile || hasVideoFile || hasVisualizationPhotos || hasFloorPlanData || hasNewDesignSvg
+  const hasDownloadableFiles = hasUsdzFile || hasFloorPlanData || hasNewDesignSvg
 
   // Storage tier states
   const isArchived = project.storage_tier === 'archived'
@@ -213,6 +223,12 @@ export function ProjectSidebar({
               >
                 {project.customer_phone}
               </a>
+            </div>
+          )}
+          {project.customer_address && (
+            <div className="flex items-start gap-3 text-sm">
+              <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+              <p className="text-gray-700">{project.customer_address}</p>
             </div>
           )}
         </CardContent>
@@ -421,45 +437,6 @@ export function ProjectSidebar({
                 </LockedFeature>
               )
             )}
-            {hasVideoFile && (
-              isArchived || isRestoring ? (
-                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed">
-                  <div className="flex-shrink-0 w-8 h-8 rounded bg-gray-200 flex items-center justify-center">
-                    <Video className="h-4 w-4 text-gray-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-500">Scan Video</p>
-                    <p className="text-xs text-gray-400">MP4 recording</p>
-                  </div>
-                  <Archive className="h-4 w-4 text-gray-400" />
-                </div>
-              ) : (
-                <button
-                  onClick={async () => {
-                    if (measurement?.video_url) {
-                      setDownloadingVideo(true)
-                      await downloadFile(measurement.video_url, `${project.reference_number}-video.mp4`)
-                      setDownloadingVideo(false)
-                    }
-                  }}
-                  disabled={downloadingVideo}
-                  className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-colors group w-full text-left"
-                >
-                  <div className="flex-shrink-0 w-8 h-8 rounded bg-red-100 flex items-center justify-center group-hover:bg-red-200 transition-colors">
-                    <Video className="h-4 w-4 text-red-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">Scan Video</p>
-                    <p className="text-xs text-gray-500">MP4 recording</p>
-                  </div>
-                  {downloadingVideo ? (
-                    <Loader2 className="h-4 w-4 text-red-600 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4 text-gray-400 group-hover:text-red-600" />
-                  )}
-                </button>
-              )
-            )}
             {hasUsdzFile && (
               isArchived || isRestoring ? (
                 <div className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed">
@@ -497,67 +474,6 @@ export function ProjectSidebar({
                     <Download className="h-4 w-4 text-gray-400 group-hover:text-purple-600" />
                   )}
                 </button>
-              )
-            )}
-            {hasVisualizationPhotos && (
-              isArchived || isRestoring ? (
-                <div className="p-2.5 rounded-lg border border-gray-200 bg-gray-50 opacity-60">
-                  <div className="flex items-center gap-3">
-                    <div className="flex-shrink-0 w-8 h-8 rounded bg-gray-200 flex items-center justify-center">
-                      <Image className="h-4 w-4 text-gray-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-500">Photos ({visualizationPhotos.length})</p>
-                      <p className="text-xs text-gray-400">Archived</p>
-                    </div>
-                    <Archive className="h-4 w-4 text-gray-400" />
-                  </div>
-                </div>
-              ) : (
-                <div className="p-2.5 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="flex-shrink-0 w-8 h-8 rounded bg-green-100 flex items-center justify-center">
-                      <Image className="h-4 w-4 text-green-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">Photos ({visualizationPhotos.length})</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1.5 mt-2">
-                    {visualizationPhotos.slice(0, 6).map((photoUrl: string, index: number) => (
-                      <div key={index} className="relative group aspect-square rounded overflow-hidden">
-                        <a
-                          href={photoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block w-full h-full"
-                        >
-                          <img
-                            src={photoUrl}
-                            alt={`Photo ${index + 1}`}
-                            className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
-                          />
-                        </a>
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            downloadFile(photoUrl, `photo-${index + 1}.jpg`, index)
-                          }}
-                          disabled={downloadingPhoto === index}
-                          className="absolute bottom-1 right-1 p-1 bg-black/60 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80 disabled:opacity-100"
-                          title="Download photo"
-                        >
-                          {downloadingPhoto === index ? (
-                            <Loader2 className="h-3 w-3 text-white animate-spin" />
-                          ) : (
-                            <Download className="h-3 w-3 text-white" />
-                          )}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               )
             )}
           </CardContent>
@@ -612,6 +528,24 @@ export function ProjectSidebar({
                 Visualize Kitchen
               </span>
             </Button>
+          )}
+
+          {/* Design Request */}
+          {showroomId && !designRequest && (
+            <DesignRequestButton
+              projectId={project.id}
+              showroomId={showroomId}
+              hasExistingRequest={false}
+            />
+          )}
+
+          {/* Voice Agent - Call Customer */}
+          {voiceAgentEnabled && showroomId && (
+            <TriggerCallButton
+              projectId={project.id}
+              showroomId={showroomId}
+              customerPhone={project.customer_phone || ''}
+            />
           )}
 
           {/* Delete Project */}

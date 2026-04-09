@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Accordion,
   AccordionContent,
@@ -21,6 +21,73 @@ import {
   DollarSign,
   Loader2,
 } from 'lucide-react'
+
+// Component to render HTML email in an iframe (preserves all styles)
+function EmailHtmlPreview({ html }: { html: string }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const [iframeHeight, setIframeHeight] = useState(400)
+
+  useEffect(() => {
+    const iframe = iframeRef.current
+    if (!iframe) return
+
+    // Write the HTML content to the iframe
+    const doc = iframe.contentDocument || iframe.contentWindow?.document
+    if (doc) {
+      doc.open()
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              body {
+                margin: 0;
+                padding: 16px;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+              }
+            </style>
+          </head>
+          <body>${html}</body>
+        </html>
+      `)
+      doc.close()
+
+      // Adjust iframe height to content
+      const resizeObserver = new ResizeObserver(() => {
+        const body = doc.body
+        const docEl = doc.documentElement
+        if (body && docEl) {
+          const height = Math.max(
+            body.scrollHeight,
+            body.offsetHeight,
+            docEl.clientHeight,
+            docEl.scrollHeight,
+            docEl.offsetHeight
+          )
+          setIframeHeight(Math.min(Math.max(height + 32, 200), 800))
+        }
+      })
+
+      if (doc.body) {
+        resizeObserver.observe(doc.body)
+      }
+
+      return () => resizeObserver.disconnect()
+    }
+  }, [html])
+
+  return (
+    <iframe
+      ref={iframeRef}
+      className="w-full border-0 bg-white rounded"
+      style={{ height: iframeHeight }}
+      title="Quote Email Preview"
+      sandbox="allow-same-origin"
+    />
+  )
+}
 
 interface QuoteSummary {
   cabinets?: string
@@ -192,14 +259,18 @@ export function QuoteEmailPreview({ quoteEmail, onSend, defaultOpen = false }: Q
                 )}
               </div>
 
-              {/* Email Body - WYSIWYG Editor */}
+              {/* Email Body - Iframe preview or WYSIWYG Editor */}
               <div className="p-4">
-                <RichTextEditor
-                  content={editedEmail.body_html}
-                  onChange={(html) => setEditedEmail({ ...editedEmail, body_html: html })}
-                  editable={isEditing}
-                  className={isEditing ? '' : 'border-0'}
-                />
+                {isEditing ? (
+                  <RichTextEditor
+                    content={editedEmail.body_html}
+                    onChange={(html) => setEditedEmail({ ...editedEmail, body_html: html })}
+                    editable={true}
+                    className=""
+                  />
+                ) : (
+                  <EmailHtmlPreview html={editedEmail.body_html} />
+                )}
               </div>
             </div>
 

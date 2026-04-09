@@ -32,6 +32,7 @@ export interface PlanFeatures {
   productSelection: boolean
   emailToCustomer: boolean
   photosVideo: boolean
+  voiceAgent: boolean
 }
 
 // Plan feature definitions
@@ -54,6 +55,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     productSelection: true,
     emailToCustomer: false,
     photosVideo: true,
+    voiceAgent: false,
   },
   starter: {
     projectLimit: 20,
@@ -72,6 +74,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     productSelection: false, // Scan-only, no product selection
     emailToCustomer: false,
     photosVideo: true,
+    voiceAgent: false,
   },
   pro: {
     projectLimit: 100,
@@ -90,6 +93,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     productSelection: true,
     emailToCustomer: false,
     photosVideo: true,
+    voiceAgent: false,
   },
   business: {
     projectLimit: null, // Unlimited
@@ -108,6 +112,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     productSelection: true,
     emailToCustomer: true,
     photosVideo: true,
+    voiceAgent: true,
   },
   enterprise: {
     projectLimit: null,
@@ -126,6 +131,7 @@ const planFeatures: Record<SubscriptionPlan, PlanFeatures> = {
     productSelection: true,
     emailToCustomer: true,
     photosVideo: true,
+    voiceAgent: true,
   },
 }
 
@@ -248,6 +254,7 @@ export const featureNames: Record<keyof PlanFeatures, string> = {
   productSelection: 'Product selection',
   emailToCustomer: 'Email to customer',
   photosVideo: 'Photos & video',
+  voiceAgent: 'Voice Agent',
 }
 
 /**

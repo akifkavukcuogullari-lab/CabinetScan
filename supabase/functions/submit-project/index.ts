@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { supabaseAdmin } from '../_shared/supabase.ts'
 import { sendEmail, generateProjectNotificationEmailHtml } from '../_shared/email.ts'
+import { calculateDistance } from '../_shared/voice-agent/distance.ts'
 
 const DASHBOARD_URL = Deno.env.get('DASHBOARD_URL') || 'https://cabinetscan.nextlyn.ai'
 
@@ -74,6 +75,8 @@ interface ProjectSubmission {
     terms_url?: string
     privacy_url?: string
   }
+  source?: string;           // 'ios_customer' | 'ios_staff' | 'dashboard'
+  created_by_user_id?: string; // UUID of the staff member who created this project
 }
 
 // Generate a unique reference number
@@ -446,6 +449,8 @@ async function buildWebhookPayload(
       postbackUrl: showroom.webhook_url || null,
     },
     device_info: submission.device_info || null,
+    source: submission.source || 'ios_customer',
+    created_by_user_id: submission.created_by_user_id || null,
   }
 }
 
@@ -565,7 +570,7 @@ serve(async (req) => {
     logTiming('Before showroom query')
     const { data: showroom, error: showroomError } = await supabaseAdmin
       .from('showrooms')
-      .select('id, name, showroom_code, webhook_url, notification_emails, phone, email')
+      .select('id, name, showroom_code, webhook_url, notification_emails, phone, email, address_line1, city, state, postal_code')
       .eq('id', submission.showroom_id)
       .eq('is_active', true)
       .single()
@@ -763,6 +768,9 @@ serve(async (req) => {
         consent_agreed_at: submission.consent?.agreed_at,
         consent_terms_url: submission.consent?.terms_url,
         consent_privacy_url: submission.consent?.privacy_url,
+        // Staff app source tracking
+        source: submission.source || 'ios_customer',
+        created_by_user_id: submission.created_by_user_id || null,
       })
       .select()
       .single()
@@ -779,6 +787,46 @@ serve(async (req) => {
         }
       )
     }
+
+    // Calculate distance from customer to showroom (fire-and-forget, don't block submission)
+    logTiming('Before distance calculation')
+    try {
+      const customerAddr = [
+        submission.end_client?.address || submission.customer.address_line1,
+        submission.customer.city,
+        submission.customer.state,
+        submission.customer.zip_code,
+      ].filter(Boolean).join(', ')
+
+      const showroomAddr = [
+        showroom.address_line1,
+        showroom.city,
+        showroom.state,
+        showroom.postal_code,
+      ].filter(Boolean).join(', ')
+
+      if (customerAddr && showroomAddr) {
+        const distResult = await calculateDistance({
+          customerAddress: customerAddr,
+          showroomAddress: showroomAddr,
+        })
+
+        if (distResult) {
+          await supabaseAdmin
+            .from('projects')
+            .update({
+              distance_miles: distResult.distanceMiles,
+              drive_time_minutes: distResult.driveTimeMinutes,
+            })
+            .eq('id', project.id)
+
+          console.log(`[SUBMIT] Distance calculated: ${distResult.distanceMiles} mi, ${distResult.driveTimeMinutes} min`)
+        }
+      }
+    } catch (distErr) {
+      console.error('[SUBMIT] Distance calculation failed (non-blocking):', distErr)
+    }
+    logTiming('After distance calculation')
 
     // Create measurements if provided
     logTiming('Before measurements')
@@ -1047,6 +1095,88 @@ serve(async (req) => {
             console.error('[EMAIL] Error fetching branding for notifications:', err)
           })
       }
+    }
+
+    // Distance calculation (async, non-blocking)
+    fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/calculate-project-distance`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ project_id: project.id }),
+    }).catch(err => console.error('[DISTANCE] Trigger error:', err))
+
+    // Voice Agent trigger (async, non-blocking)
+    try {
+      const { data: vaGlobal } = await supabaseAdmin
+        .from('platform_settings')
+        .select('value')
+        .eq('key', 'voice_agent_globally_enabled')
+        .single()
+
+      if (vaGlobal?.value === 'true') {
+        const { data: vaSettings } = await supabaseAdmin
+          .from('voice_agent_showroom_settings')
+          .select('enabled, trigger_mode')
+          .eq('showroom_id', submission.showroom_id)
+          .single()
+
+        if (vaSettings?.enabled && vaSettings.trigger_mode !== 'manual') {
+          const normalizedPhone = normalizePhone(submission.customer.phone)
+
+          fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/voice-agent-trigger`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              project_id: project.id,
+              showroom_id: submission.showroom_id,
+              customer: {
+                id: customerId,
+                first_name: submission.customer.first_name,
+                last_name: submission.customer.last_name,
+                phone_normalized: normalizedPhone,
+                email: submission.customer.email || null,
+                customer_type: submission.customer.customer_type || 'homeowner',
+                address_line1: submission.customer.address_line1 || null,
+                city: submission.customer.city || null,
+                state: submission.customer.state || null,
+                zip_code: submission.customer.zip_code || null,
+              },
+              end_client: submission.end_client || {
+                first_name: null,
+                last_name: null,
+                phone: null,
+                email: null,
+                address: null,
+              },
+              project: {
+                name: submission.project.name,
+                reference_number: referenceNumber,
+                notes: submission.project.notes || null,
+                status: 'submitted',
+                submitted_at: new Date().toISOString(),
+              },
+              showroom: {
+                name: showroom.name,
+                phone: showroom.phone || null,
+                email: showroom.email || null,
+                address_line1: (showroom as any).address_line1 || null,
+                city: (showroom as any).city || null,
+                state: (showroom as any).state || null,
+                postal_code: (showroom as any).postal_code || null,
+                showroom_code: showroom.showroom_code,
+              },
+              triggered_by: 'system',
+            }),
+          }).catch((err) => console.error('[VOICE_AGENT] Trigger error:', err))
+        }
+      }
+    } catch (err) {
+      console.error('[VOICE_AGENT] Settings check error:', err)
     }
 
     logTiming('Returning response')
