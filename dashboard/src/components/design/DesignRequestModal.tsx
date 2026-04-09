@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
@@ -15,14 +15,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Loader2 } from 'lucide-react'
+import { AlertTriangle, Loader2 } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 interface DesignRequestModalProps {
   projectId: string
@@ -41,6 +35,52 @@ export function DesignRequestModal({
   const [notes, setNotes] = useState('')
   const [priority, setPriority] = useState('normal')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [priorityPricing, setPriorityPricing] = useState<Record<string, number>>({})
+  const [balanceCents, setBalanceCents] = useState<number | null>(null)
+
+  const PRIORITY_OPTIONS = [
+    { value: 'low', label: 'Low', desc: '2-3 business days' },
+    { value: 'normal', label: 'Normal', desc: '1 business day' },
+    { value: 'high', label: 'High', desc: '3 hours' },
+    { value: 'urgent', label: 'Urgent', desc: '1 hour' },
+  ]
+
+  useEffect(() => {
+    if (!open) return
+    const supabase = createClient()
+
+    async function fetchCreditInfo() {
+      const [{ data: configs }, { data: balance }] = await Promise.all([
+        supabase
+          .from('credit_service_config')
+          .select('service_type, cost_per_unit_cents, multiplier, minimum_charge_cents')
+          .like('service_type', 'design_%'),
+        supabase
+          .from('showroom_credit_balances')
+          .select('balance_cents')
+          .eq('showroom_id', showroomId)
+          .single(),
+      ])
+
+      if (configs) {
+        const pricing: Record<string, number> = {}
+        for (const c of configs) {
+          const p = c.service_type.replace('design_', '')
+          pricing[p] = Math.max(
+            Math.ceil(c.cost_per_unit_cents * c.multiplier),
+            c.minimum_charge_cents
+          )
+        }
+        setPriorityPricing(pricing)
+      }
+      setBalanceCents(balance?.balance_cents ?? 0)
+    }
+
+    fetchCreditInfo()
+  }, [open, showroomId])
+
+  const designCostCents = priorityPricing[priority] ?? null
+  const insufficientBalance = designCostCents !== null && balanceCents !== null && balanceCents < designCostCents
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
@@ -127,20 +167,58 @@ export function DesignRequestModal({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="priority">Priority</Label>
-            <Select value={priority} onValueChange={setPriority} disabled={isSubmitting}>
-              <SelectTrigger id="priority">
-                <SelectValue placeholder="Select priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="normal">Normal</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label>Priority</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {PRIORITY_OPTIONS.map((opt) => {
+                const price = priorityPricing[opt.value]
+                const isSelected = priority === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setPriority(opt.value)}
+                    disabled={isSubmitting}
+                    className={`p-3 rounded-lg border-2 text-left transition-colors ${
+                      isSelected
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium text-sm">{opt.label}</p>
+                      {price != null && (
+                        <span className={`text-sm font-semibold ${isSelected ? 'text-blue-600' : 'text-gray-900'}`}>
+                          ${(price / 100).toFixed(0)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </div>
+
+        {/* Credit cost info */}
+        {designCostCents !== null && (
+          <div className="text-sm text-gray-500 border-t pt-3">
+            This will use <span className="font-medium text-gray-900">${(designCostCents / 100).toFixed(2)}</span> from your credits
+            {balanceCents !== null && (
+              <span> (balance: ${(balanceCents / 100).toFixed(2)})</span>
+            )}
+          </div>
+        )}
+
+        {insufficientBalance && (
+          <Alert variant="destructive" className="border-amber-200 bg-amber-50">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-700">
+              Insufficient credits.{' '}
+              <a href="/showroom/billing" className="underline font-medium">Top up your balance</a> to request a design.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <DialogFooter>
           <Button
@@ -150,7 +228,7 @@ export function DesignRequestModal({
           >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting}>
+          <Button onClick={handleSubmit} disabled={isSubmitting || insufficientBalance}>
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

@@ -6,14 +6,18 @@ import { Clock } from 'lucide-react'
 
 interface WaitNodeData {
   hours: number
+  mode?: 'hours' | 'next_business_day'
 }
 
-function formatWait(hours: number): string {
-  if (hours >= 24 && hours % 24 === 0) {
-    const days = hours / 24
+function formatWait(data: WaitNodeData): string {
+  if (data.mode === 'next_business_day') {
+    return 'Next business day'
+  }
+  if (data.hours >= 24 && data.hours % 24 === 0) {
+    const days = data.hours / 24
     return `Wait ${days}d`
   }
-  return `Wait ${hours}h`
+  return `Wait ${data.hours}h`
 }
 
 function WaitNodeComponent({ data }: NodeProps<WaitNodeData>) {
@@ -27,7 +31,7 @@ function WaitNodeComponent({ data }: NodeProps<WaitNodeData>) {
       <div className="flex items-center gap-2">
         <Clock className="size-4 shrink-0 text-gray-500" />
         <span className="text-sm font-medium text-gray-700">
-          {formatWait(data.hours)}
+          {formatWait(data)}
         </span>
       </div>
       <Handle

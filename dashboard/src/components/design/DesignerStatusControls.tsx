@@ -88,22 +88,7 @@ export function DesignerStatusControls({
 
       toast.success(`Status updated to ${newStatus.replace(/_/g, ' ')}.`)
 
-      // Auto-update project status based on design request status
-      if (newStatus === 'delivered' || newStatus === 'completed') {
-        // Get the project_id from the design request
-        const { data: dr } = await supabase
-          .from('design_requests')
-          .select('project_id')
-          .eq('id', designRequestId)
-          .single()
-
-        if (dr?.project_id) {
-          await supabase
-            .from('projects')
-            .update({ status: 'design_completed' })
-            .eq('id', dr.project_id)
-        }
-      }
+      // Project status is auto-updated by DB trigger (migration 132)
 
       // Fire-and-forget notification
       if (designerId) {

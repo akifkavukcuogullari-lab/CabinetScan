@@ -11,7 +11,9 @@ interface SendSmsOptions {
 interface SendSmsResult {
   success: boolean
   sid?: string
+  status?: string
   error?: string
+  error_code?: number
 }
 
 async function getPlatformSetting(key: string): Promise<string | null> {
@@ -50,11 +52,22 @@ export async function sendSms({ to, body, from }: SendSmsOptions): Promise<SendS
       return { success: false, error: 'No sender phone number configured' }
     }
 
-    const formBody = new URLSearchParams({
+    // Build StatusCallback URL so Twilio notifies us of delivery failures
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+    const statusCallbackUrl = supabaseUrl
+      ? `${supabaseUrl}/functions/v1/voice-agent-sms-status`
+      : ''
+
+    const params: Record<string, string> = {
       To: to,
       From: fromNumber,
       Body: body,
-    }).toString()
+    }
+    if (statusCallbackUrl) {
+      params.StatusCallback = statusCallbackUrl
+    }
+
+    const formBody = new URLSearchParams(params).toString()
 
     const credentials = btoa(`${accountSid}:${authToken}`)
     const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`
@@ -72,16 +85,23 @@ export async function sendSms({ to, body, from }: SendSmsOptions): Promise<SendS
 
     const data = await response.json()
 
-    console.log('[VOICE_SMS] Twilio API response:', { status: response.status, sid: data.sid, errorCode: data.code })
+    console.log('[VOICE_SMS] Twilio API response:', {
+      status: response.status,
+      sid: data.sid,
+      msgStatus: data.status,
+      errorCode: data.error_code || data.code,
+    })
 
     if (!response.ok || data.code) {
       const errorMessage = data.message || `Twilio API error (${response.status})`
       console.error('[VOICE_SMS] Twilio error:', JSON.stringify(data))
-      return { success: false, error: errorMessage }
+      return { success: false, error: errorMessage, error_code: data.error_code || data.code }
     }
 
-    console.log('[VOICE_SMS] SMS sent successfully, SID:', data.sid)
-    return { success: true, sid: data.sid }
+    // Twilio accepted it — status will be 'queued' or 'sent'
+    // Actual delivery confirmation comes via StatusCallback
+    console.log('[VOICE_SMS] SMS accepted by Twilio, SID:', data.sid, 'status:', data.status)
+    return { success: true, sid: data.sid, status: data.status }
   } catch (error) {
     console.error('[VOICE_SMS] Unexpected error sending SMS:', error)
     return { success: false, error: `Failed to send SMS: ${error}` }

@@ -7,7 +7,8 @@ import { supabaseAdmin } from '../_shared/supabase.ts'
 import type { VoiceAgentTriggerPayload, VoiceAgentShowroomSettings } from '../_shared/voice-agent/types.ts'
 import { sendSms } from '../_shared/voice-agent/twilio.ts'
 import { initiateVapiCall } from '../_shared/voice-agent/vapi.ts'
-import { calculateDistance, determineZone } from '../_shared/voice-agent/distance.ts'
+import { determineZone } from '../_shared/voice-agent/distance.ts'
+import { getNextValidBusinessTime } from '../_shared/voice-agent/business-hours.ts'
 import { interpolate, buildTemplateVariables } from '../_shared/voice-agent/template.ts'
 import { SEND_LINK_TOOL_DEFINITION, DEFAULT_SMS_TEMPLATE, DEFAULT_SYSTEM_PROMPT } from '../_shared/voice-agent/constants.ts'
 
@@ -182,41 +183,26 @@ serve(async (req) => {
       }
     }
 
-    // 6. Calculate distance
-    const customerAddressParts = [
-      payload.customer.address_line1,
-      payload.customer.city,
-      payload.customer.state,
-      payload.customer.zip_code,
-    ].filter(Boolean)
-    const customerAddress = customerAddressParts.join(', ')
-
-    const showroomAddressParts = [
-      payload.showroom.address_line1,
-      payload.showroom.city,
-      payload.showroom.state,
-      payload.showroom.postal_code,
-    ].filter(Boolean)
-    const showroomAddress = showroomAddressParts.join(', ')
-
+    // 6. Read distance from project (calculated at submission time)
     let distanceMiles: number | null = null
     let distanceKm: number | null = null
     let driveTimeMinutes: number | null = null
-    let zone: 'near' | 'far' = 'near' // Default to near if no distance data
+    let zone: 'near' | 'far' = 'near'
 
-    const distanceResult = await calculateDistance({
-      customerAddress,
-      showroomAddress,
-    })
+    const { data: projectDist } = await supabaseAdmin
+      .from('projects')
+      .select('distance_miles, drive_time_minutes')
+      .eq('id', payload.project_id)
+      .single()
 
-    if (distanceResult) {
-      distanceMiles = distanceResult.distanceMiles
-      distanceKm = distanceResult.distanceKm
-      driveTimeMinutes = distanceResult.driveTimeMinutes
+    if (projectDist?.distance_miles != null) {
+      distanceMiles = projectDist.distance_miles
+      distanceKm = Math.round((distanceMiles * 1.60934) * 100) / 100
+      driveTimeMinutes = projectDist.drive_time_minutes
       zone = determineZone(distanceMiles, vaSettings.distance_threshold_miles)
     }
 
-    console.log('[VOICE_TRIGGER] Distance result', { distanceMiles, zone })
+    console.log('[VOICE_TRIGGER] Distance from project', { distanceMiles, zone })
 
     // 7. Determine customer type
     const customerType = payload.customer.customer_type || 'homeowner'
@@ -250,15 +236,16 @@ serve(async (req) => {
     }
 
     // 10. Build template variables
-    const distanceData = distanceResult
+    const distanceData = distanceMiles != null
       ? { distanceMiles: distanceMiles!, distanceKm: distanceKm!, driveTimeMinutes: driveTimeMinutes!, zone }
       : null
     const templateVars = buildTemplateVariables(payload, distanceData)
 
-    // Add scheduling_link to template vars
+    // Add scheduling_link and agent_name to template vars
     if (vaSettings.scheduling_link) {
       templateVars.scheduling_link = vaSettings.scheduling_link
     }
+    templateVars.agent_name = (vaSettings as any).agent_name || 'Layla'
 
     // 11. Interpolate SMS template
     const smsBody = interpolate(smsTemplate, templateVars)
@@ -314,7 +301,7 @@ serve(async (req) => {
       await supabaseAdmin
         .from('voice_agent_logs')
         .update({
-          sms_status: 'sent',
+          sms_status: 'queued',
           sms_sid: smsResult.sid || null,
           sms_sent_at: new Date().toISOString(),
         })
@@ -330,21 +317,42 @@ serve(async (req) => {
       console.error('[VOICE_TRIGGER] SMS failed, continuing with call:', smsResult.error)
     }
 
-    // 15. Interpolate system prompt
-    const interpolatedPrompt = interpolate(systemPrompt, templateVars)
+    // 15. Interpolate system prompt and first message
+    const interpolatedPrompt = interpolate(systemPrompt!, templateVars)
+    const rawFirstMessage = (vaSettings as any).first_message || null
+    const interpolatedFirstMessage = rawFirstMessage ? interpolate(rawFirstMessage, templateVars) : null
 
-    // 16. Calculate scheduledAt for delayed triggers
-    let scheduledAt: string | undefined
-    if (vaSettings.trigger_mode === 'delayed' && vaSettings.delay_minutes > 0) {
-      const scheduled = new Date()
-      scheduled.setMinutes(scheduled.getMinutes() + vaSettings.delay_minutes)
-      scheduledAt = scheduled.toISOString()
+    // 16. Calculate scheduledAt with business hours enforcement (10 AM - 6 PM, Mon-Sat)
+    // Apply delay first (only on first attempt), then enforce business hours
+    let baseTime = new Date()
+    if (vaSettings.delay_minutes > 0 && attemptNumber === 1) {
+      baseTime = new Date(baseTime.getTime() + vaSettings.delay_minutes * 60 * 1000)
+    }
+
+    // Fetch showroom timezone
+    const { data: showroomTz } = await supabaseAdmin
+      .from('showrooms')
+      .select('timezone')
+      .eq('id', payload.showroom_id)
+      .single()
+    const timezone = showroomTz?.timezone || 'America/New_York'
+
+    // Get next valid business time (returns now if already within hours, otherwise next business day)
+    const validTime = getNextValidBusinessTime(timezone, baseTime)
+    const scheduledAt: string | undefined =
+      validTime.getTime() === baseTime.getTime() && vaSettings.delay_minutes === 0
+        ? undefined  // No scheduling needed — call right now
+        : validTime.toISOString()
+
+    if (scheduledAt) {
+      console.log(`[VOICE_TRIGGER] Scheduled call for: ${scheduledAt} (timezone: ${timezone})`)
     }
 
     // 17. Initiate Vapi call (tools are handled via serverUrl webhook, not inline)
     const callResult = await initiateVapiCall({
       customerPhone: payload.customer.phone_normalized,
       systemPrompt: interpolatedPrompt,
+      firstMessage: interpolatedFirstMessage || undefined,
       scheduledAt,
       // Per-showroom AI agent overrides (NULL = use platform defaults)
       showroomLlmProvider: (vaSettings as any).llm_provider || null,
@@ -352,7 +360,7 @@ serve(async (req) => {
       showroomVoiceProvider: (vaSettings as any).voice_provider || null,
       showroomVoiceId: (vaSettings as any).voice_id || null,
       showroomAgentName: (vaSettings as any).agent_name || null,
-      showroomFirstMessage: (vaSettings as any).first_message || null,
+      showroomFirstMessage: interpolatedFirstMessage || null,
     })
 
     if (callResult.success) {

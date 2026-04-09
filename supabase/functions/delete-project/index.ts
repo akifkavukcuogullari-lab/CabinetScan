@@ -117,6 +117,24 @@ serve(async (req) => {
       }
     }
 
+    // Voice agent recordings (recordings bucket)
+    const { data: vaLogs } = await supabaseAdmin
+      .from('voice_agent_logs')
+      .select('id, recording_url')
+      .eq('project_id', project_id)
+
+    if (vaLogs) {
+      for (const log of vaLogs) {
+        // recording_url stores the storage path (e.g. "showroom_id/log_id.mp3")
+        if (log.recording_url && !log.recording_url.startsWith('http')) {
+          filesToDelete.push({ bucket: 'recordings', path: log.recording_url })
+        } else if (log.recording_url) {
+          const parsed = extractStoragePath(log.recording_url)
+          if (parsed) filesToDelete.push(parsed)
+        }
+      }
+    }
+
     // Chat attachments and design files (via design_requests)
     const { data: designReq } = await supabaseAdmin
       .from('design_requests')
@@ -189,6 +207,30 @@ serve(async (req) => {
       await supabaseAdmin.from('design_files').delete().eq('design_request_id', designReq.id)
       await supabaseAdmin.from('design_requests').delete().eq('id', designReq.id)
     }
+    // Voice agent: credit transactions referencing these logs, then logs themselves
+    if (vaLogs && vaLogs.length > 0) {
+      const logIds = vaLogs.map((l: any) => l.id)
+      await supabaseAdmin
+        .from('showroom_credit_transactions')
+        .delete()
+        .in('reference_id', logIds)
+        .eq('reference_type', 'voice_agent_log')
+      await supabaseAdmin.from('voice_agent_logs').delete().eq('project_id', project_id)
+      console.log(`[DELETE PROJECT] Deleted ${vaLogs.length} voice agent logs`)
+    }
+
+    // AI chat conversations and messages
+    const { data: chatConvos } = await supabaseAdmin
+      .from('ai_chat_conversations')
+      .select('id')
+      .eq('project_id', project_id)
+
+    if (chatConvos && chatConvos.length > 0) {
+      const convoIds = chatConvos.map((c: any) => c.id)
+      await supabaseAdmin.from('ai_chat_messages').delete().in('conversation_id', convoIds)
+      await supabaseAdmin.from('ai_chat_conversations').delete().eq('project_id', project_id)
+    }
+
     await supabaseAdmin.from('project_whiteboards').delete().eq('project_id', project_id)
     await supabaseAdmin.from('quote_emails').delete().eq('project_id', project_id)
     await supabaseAdmin.from('project_addon_selections').delete().eq('project_id', project_id)

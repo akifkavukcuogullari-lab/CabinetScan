@@ -201,19 +201,6 @@ async function processLog(log: any): Promise<{ success: boolean; error?: string 
         break
       }
 
-      case 'send_link': {
-        if (payload && schedulingLink) {
-          const smsBody = `Here's your link to schedule a visit: ${schedulingLink}`
-          await sendSms({
-            to: payload.customer.phone_normalized,
-            body: smsBody,
-          })
-          console.log('[FLOW_PROCESSOR] Scheduling link sent')
-        }
-        nextNode = findNextNode(flow, currentNode.id)
-        break
-      }
-
       case 'condition': {
         // Evaluate condition and follow the appropriate edge
         // For now, follow the default (no sourceHandle) edge
@@ -274,18 +261,6 @@ async function processLog(log: any): Promise<{ success: boolean; error?: string 
               (nextNode.data.template as string) || '',
               templateVars
             )
-            await sendSms({
-              to: payload.customer.phone_normalized,
-              body: smsBody,
-            })
-          }
-          nextNode = findNextNode(flow, nextNode.id)
-          break
-        }
-
-        case 'send_link': {
-          if (payload && schedulingLink) {
-            const smsBody = `Here's your link to schedule a visit: ${schedulingLink}`
             await sendSms({
               to: payload.customer.phone_normalized,
               body: smsBody,

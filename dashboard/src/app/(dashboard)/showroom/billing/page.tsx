@@ -36,6 +36,7 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { CreditBalanceSection } from '@/components/billing/CreditBalanceSection'
 
 interface SubscriptionPlan {
   id: string
@@ -102,7 +103,9 @@ export default function BillingPage() {
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
       setSuccessMessage('Your subscription has been activated successfully!')
-    } else if (searchParams.get('canceled') === 'true') {
+    } else if (searchParams.get('topup') === 'success') {
+      setSuccessMessage('Credits added to your balance!')
+    } else if (searchParams.get('canceled') === 'true' || searchParams.get('topup') === 'canceled') {
       setError('Checkout was canceled. You can try again when ready.')
     }
   }, [searchParams])
@@ -369,6 +372,9 @@ export default function BillingPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      {/* Credit Balance */}
+      {showroomId && <CreditBalanceSection showroomId={showroomId} />}
 
       {/* Current Plan Status */}
       <Card>

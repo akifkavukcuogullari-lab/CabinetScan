@@ -44,6 +44,7 @@ export function buildTemplateVariables(
     : ''
 
   return {
+    customer_name: customer.first_name || '',
     customer_first_name: customer.first_name || '',
     customer_last_name: customer.last_name || '',
     customer_full_name: [customer.first_name, customer.last_name]

@@ -45,7 +45,6 @@ export async function initiateVapiCall(options: InitiateCallOptions): Promise<In
   console.log('[VOICE_CALL] Preparing to initiate Vapi call', {
     customerPhone,
     promptLength: systemPrompt.length,
-    hasTools: !!(tools && tools.length),
     scheduled: !!scheduledAt,
   })
 

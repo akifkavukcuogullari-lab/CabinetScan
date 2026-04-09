@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -40,26 +40,12 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useSubscriptionContext } from '@/contexts/subscription-context'
 
-const statusOptions = [
-  { value: 'all', label: 'All Statuses' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'submitted', label: 'Submitted' },
-  { value: 'in_review', label: 'In Review' },
-  { value: 'quoted', label: 'Quoted' },
-  { value: 'accepted', label: 'Accepted' },
-  { value: 'rejected', label: 'Rejected' },
-  { value: 'completed', label: 'Completed' },
-]
+import { PROJECT_STATUSES, getStatusColor, getStatusLabel, mapDesignStatus } from '@/lib/project-status'
 
-const statusColors: Record<string, string> = {
-  draft: 'bg-gray-100 text-gray-800',
-  submitted: 'bg-blue-100 text-blue-800',
-  in_review: 'bg-yellow-100 text-yellow-800',
-  quoted: 'bg-purple-100 text-purple-800',
-  accepted: 'bg-green-100 text-green-800',
-  rejected: 'bg-red-100 text-red-800',
-  completed: 'bg-green-100 text-green-800',
-}
+const statusFilterOptions = [
+  { value: 'all', label: 'All Statuses' },
+  ...PROJECT_STATUSES.map(s => ({ value: s.value, label: s.label })),
+]
 
 function DesignStatusBadge({ status }: { status: string }) {
   const config: Record<string, { label: string; className: string }> = {
@@ -211,11 +197,20 @@ export default function ProjectsPage() {
     }
   }
 
+  // Helper to get effective status (merges design status into project status)
+  const getEffectiveStatus = useCallback((project: any) => {
+    const ds = designStatuses[project.id]
+    if (ds && ds !== 'canceled') {
+      return mapDesignStatus(ds) || project.status
+    }
+    return project.status
+  }, [designStatuses])
+
   // Filter projects based on search and status
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
       // Status filter
-      if (statusFilter !== 'all' && project.status !== statusFilter) {
+      if (statusFilter !== 'all' && getEffectiveStatus(project) !== statusFilter) {
         return false
       }
 
@@ -241,14 +236,15 @@ export default function ProjectsPage() {
     })
   }, [projects, searchQuery, statusFilter])
 
-  // Count projects by status for filter badges
+  // Count projects by effective status for filter badges
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { all: projects.length }
     projects.forEach((p) => {
-      counts[p.status] = (counts[p.status] || 0) + 1
+      const effective = getEffectiveStatus(p)
+      counts[effective] = (counts[effective] || 0) + 1
     })
     return counts
-  }, [projects])
+  }, [projects, getEffectiveStatus])
 
   // Sort projects for table view
   const sortedProjects = useMemo(() => {
@@ -362,7 +358,7 @@ export default function ProjectsPage() {
                   <SelectValue placeholder="Filter by status" />
                 </SelectTrigger>
                 <SelectContent>
-                  {statusOptions.map((option) => (
+                  {statusFilterOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       <div className="flex items-center justify-between w-full">
                         <span>{option.label}</span>
@@ -419,7 +415,7 @@ export default function ProjectsPage() {
             <div className="mt-3 pt-3 border-t flex items-center gap-2 text-sm text-gray-600">
               <span>Showing {filteredProjects.length} of {projects.length} projects</span>
               {statusFilter !== 'all' && (
-                <Badge className={statusColors[statusFilter]}>
+                <Badge className={getStatusColor(statusFilter)}>
                   {statusFilter.replace('_', ' ')}
                 </Badge>
               )}
@@ -463,7 +459,7 @@ export default function ProjectsPage() {
                             </span>
                           </div>
                         </div>
-                        <Badge className={`${statusColors[project.status]} shrink-0 text-xs`}>
+                        <Badge className={`${getStatusColor(project.status)} shrink-0 text-xs`}>
                           {project.status.replace('_', ' ')}
                         </Badge>
                       </div>
@@ -537,7 +533,6 @@ export default function ProjectsPage() {
                           <ArrowUpDown className="h-4 w-4" />
                         </div>
                       </TableHead>
-                      <TableHead>Design</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -566,14 +561,14 @@ export default function ProjectsPage() {
                             : '-'}
                         </TableCell>
                         <TableCell>
-                          <Badge className={statusColors[project.status]}>
-                            {project.status.replace('_', ' ')}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {designStatuses[project.id] && (
-                            <DesignStatusBadge status={designStatuses[project.id]} />
-                          )}
+                          {(() => {
+                            const effective = getEffectiveStatus(project)
+                            return (
+                              <Badge className={getStatusColor(effective)}>
+                                {getStatusLabel(effective)}
+                              </Badge>
+                            )
+                          })()}
                         </TableCell>
                       </TableRow>
                     ))}
