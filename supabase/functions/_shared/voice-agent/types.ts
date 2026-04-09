@@ -162,7 +162,7 @@ export type SimplifiedOutcome =
   | 'technical_error'
 
 // Flow Types
-export type FlowNodeType = 'outcome' | 'wait' | 'sms' | 'retry_call' | 'send_link' | 'condition' | 'stop'
+export type FlowNodeType = 'outcome' | 'wait' | 'sms' | 'retry_call' | 'condition' | 'stop'
 
 export interface FlowNode {
   id: string

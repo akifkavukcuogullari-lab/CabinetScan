@@ -29,6 +29,7 @@ import {
   Sun,
   TrendingUp,
   Phone,
+  Wallet,
 } from 'lucide-react'
 import { NotificationBell } from '@/components/design/NotificationBell'
 import { useTheme } from 'next-themes'
@@ -66,6 +67,7 @@ const adminLinks: NavLink[] = [
   { href: '/admin/categories', label: 'Categories', icon: LayoutGrid },
   { href: '/admin/designers', label: 'Designers', icon: PenTool },
   { href: '/admin/voice-agent', label: 'Voice Agent', icon: Phone },
+  { href: '/admin/credits', label: 'Credits', icon: Wallet },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ]
 

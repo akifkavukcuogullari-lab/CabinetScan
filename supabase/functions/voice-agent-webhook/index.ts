@@ -111,7 +111,7 @@ async function processPostCallFlow(
 ) {
   console.log('[VOICE_WEBHOOK] Processing post-call flow for outcome:', outcome)
 
-  // Find the outcome node
+  // Find the outcome node matching this call result
   const outcomeNode = flow.nodes.find(
     (n) => n.type === 'outcome' && n.data.outcome === outcome
   )
@@ -169,9 +169,29 @@ async function processPostCallFlow(
       }
 
       case 'wait': {
-        const hours = (currentNode.data.hours as number) || 1
-        const nextAt = new Date()
-        nextAt.setHours(nextAt.getHours() + hours)
+        const mode = (currentNode.data.mode as string) || 'hours'
+        let nextAt: Date
+
+        if (mode === 'next_business_day') {
+          // Fetch showroom timezone
+          const { data: log } = await supabaseAdmin
+            .from('voice_agent_logs')
+            .select('showroom_id')
+            .eq('id', logId)
+            .single()
+          const { data: showroom } = await supabaseAdmin
+            .from('showrooms')
+            .select('timezone')
+            .eq('id', log?.showroom_id)
+            .single()
+          const tz = showroom?.timezone || 'America/New_York'
+          const { getNextBusinessDayTime } = await import('../_shared/voice-agent/business-hours.ts')
+          nextAt = getNextBusinessDayTime(tz)
+        } else {
+          const hours = (currentNode.data.hours as number) || 1
+          nextAt = new Date()
+          nextAt.setHours(nextAt.getHours() + hours)
+        }
 
         await supabaseAdmin
           .from('voice_agent_logs')
@@ -201,18 +221,6 @@ async function processPostCallFlow(
           console.log('[VOICE_WEBHOOK] Flow SMS sent:', smsResult.success)
         }
         // Continue to next node
-        currentNode = findNextNode(flow, currentNode.id)
-        break
-      }
-
-      case 'send_link': {
-        if (payloadData && schedulingLink) {
-          const smsBody = `Here's your link to schedule a visit: ${schedulingLink}`
-          await sendSms({
-            to: payloadData.customer.phone_normalized,
-            body: smsBody,
-          })
-        }
         currentNode = findNextNode(flow, currentNode.id)
         break
       }
@@ -316,10 +324,13 @@ serve(async (req) => {
         )
       }
 
-      // Extract data from report
+      // Extract data from report — Vapi nests data under `artifact`
       const endedReason = report.endedReason || report.call?.endedReason || 'unknown-error'
-      const summary = report.summary || report.analysis?.summary || null
-      const messages = report.messages || report.transcript || []
+      const summary = report.analysis?.summary || report.summary || report.artifact?.summary || null
+      const recordingUrl = report.artifact?.recordingUrl || report.recordingUrl || null
+
+      // Transcript: Vapi puts messages in artifact.messages or report.messages
+      const messages = report.artifact?.messages || report.messages || report.transcript || []
       const transcript = Array.isArray(messages)
         ? messages
             .filter((m: any) => m.role && m.content)
@@ -328,6 +339,14 @@ serve(async (req) => {
         : typeof messages === 'string'
         ? messages
         : null
+
+      console.log('[VOICE_WEBHOOK] Extracted data', {
+        endedReason,
+        hasSummary: !!summary,
+        hasTranscript: !!transcript,
+        transcriptLength: transcript?.length || 0,
+        hasRecording: !!recordingUrl,
+      })
 
       // Calculate duration
       let durationSeconds: number | null = null
@@ -347,17 +366,31 @@ serve(async (req) => {
         outcome = 'hung_up_early'
       }
 
-      // Check if link was sent during call (look in transcript or outcome_details)
+      // Check transcript and summary for positive signals
       const transcriptLower = (transcript || '').toLowerCase()
-      if (transcriptLower.includes('scheduling link sent') || transcriptLower.includes('send_scheduling_link')) {
+      const summaryLower = (summary || '').toLowerCase()
+      const combinedText = transcriptLower + ' ' + summaryLower
+
+      // Check if link was sent during call
+      if (combinedText.includes('scheduling link') || combinedText.includes('send_scheduling_link') || combinedText.includes('booking link')) {
         outcome = 'link_sent'
+      }
+
+      // Check for successful appointment/scheduling
+      if (
+        combinedText.includes('scheduled') ||
+        combinedText.includes('appointment') ||
+        combinedText.includes('booked') ||
+        combinedText.includes('pre-measurement')
+      ) {
+        outcome = 'interested'
       }
 
       // Check for callback requests
       if (
-        transcriptLower.includes('call me back') ||
-        transcriptLower.includes('callback') ||
-        transcriptLower.includes('call back later')
+        combinedText.includes('call me back') ||
+        combinedText.includes('callback') ||
+        combinedText.includes('call back later')
       ) {
         outcome = 'callback_requested'
       }
@@ -375,6 +408,7 @@ serve(async (req) => {
           raw_ended_reason: endedReason,
           duration_seconds: durationSeconds,
           had_transcript: !!transcript,
+          has_recording: !!recordingUrl,
         },
       }
 
@@ -384,6 +418,47 @@ serve(async (req) => {
         .eq('id', log.id)
 
       console.log('[VOICE_WEBHOOK] Updated log with outcome:', outcome)
+
+      // Download recording from Vapi and upload to Supabase Storage (async, non-blocking)
+      if (recordingUrl) {
+        (async () => {
+          try {
+            console.log('[VOICE_WEBHOOK] Downloading recording from Vapi:', recordingUrl)
+            const recordingRes = await fetch(recordingUrl)
+            if (!recordingRes.ok) {
+              console.error('[VOICE_WEBHOOK] Failed to download recording:', recordingRes.status)
+              return
+            }
+
+            const audioBlob = await recordingRes.arrayBuffer()
+            const contentType = recordingRes.headers.get('content-type') || 'audio/mpeg'
+            const ext = contentType.includes('wav') ? 'wav' : contentType.includes('ogg') ? 'ogg' : 'mp3'
+            const storagePath = `${log.showroom_id}/${log.id}.${ext}`
+
+            const { error: uploadError } = await supabaseAdmin.storage
+              .from('recordings')
+              .upload(storagePath, audioBlob, {
+                contentType,
+                upsert: true,
+              })
+
+            if (uploadError) {
+              console.error('[VOICE_WEBHOOK] Recording upload failed:', uploadError)
+              return
+            }
+
+            // Store the storage path (frontend will create signed URLs via RLS)
+            await supabaseAdmin
+              .from('voice_agent_logs')
+              .update({ recording_url: storagePath })
+              .eq('id', log.id)
+
+            console.log('[VOICE_WEBHOOK] Recording saved to storage:', storagePath)
+          } catch (err) {
+            console.error('[VOICE_WEBHOOK] Recording save error:', err)
+          }
+        })()
+      }
 
       // Start post-call flow
       const { data: vaSettings } = await supabaseAdmin

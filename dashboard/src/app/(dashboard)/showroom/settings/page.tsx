@@ -62,6 +62,7 @@ export default function SettingsPage() {
   const [showroomCode, setShowroomCode] = useState('')
   const [showroomEmail, setShowroomEmail] = useState('')
   const [showroomPhone, setShowroomPhone] = useState('')
+  const [showroomTimezone, setShowroomTimezone] = useState('America/New_York')
   const [infoSaving, setInfoSaving] = useState(false)
   const [infoError, setInfoError] = useState<string | null>(null)
   const [infoSuccess, setInfoSuccess] = useState(false)
@@ -119,6 +120,7 @@ export default function SettingsPage() {
         setShowroomCode(showroomData.showroom_code || '')
         setShowroomEmail(showroomData.email || '')
         setShowroomPhone(showroomData.phone || '')
+        setShowroomTimezone(showroomData.timezone || 'America/New_York')
         // AI settings
         setAiChatbotEnabled(showroomData.ai_chatbot_enabled || false)
         setAiAssistantName(showroomData.ai_assistant_name || 'Design Assistant')
@@ -379,6 +381,7 @@ export default function SettingsPage() {
         showroom_code: upperCode,
         email: showroomEmail.trim(),
         phone: formattedPhone,
+        timezone: showroomTimezone,
       })
       .eq('id', showroomId)
 
@@ -784,6 +787,26 @@ export default function SettingsPage() {
                       Enter 10-digit phone number
                     </p>
                   </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="showroom-timezone">Timezone</Label>
+                  <select
+                    id="showroom-timezone"
+                    value={showroomTimezone}
+                    onChange={(e) => setShowroomTimezone(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="America/New_York">Eastern (ET)</option>
+                    <option value="America/Chicago">Central (CT)</option>
+                    <option value="America/Denver">Mountain (MT)</option>
+                    <option value="America/Los_Angeles">Pacific (PT)</option>
+                    <option value="America/Anchorage">Alaska (AKT)</option>
+                    <option value="Pacific/Honolulu">Hawaii (HT)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Used for voice agent business hours scheduling (10 AM - 6 PM)
+                  </p>
                 </div>
 
                 {infoError && (

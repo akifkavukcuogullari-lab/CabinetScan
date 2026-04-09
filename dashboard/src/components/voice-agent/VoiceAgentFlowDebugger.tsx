@@ -15,7 +15,6 @@ import { OutcomeNode } from './nodes/OutcomeNode'
 import { WaitNode } from './nodes/WaitNode'
 import { SmsNode } from './nodes/SmsNode'
 import { RetryCallNode } from './nodes/RetryCallNode'
-import { SendLinkNode } from './nodes/SendLinkNode'
 import { ConditionNode } from './nodes/ConditionNode'
 import { StopNode } from './nodes/StopNode'
 import { NodeDetailPanel } from './NodeDetailPanel'
@@ -258,21 +257,27 @@ function computeExecutionStatuses(
     const currentIdx = pathNodes.indexOf(currentFlowNode)
 
     if (currentIdx >= 0) {
-      // All nodes before current in the path are success
+      // All nodes before current in the path are success (unless they have errors)
       for (let i = 0; i < currentIdx; i++) {
         const nodeId = pathNodes[i]
+        const nodeObj = flowNodes.find((n) => n.id === nodeId)
         const relevantLog = findRelevantLog(
           flowNodes,
           nodeId,
           sortedLogs
         )
+
+        const hadError =
+          (nodeObj?.type === 'sms' && relevantLog?.sms_error) ||
+          ((nodeObj?.type === 'retryCall' || nodeObj?.type === 'retry_call') && relevantLog?.call_error)
+
         statusMap.set(nodeId, {
-          status: 'success',
+          status: hadError ? 'failed' : 'success',
           log: relevantLog,
         })
       }
 
-      // Current node status depends on flow_status
+      // Current node status depends on flow_status and any errors
       const currentNodeObj = flowNodes.find((n) => n.id === currentFlowNode)
       const relevantLog = findRelevantLog(
         flowNodes,
@@ -280,23 +285,32 @@ function computeExecutionStatuses(
         sortedLogs
       )
 
-      if (flowStatus === 'waiting') {
+      // Detect failure based on node type and errors
+      const nodeForError = relevantLog || latestLog
+      const isFailedNode =
+        (currentNodeObj?.type === 'sms' && nodeForError?.sms_error) ||
+        ((currentNodeObj?.type === 'retryCall' || currentNodeObj?.type === 'retry_call') && nodeForError?.call_error) ||
+        flowStatus === 'stopped'
+
+      if (isFailedNode) {
+        statusMap.set(currentFlowNode, {
+          status: 'failed',
+          log: nodeForError,
+        })
+      } else if (flowStatus === 'waiting') {
         statusMap.set(currentFlowNode, {
           status: 'waiting',
-          log: relevantLog || latestLog,
+          log: nodeForError,
         })
-      } else if (flowStatus === 'completed' || flowStatus === 'stopped') {
-        // Everything up to and including current is done
-        statusMap.set(currentFlowNode, {
-          status: currentNodeObj?.type === 'stop' ? 'success' : 'success',
-          log: relevantLog || latestLog,
-        })
-        // Mark remaining path nodes after current as pending (they were skipped or not reached)
-      } else if (flowStatus === 'active') {
-        // Flow is actively processing this node
+      } else if (flowStatus === 'completed') {
         statusMap.set(currentFlowNode, {
           status: 'success',
-          log: relevantLog || latestLog,
+          log: nodeForError,
+        })
+      } else if (flowStatus === 'active') {
+        statusMap.set(currentFlowNode, {
+          status: 'success',
+          log: nodeForError,
         })
       }
 
@@ -489,14 +503,13 @@ function FlowDebuggerInner({
       wait: withDebugWrapper(WaitNode, 'Wait'),
       sms: withDebugWrapper(SmsNode, 'Sms'),
       retryCall: withDebugWrapper(RetryCallNode, 'RetryCall'),
-      sendLink: withDebugWrapper(SendLinkNode, 'SendLink'),
       condition: withDebugWrapper(ConditionNode, 'Condition'),
       stop: withDebugWrapper(StopNode, 'Stop'),
     }),
     []
   )
 
-  // Compute execution statuses and inject into node data
+  // Compute execution statuses, then filter to only executed nodes/edges
   const { nodes, edges } = useMemo(() => {
     if (!flow) return { nodes: [], edges: [] }
 
@@ -506,10 +519,61 @@ function FlowDebuggerInner({
       logs
     )
 
-    const enhancedNodes: Node[] = flow.nodes.map((n) => {
+    // Only keep nodes that were actually executed (success, failed, or waiting)
+    const executedNodeIds = new Set<string>()
+    for (const [nodeId, exec] of statusMap.entries()) {
+      if (exec.status === 'success' || exec.status === 'failed' || exec.status === 'waiting') {
+        executedNodeIds.add(nodeId)
+      }
+    }
+
+    // Filter and re-layout the executed nodes horizontally
+    const executedNodes = flow.nodes.filter((n) => executedNodeIds.has(n.id))
+    const executedEdges = flow.edges.filter(
+      (e) => executedNodeIds.has(e.source) && executedNodeIds.has(e.target)
+    )
+
+    // Re-layout the executed nodes left-to-right (BFS from outcome node)
+    const adjacency = new Map<string, string[]>()
+    for (const edge of executedEdges) {
+      const list = adjacency.get(edge.source) || []
+      list.push(edge.target)
+      adjacency.set(edge.source, list)
+    }
+
+    // Find the start node (one with no incoming executed edge — usually the outcome)
+    const targetSet = new Set(executedEdges.map((e) => e.target))
+    const startNodes = executedNodes.filter((n) => !targetSet.has(n.id))
+
+    // Assign x/y by BFS depth
+    const positions = new Map<string, { x: number; y: number }>()
+    const visited = new Set<string>()
+    const queue: { id: string; depth: number }[] = startNodes.map((n) => ({ id: n.id, depth: 0 }))
+    const depthCounts = new Map<number, number>()
+
+    while (queue.length > 0) {
+      const { id, depth } = queue.shift()!
+      if (visited.has(id)) continue
+      visited.add(id)
+
+      const indexAtDepth = depthCounts.get(depth) || 0
+      depthCounts.set(depth, indexAtDepth + 1)
+
+      positions.set(id, { x: depth * 240, y: indexAtDepth * 120 })
+
+      for (const next of adjacency.get(id) || []) {
+        if (!visited.has(next)) {
+          queue.push({ id: next, depth: depth + 1 })
+        }
+      }
+    }
+
+    const enhancedNodes: Node[] = executedNodes.map((n) => {
       const exec = statusMap.get(n.id)
+      const pos = positions.get(n.id) || n.position
       return {
         ...n,
+        position: pos,
         data: {
           ...n.data,
           executionStatus: exec?.status || 'pending',
@@ -518,11 +582,18 @@ function FlowDebuggerInner({
       } as Node
     })
 
-    const enhancedEdges: Edge[] = flow.edges.map((e, i) => ({
-      ...e,
-      id: e.id || `edge_${i}`,
-      animated: true,
-    }))
+    const enhancedEdges: Edge[] = executedEdges.map((e, i) => {
+      const targetStatus = statusMap.get(e.target)?.status
+      const isFailedEdge = targetStatus === 'failed'
+      return {
+        ...e,
+        id: e.id || `edge_${i}`,
+        animated: true,
+        style: isFailedEdge
+          ? { stroke: '#dc2626', strokeWidth: 2.5 }
+          : { stroke: '#16a34a', strokeWidth: 2.5 },
+      }
+    })
 
     return { nodes: enhancedNodes, edges: enhancedEdges }
   }, [flow, logs])

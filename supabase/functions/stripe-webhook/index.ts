@@ -79,6 +79,12 @@ serve(async (req) => {
 })
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+  // Route credit top-ups to separate handler
+  if (session.metadata?.credit_topup === 'true') {
+    await handleCreditTopup(session)
+    return
+  }
+
   const showroomId = session.metadata?.showroom_id
   const planSlug = session.metadata?.plan_slug
   const planId = session.metadata?.plan_id
@@ -133,6 +139,11 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   if (historyError) {
     console.error(`Failed to record subscription history for ${showroomId}:`, historyError)
     // Don't throw here - history is secondary to the main update
+  }
+
+  // Grant one-time plan bonus credits if applicable
+  if (planSlug) {
+    await grantPlanBonus(showroomId, planSlug, 'one_time')
   }
 }
 
@@ -283,6 +294,17 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
   } else {
     console.log(`Successfully recorded invoice ${invoice.id} for showroom ${showroomId}`)
   }
+
+  // Grant monthly plan bonus credits if applicable
+  const { data: showroom } = await supabaseAdmin
+    .from('showrooms')
+    .select('subscription_plan')
+    .eq('id', showroomId)
+    .single()
+
+  if (showroom?.subscription_plan) {
+    await grantPlanBonus(showroomId, showroom.subscription_plan, 'monthly')
+  }
 }
 
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
@@ -334,4 +356,72 @@ async function getShowroomByCustomer(customerId: string): Promise<string | null>
     .single()
 
   return showroom?.id || null
+}
+
+// --- Credit System Handlers ---
+
+async function handleCreditTopup(session: Stripe.Checkout.Session) {
+  const showroomId = session.metadata?.showroom_id
+  const amountCents = parseInt(session.metadata?.amount_cents || '0', 10)
+
+  if (!showroomId || !amountCents) {
+    console.error('[CREDIT_TOPUP] Missing metadata:', session.metadata)
+    return
+  }
+
+  const { data, error } = await supabaseAdmin.rpc('add_showroom_credit', {
+    p_showroom_id: showroomId,
+    p_amount_cents: amountCents,
+    p_type: 'top_up',
+    p_notes: `Stripe top-up $${(amountCents / 100).toFixed(2)}`,
+    p_stripe_session_id: session.id,
+  })
+
+  if (error) {
+    console.error('[CREDIT_TOPUP] RPC error:', error)
+    throw new Error(`Failed to add credits: ${error.message}`)
+  }
+
+  const result = data?.[0] || data
+  console.log(`[CREDIT_TOPUP] Added $${(amountCents / 100).toFixed(2)} to showroom ${showroomId}. New balance: $${((result?.new_balance_cents || 0) / 100).toFixed(2)}`)
+}
+
+async function grantPlanBonus(showroomId: string, planSlug: string, frequency: 'one_time' | 'monthly') {
+  const { data: bonus } = await supabaseAdmin
+    .from('credit_plan_bonuses')
+    .select('bonus_cents')
+    .eq('subscription_plan', planSlug)
+    .eq('frequency', frequency)
+    .eq('is_active', true)
+    .single()
+
+  if (!bonus) return
+
+  // For one_time: check if already granted
+  if (frequency === 'one_time') {
+    const { count } = await supabaseAdmin
+      .from('showroom_credit_transactions')
+      .select('*', { count: 'exact', head: true })
+      .eq('showroom_id', showroomId)
+      .eq('type', 'plan_bonus')
+      .ilike('notes', `%${planSlug}%one-time%`)
+
+    if ((count || 0) > 0) {
+      console.log(`[PLAN_BONUS] One-time bonus already granted for showroom ${showroomId} plan ${planSlug}`)
+      return
+    }
+  }
+
+  const { error } = await supabaseAdmin.rpc('add_showroom_credit', {
+    p_showroom_id: showroomId,
+    p_amount_cents: bonus.bonus_cents,
+    p_type: 'plan_bonus',
+    p_notes: `${planSlug} plan ${frequency === 'one_time' ? 'one-time' : 'monthly'} bonus`,
+  })
+
+  if (error) {
+    console.error(`[PLAN_BONUS] Failed to grant bonus for showroom ${showroomId}:`, error)
+  } else {
+    console.log(`[PLAN_BONUS] Granted $${(bonus.bonus_cents / 100).toFixed(2)} ${frequency} bonus to showroom ${showroomId} (${planSlug})`)
+  }
 }

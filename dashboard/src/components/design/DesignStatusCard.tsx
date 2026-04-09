@@ -115,7 +115,7 @@ export function DesignStatusCard({ designRequest, designerName }: DesignStatusCa
         approved: 'design_approved',
         revision_requested: 'design_revision',
         completed: 'design_completed',
-        pending: 'design_canceled',
+        canceled: 'design_canceled',
       }
       const eventType = eventMap[newStatus]
       if (eventType) {
@@ -184,9 +184,30 @@ export function DesignStatusCard({ designRequest, designerName }: DesignStatusCa
       case 'complete':
         updateStatus('completed', { completed_at: new Date().toISOString() })
         break
-      case 'cancel':
-        updateStatus('pending', { designer_id: null, accepted_at: null })
-        break
+      case 'cancel': {
+        // Delete the pending request so a new one can be created
+        const supabase = createClient()
+        const { error } = await supabase
+          .from('design_requests')
+          .delete()
+          .eq('id', designRequest.id)
+
+        if (error) {
+          toast.error('Failed to cancel design request.')
+          console.error('Design request delete error:', error)
+        } else {
+          // Revert project status to submitted
+          await supabase
+            .from('projects')
+            .update({ status: 'submitted' })
+            .eq('id', designRequest.project_id)
+          toast.success('Design request canceled.')
+          router.refresh()
+        }
+        setIsUpdating(false)
+        setConfirmAction(null)
+        return
+      }
     }
   }
 
@@ -204,8 +225,8 @@ export function DesignStatusCard({ designRequest, designerName }: DesignStatusCa
       description: 'This will mark the design request as completed.',
     },
     cancel: {
-      title: 'Cancel Design Assignment?',
-      description: 'This will unassign the current designer and return the request to the pool so another designer can accept it.',
+      title: 'Cancel Design Request?',
+      description: 'This will cancel the design request. You can submit a new request later if needed.',
     },
   }
 
@@ -437,7 +458,7 @@ export function DesignStatusCard({ designRequest, designerName }: DesignStatusCa
               <Button
                 size="sm"
                 variant="outline"
-                className="w-full gap-2 text-red-600 hover:text-red-700"
+                className="w-full gap-2"
                 onClick={() => handleAction('cancel')}
                 disabled={isUpdating}
               >

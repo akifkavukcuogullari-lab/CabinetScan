@@ -39,8 +39,6 @@ import { DesignFilesSection } from '@/components/design/DesignFilesSection'
 import { DesignChatWrapper } from '@/components/design/DesignChatWrapper'
 import { WhiteboardGallery } from '@/components/project/WhiteboardGallery'
 import { PhotoLightbox } from '@/components/project/PhotoLightbox'
-import { VoiceAgentLogCard } from '@/components/voice-agent/VoiceAgentLogCard'
-import { TriggerCallButton } from '@/components/voice-agent/TriggerCallButton'
 
 interface ProjectDetailPageProps {
   params: Promise<{ id: string }>
@@ -96,18 +94,12 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     notFound()
   }
 
-  // Get customer address
-  let customerAddress: string | null = null
-  if (project.customer_id) {
-    const { data: customer } = await supabase
-      .from('customers')
-      .select('address_line1, end_client_address')
-      .eq('id', project.customer_id)
-      .single()
-    if (customer) {
-      customerAddress = customer.end_client_address || customer.address_line1 || null
-    }
-  }
+  // Get customer address from project table
+  const customerAddress: string | null = project.end_client_address || null
+
+  // Distance is stored on the project (calculated at submission time)
+  const distanceMiles: number | null = project.distance_miles ?? null
+  const driveTimeMinutes: number | null = project.drive_time_minutes ?? null
 
   // Get measurements
   const { data: measurements } = await supabase
@@ -198,17 +190,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     .eq('project_id', id)
     .order('created_at', { ascending: true })
 
-  const statusColors: Record<string, string> = {
-    draft: 'bg-gray-100 text-gray-800',
-    submitted: 'bg-blue-100 text-blue-800',
-    design_requested: 'bg-indigo-100 text-indigo-800',
-    design_completed: 'bg-teal-100 text-teal-800',
-    in_review: 'bg-yellow-100 text-yellow-800',
-    quoted: 'bg-purple-100 text-purple-800',
-    accepted: 'bg-green-100 text-green-800',
-    rejected: 'bg-red-100 text-red-800',
-    completed: 'bg-green-100 text-green-800',
-  }
+  const { getStatusColor, getStatusLabel } = await import('@/lib/project-status')
 
   const updateStatus = async (formData: FormData) => {
     'use server'
@@ -417,8 +399,8 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             <h1 className="text-xl font-bold truncate">
               {project.customer_first_name} {project.customer_last_name}
             </h1>
-            <Badge className={statusColors[project.status] || 'bg-gray-100 text-gray-800'}>
-              {project.status.replaceAll('_', ' ')}
+            <Badge className={getStatusColor(project.status)}>
+              {getStatusLabel(project.status)}
             </Badge>
           </div>
           <p className="text-sm text-gray-500">
@@ -606,7 +588,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         {/* Right Column - Sidebar */}
         <div className="lg:sticky lg:top-6 lg:self-start min-w-0 space-y-4">
           <ProjectSidebarWrapper
-            project={{ ...project, customer_address: customerAddress }}
+            project={{ ...project, customer_address: customerAddress, distance_miles: distanceMiles, drive_time_minutes: driveTimeMinutes, distance_error: project.distance_error ?? null }}
             measurement={measurement}
             canExportDxf={canExportDxf}
             visualizeKitchenEnabled={showroom?.visualize_kitchen_enabled ?? false}
@@ -623,14 +605,6 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             onCreateQuote={createQuote}
             onDeleteProject={deleteProject}
           />
-
-          {/* Voice Agent Activity Log */}
-          {voiceAgentEnabled && (
-            <VoiceAgentLogCard
-              projectId={project.id}
-              showroomId={showroomUser.showroom_id}
-            />
-          )}
 
           {/* Design Status & Files */}
           {designRequest && (

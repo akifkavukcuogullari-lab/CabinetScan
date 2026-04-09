@@ -17,7 +17,6 @@ import {
   Clock,
   MessageSquare,
   PhoneCall,
-  Link as LinkIcon,
   Square,
   GitBranch,
   PhoneOff,
@@ -167,8 +166,6 @@ function getNodeIcon(type: string | undefined) {
       return <MessageSquare className="size-4" />
     case 'retryCall':
       return <PhoneCall className="size-4" />
-    case 'sendLink':
-      return <LinkIcon className="size-4" />
     case 'condition':
       return <GitBranch className="size-4" />
     case 'stop':
@@ -188,8 +185,6 @@ function getNodeLabel(node: Node): string {
       return 'SMS'
     case 'retryCall':
       return `Retry Call (max ${node.data?.maxAttempts || 0})`
-    case 'sendLink':
-      return 'Send Scheduling Link'
     case 'condition':
       return 'Condition'
     case 'stop':
@@ -536,72 +531,6 @@ function RetryCallDetails({ node, logs }: { node: Node; logs: VoiceAgentLog[] })
   )
 }
 
-function SendLinkDetails({ node, logs }: { node: Node; logs: VoiceAgentLog[] }) {
-  const executionStatus = node.data?.executionStatus
-  // Check if any log indicates link was sent
-  const linkLog = logs.find(
-    (l) =>
-      l.outcome === 'link_sent' ||
-      (l.outcome_details && (l.outcome_details as Record<string, unknown>).link_sent)
-  )
-
-  return (
-    <div className="space-y-4">
-      {/* Status */}
-      <div className="space-y-1">
-        <h4 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Link Status
-        </h4>
-        <div className="flex items-center gap-2">
-          {linkLog ? (
-            <>
-              <CheckCircle2 className="size-4 text-green-500" />
-              <span className="text-sm">Link sent to customer</span>
-            </>
-          ) : executionStatus === 'success' ? (
-            <>
-              <CheckCircle2 className="size-4 text-green-500" />
-              <span className="text-sm">Completed</span>
-            </>
-          ) : (
-            <StatusBadge status={executionStatus || 'pending'} />
-          )}
-        </div>
-      </div>
-
-      {/* Link URL from outcome_details */}
-      {linkLog?.outcome_details &&
-        typeof (linkLog.outcome_details as Record<string, unknown>).scheduling_link === 'string' && (
-          <div className="space-y-1">
-            <h4 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Scheduling Link
-            </h4>
-            <a
-              href={(linkLog.outcome_details as Record<string, unknown>).scheduling_link as string}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block truncate rounded bg-muted/50 px-2 py-1 text-xs text-blue-600 underline"
-            >
-              {(linkLog.outcome_details as Record<string, unknown>).scheduling_link as string}
-            </a>
-          </div>
-        )}
-
-      {/* Timestamp */}
-      <div className="space-y-1">
-        <h4 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Timestamp
-        </h4>
-        <p className="text-sm">
-          {formatTimestamp(
-            linkLog?.updated_at || logs[logs.length - 1]?.updated_at
-          )}
-        </p>
-      </div>
-    </div>
-  )
-}
-
 function StopDetails({ node, logs }: { node: Node; logs: VoiceAgentLog[] }) {
   const executionStatus = node.data?.executionStatus
   const latestLog = logs[logs.length - 1]
@@ -690,8 +619,6 @@ export function NodeDetailPanel({ node, logs, onClose }: NodeDetailPanelProps) {
         return <SmsDetails node={node} logs={logs} />
       case 'retryCall':
         return <RetryCallDetails node={node} logs={logs} />
-      case 'sendLink':
-        return <SendLinkDetails node={node} logs={logs} />
       case 'stop':
         return <StopDetails node={node} logs={logs} />
       case 'condition':

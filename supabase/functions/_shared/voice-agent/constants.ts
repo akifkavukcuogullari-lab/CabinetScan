@@ -19,36 +19,47 @@ export const SIMPLIFIED_OUTCOMES: SimplifiedOutcome[] = [
   'technical_error',
 ]
 
+// Maps real Vapi `endedReason` enum values → our simplified business outcomes
+// All keys here are validated against Vapi's official CallEndedReason enum
 export const VAPI_OUTCOME_MAP: Record<string, SimplifiedOutcome> = {
+  // Customer didn't answer
   'customer-did-not-answer': 'no_answer',
-  'no-answer': 'no_answer',
+
+  // Customer's line was busy
   'customer-busy': 'line_busy',
-  'busy': 'line_busy',
+
+  // Voicemail picked up
   'voicemail': 'voicemail',
-  'machine-detected': 'voicemail',
+
+  // Customer didn't speak (silence timeout)
   'silence-timed-out': 'ghosted',
+
+  // Assistant successfully completed the call (positive outcome)
   'assistant-ended-call': 'interested',
+  'assistant-said-end-call-phrase': 'interested',
+  'assistant-ended-call-after-message-spoken': 'interested',
+  'assistant-ended-call-with-hangup-task': 'interested',
+
+  // Customer hung up the call
   'customer-ended-call': 'not_interested',
+  'customer-ended-call-before-warm-transfer': 'not_interested',
+  'customer-ended-call-after-warm-transfer-attempt': 'not_interested',
+  'customer-ended-call-during-transfer': 'not_interested',
+
+  // Customer didn't give microphone permission (hung up before talking)
   'customer-did-not-give-microphone-permission': 'hung_up_early',
-  'error-openai-llm-failed': 'technical_error',
-  'error-openai-voice-failed': 'technical_error',
-  'error-phone-call-provider-bypass-enabled-but-no-call-received': 'technical_error',
-  'error-vapi-error-phone-call-worker-setup-socket-error': 'technical_error',
-  'error-vapi-error-phone-call-worker-error': 'technical_error',
-  'error-vapi-error-sip-gateway': 'technical_error',
-  'error-twilio-authentication-error': 'technical_error',
-  'error-twilio-invalid-phone-number': 'technical_error',
-  'error-twilio-rate-limit': 'technical_error',
-  'error-vonage-authentication-error': 'technical_error',
-  'error-transport-close-error': 'technical_error',
-  'error-sip-transport-connection-error': 'technical_error',
-  'pipeline-error-openai-llm-failed': 'technical_error',
-  'pipeline-error-deepgram-transcriber-failed': 'technical_error',
-  'pipeline-error-eleven-labs-voice-failed': 'technical_error',
-  'pipeline-error-eleven-labs-voice-rate-limit-reached': 'technical_error',
-  'pipeline-error-play-ht-voice-failed': 'technical_error',
-  'pipeline-error-play-ht-voice-rate-limit-reached': 'technical_error',
-  'unknown-error': 'technical_error',
+
+  // Misc — treat as technical error
+  'assistant-join-timed-out': 'technical_error',
+  'exceeded-max-duration': 'technical_error',
+  'manually-canceled': 'technical_error',
+  'phone-call-provider-closed-websocket': 'technical_error',
+  'twilio-failed-to-connect-call': 'technical_error',
+  'twilio-reported-customer-misdialed': 'technical_error',
+  'vonage-rejected': 'technical_error',
+  'vonage-failed-to-connect-call': 'technical_error',
+  'worker-shutdown': 'technical_error',
+  'call-deleted': 'technical_error',
 }
 
 export function mapVapiOutcome(endedReason: string): SimplifiedOutcome {
@@ -56,9 +67,15 @@ export function mapVapiOutcome(endedReason: string): SimplifiedOutcome {
     return VAPI_OUTCOME_MAP[endedReason]
   }
 
+  // Vapi error prefixes — all map to technical_error
   if (
     endedReason.startsWith('error-') ||
-    endedReason.startsWith('pipeline-error-')
+    endedReason.startsWith('pipeline-error-') ||
+    endedReason.startsWith('call.in-progress.error-') ||
+    endedReason.startsWith('call.start.error-') ||
+    endedReason.startsWith('call.ringing.error-') ||
+    endedReason.startsWith('call.ending.error-') ||
+    endedReason.startsWith('assistant-request-')
   ) {
     return 'technical_error'
   }
@@ -78,30 +95,26 @@ export const DEFAULT_POST_CALL_FLOW: PostCallFlow = {
     { id: 'callback_requested', type: 'outcome', data: { outcome: 'callback_requested', label: 'Callback Requested' }, position: { x: 0, y: 1050 } },
     { id: 'hung_up_early', type: 'outcome', data: { outcome: 'hung_up_early', label: 'Hung Up Early' }, position: { x: 0, y: 1200 } },
     { id: 'technical_error', type: 'outcome', data: { outcome: 'technical_error', label: 'Technical Error' }, position: { x: 0, y: 1350 } },
-    { id: 'na_wait', type: 'wait', data: { hours: 24 }, position: { x: 300, y: 0 } },
+    { id: 'na_wait', type: 'wait', data: { mode: 'next_business_day', hours: 24 }, position: { x: 300, y: 0 } },
     { id: 'na_retry', type: 'retry_call', data: { maxAttempts: 3 }, position: { x: 550, y: 0 } },
-    { id: 'na_sms', type: 'sms', data: { template: 'Hi {{customer_first_name}}, we tried reaching you about your project at {{showroom_name}}. Feel free to call us at {{showroom_phone}} or book a visit: {{scheduling_link}}' }, position: { x: 800, y: 50 } },
+    { id: 'na_sms', type: 'sms', data: { template: 'Hi {{customer_first_name}}, we tried reaching you about your project at {{showroom_name}}. Call us at {{showroom_phone}} or book a visit: {{scheduling_link}}' }, position: { x: 800, y: 50 } },
     { id: 'na_stop', type: 'stop', data: {}, position: { x: 1050, y: 50 } },
     { id: 'lb_wait', type: 'wait', data: { hours: 1 }, position: { x: 300, y: 150 } },
     { id: 'lb_retry', type: 'retry_call', data: { maxAttempts: 3 }, position: { x: 550, y: 150 } },
-    { id: 'lb_sms', type: 'sms', data: { template: 'Hi {{customer_first_name}}, we tried calling about your project at {{showroom_name}}. Call us at {{showroom_phone}} or book online: {{scheduling_link}}' }, position: { x: 800, y: 200 } },
-    { id: 'lb_stop', type: 'stop', data: {}, position: { x: 1050, y: 200 } },
+    { id: 'lb_stop', type: 'stop', data: {}, position: { x: 800, y: 150 } },
     { id: 'vm_sms', type: 'sms', data: { template: 'Hi {{customer_first_name}}, we left you a voicemail about your project at {{showroom_name}}. Book your showroom visit here: {{scheduling_link}}' }, position: { x: 300, y: 300 } },
-    { id: 'vm_wait', type: 'wait', data: { hours: 48 }, position: { x: 550, y: 300 } },
-    { id: 'vm_retry', type: 'retry_call', data: { maxAttempts: 2 }, position: { x: 800, y: 300 } },
-    { id: 'vm_stop', type: 'stop', data: {}, position: { x: 1050, y: 300 } },
+    { id: 'vm_stop', type: 'stop', data: {}, position: { x: 600, y: 300 } },
     { id: 'gh_sms', type: 'sms', data: { template: 'Hi {{customer_first_name}}, sorry we missed you! When you are ready to discuss your project at {{showroom_name}}, book a visit: {{scheduling_link}}' }, position: { x: 300, y: 450 } },
-    { id: 'gh_stop', type: 'stop', data: {}, position: { x: 550, y: 450 } },
-    { id: 'int_link', type: 'send_link', data: {}, position: { x: 300, y: 600 } },
-    { id: 'int_stop', type: 'stop', data: {}, position: { x: 550, y: 600 } },
+    { id: 'gh_stop', type: 'stop', data: {}, position: { x: 600, y: 450 } },
+    { id: 'int_sms', type: 'sms', data: { template: "Here's your link to schedule a visit: {{scheduling_link}}" }, position: { x: 300, y: 600 } },
+    { id: 'int_stop', type: 'stop', data: {}, position: { x: 600, y: 600 } },
     { id: 'ni_stop', type: 'stop', data: {}, position: { x: 300, y: 750 } },
     { id: 'ls_stop', type: 'stop', data: {}, position: { x: 300, y: 900 } },
     { id: 'cb_wait', type: 'wait', data: { hours: 4 }, position: { x: 300, y: 1050 } },
     { id: 'cb_retry', type: 'retry_call', data: { maxAttempts: 2 }, position: { x: 550, y: 1050 } },
     { id: 'cb_stop', type: 'stop', data: {}, position: { x: 800, y: 1050 } },
-    { id: 'hu_wait', type: 'wait', data: { hours: 2 }, position: { x: 300, y: 1200 } },
-    { id: 'hu_sms', type: 'sms', data: { template: 'Hi {{customer_first_name}}, this is {{showroom_name}}. We just tried calling about your project. Book a visit at your convenience: {{scheduling_link}}' }, position: { x: 550, y: 1200 } },
-    { id: 'hu_stop', type: 'stop', data: {}, position: { x: 800, y: 1200 } },
+    { id: 'hu_sms', type: 'sms', data: { template: 'Hi {{customer_first_name}}, this is {{showroom_name}}. We just tried calling about your project. Book a visit at your convenience: {{scheduling_link}}' }, position: { x: 300, y: 1200 } },
+    { id: 'hu_stop', type: 'stop', data: {}, position: { x: 600, y: 1200 } },
     { id: 'te_retry', type: 'retry_call', data: { maxAttempts: 1 }, position: { x: 300, y: 1350 } },
     { id: 'te_stop', type: 'stop', data: {}, position: { x: 550, y: 1350 } },
   ],
@@ -112,23 +125,19 @@ export const DEFAULT_POST_CALL_FLOW: PostCallFlow = {
     { source: 'na_sms', target: 'na_stop' },
     { source: 'line_busy', target: 'lb_wait' },
     { source: 'lb_wait', target: 'lb_retry' },
-    { source: 'lb_retry', target: 'lb_sms', sourceHandle: 'max_reached' },
-    { source: 'lb_sms', target: 'lb_stop' },
+    { source: 'lb_retry', target: 'lb_stop', sourceHandle: 'max_reached' },
     { source: 'voicemail', target: 'vm_sms' },
-    { source: 'vm_sms', target: 'vm_wait' },
-    { source: 'vm_wait', target: 'vm_retry' },
-    { source: 'vm_retry', target: 'vm_stop', sourceHandle: 'max_reached' },
+    { source: 'vm_sms', target: 'vm_stop' },
     { source: 'ghosted', target: 'gh_sms' },
     { source: 'gh_sms', target: 'gh_stop' },
-    { source: 'interested', target: 'int_link' },
-    { source: 'int_link', target: 'int_stop' },
+    { source: 'interested', target: 'int_sms' },
+    { source: 'int_sms', target: 'int_stop' },
     { source: 'not_interested', target: 'ni_stop' },
     { source: 'link_sent', target: 'ls_stop' },
     { source: 'callback_requested', target: 'cb_wait' },
     { source: 'cb_wait', target: 'cb_retry' },
     { source: 'cb_retry', target: 'cb_stop', sourceHandle: 'max_reached' },
-    { source: 'hung_up_early', target: 'hu_wait' },
-    { source: 'hu_wait', target: 'hu_sms' },
+    { source: 'hung_up_early', target: 'hu_sms' },
     { source: 'hu_sms', target: 'hu_stop' },
     { source: 'technical_error', target: 'te_retry' },
     { source: 'te_retry', target: 'te_stop', sourceHandle: 'max_reached' },

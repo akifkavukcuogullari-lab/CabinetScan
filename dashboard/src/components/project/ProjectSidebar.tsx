@@ -25,7 +25,8 @@ import {
   AlertTriangle,
   Info,
   Trash2,
-  Loader2
+  Loader2,
+  Navigation
 } from 'lucide-react'
 import {
   HoverCard,
@@ -40,6 +41,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { DesignRequestButton } from '@/components/design/DesignRequestButton'
 import { TriggerCallButton } from '@/components/voice-agent/TriggerCallButton'
+import { VoiceAgentLogCard } from '@/components/voice-agent/VoiceAgentLogCard'
 
 interface Project {
   id: string
@@ -51,6 +53,9 @@ interface Project {
   customer_email: string
   customer_phone?: string
   customer_address?: string | null
+  distance_miles?: number | null
+  drive_time_minutes?: number | null
+  distance_error?: string | null
   submitted_at?: string
   reviewed_at?: string
   completed_at?: string
@@ -96,14 +101,9 @@ interface ProjectSidebarProps {
   className?: string
 }
 
-const statusOptions = [
-  { value: 'submitted', label: 'Submitted', color: 'bg-blue-100 text-blue-800' },
-  { value: 'in_review', label: 'In Review', color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'quoted', label: 'Quoted', color: 'bg-purple-100 text-purple-800' },
-  { value: 'accepted', label: 'Accepted', color: 'bg-green-100 text-green-800' },
-  { value: 'rejected', label: 'Rejected', color: 'bg-red-100 text-red-800' },
-  { value: 'completed', label: 'Completed', color: 'bg-green-100 text-green-800' },
-]
+import { PROJECT_STATUSES, getStatusColor, getStatusLabel } from '@/lib/project-status'
+
+const statusOptions = PROJECT_STATUSES.filter(s => s.value !== 'draft')
 
 export function ProjectSidebar({
   project,
@@ -229,6 +229,23 @@ export function ProjectSidebar({
             <div className="flex items-start gap-3 text-sm">
               <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
               <p className="text-gray-700">{project.customer_address}</p>
+            </div>
+          )}
+          {project.distance_miles != null && (
+            <div className="flex items-center gap-3 text-sm">
+              <Navigation className="h-4 w-4 text-gray-400" />
+              <p className="text-gray-700">
+                {project.distance_miles.toFixed(1)} miles away
+                {project.drive_time_minutes != null && (
+                  <span className="text-gray-400"> &middot; ~{project.drive_time_minutes} min drive</span>
+                )}
+              </p>
+            </div>
+          )}
+          {!project.distance_miles && project.distance_error && (
+            <div className="flex items-start gap-3 text-sm">
+              <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+              <p className="text-amber-600 text-xs">{project.distance_error}</p>
             </div>
           )}
         </CardContent>
@@ -539,15 +556,6 @@ export function ProjectSidebar({
             />
           )}
 
-          {/* Voice Agent - Call Customer */}
-          {voiceAgentEnabled && showroomId && (
-            <TriggerCallButton
-              projectId={project.id}
-              showroomId={showroomId}
-              customerPhone={project.customer_phone || ''}
-            />
-          )}
-
           {/* Delete Project */}
           <Button
             className="w-full justify-start gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
@@ -569,6 +577,37 @@ export function ProjectSidebar({
           </Button>
         </CardContent>
       </Card>
+
+      {/* Voice Agent */}
+      {voiceAgentEnabled && showroomId && (
+        <div className="space-y-1.5">
+          <Card className="py-0 gap-0">
+            <CardHeader className="px-3 pt-3 pb-1">
+              <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                <Phone className="h-3 w-3" />
+                Voice Agent
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-3 pb-3 space-y-3">
+              <TriggerCallButton
+                projectId={project.id}
+                showroomId={showroomId}
+                customerPhone={project.customer_phone || ''}
+              />
+              <VoiceAgentLogCard
+                projectId={project.id}
+                showroomId={showroomId}
+              />
+              <a
+                href="/showroom/voice-agent"
+                className="flex items-center justify-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors pt-1 border-t"
+              >
+                View Flow & Debug
+              </a>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Device Info (subtle) */}
       {(project.device_model || project.ios_version || project.app_version) && (

@@ -3,21 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion'
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet'
-import { Loader2, MapPin, MessageSquare, Phone, Clock, GitBranch } from 'lucide-react'
+import { DollarSign, Loader2, MessageSquare, Phone, Clock, MapPin } from 'lucide-react'
 import type { VoiceAgentLog, SimplifiedOutcome } from '@/types/voice-agent'
 import { OUTCOME_COLORS, OUTCOME_LABELS } from '@/types/voice-agent'
 
@@ -43,23 +29,11 @@ function formatDate(dateStr: string | null): string {
   })
 }
 
-const SMS_STATUS_COLORS: Record<string, string> = {
-  sent: 'bg-green-100 text-green-800',
-  delivered: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-  pending: 'bg-yellow-100 text-yellow-800',
-  queued: 'bg-blue-100 text-blue-800',
-}
-
 const CALL_STATUS_COLORS: Record<string, string> = {
   completed: 'bg-green-100 text-green-800',
   'in-progress': 'bg-blue-100 text-blue-800',
   ringing: 'bg-yellow-100 text-yellow-800',
-  queued: 'bg-gray-100 text-gray-800',
   failed: 'bg-red-100 text-red-800',
-  busy: 'bg-orange-100 text-orange-800',
-  'no-answer': 'bg-yellow-100 text-yellow-800',
-  canceled: 'bg-gray-100 text-gray-800',
   pending: 'bg-gray-100 text-gray-800',
 }
 
@@ -72,22 +46,12 @@ const FLOW_STATUS_COLORS: Record<string, string> = {
 
 export function VoiceAgentLogCard({ projectId, showroomId }: VoiceAgentLogCardProps) {
   const supabase = createClient()
-  const [logs, setLogs] = useState<VoiceAgentLog[]>([])
+  const [latestLog, setLatestLog] = useState<VoiceAgentLog | null>(null)
+  const [costCents, setCostCents] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
-  const [flowSheetOpen, setFlowSheetOpen] = useState(false)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [FlowDebuggerComponent, setFlowDebuggerComponent] = useState<React.ComponentType<any> | null>(null)
-
-  // Lazy-load FlowDebugger when sheet is opened
-  useEffect(() => {
-    if (!flowSheetOpen) return
-    import('@/components/voice-agent/VoiceAgentFlowDebugger')
-      .then((mod) => setFlowDebuggerComponent(() => mod.VoiceAgentFlowDebugger))
-      .catch(() => console.warn('FlowDebugger not available'))
-  }, [flowSheetOpen])
 
   useEffect(() => {
-    async function loadLogs() {
+    async function loadLatest() {
       setLoading(true)
       try {
         const { data, error } = await supabase
@@ -95,18 +59,32 @@ export function VoiceAgentLogCard({ projectId, showroomId }: VoiceAgentLogCardPr
           .select('*')
           .eq('project_id', projectId)
           .eq('showroom_id', showroomId)
-          .order('attempt_number', { ascending: true })
+          .order('created_at', { ascending: false })
+          .limit(1)
 
         if (error) throw error
-        setLogs(data || [])
+        const log = data && data.length > 0 ? data[0] : null
+        setLatestLog(log)
+
+        // Fetch credit cost for this log
+        if (log) {
+          const { data: txn } = await supabase
+            .from('showroom_credit_transactions')
+            .select('billed_cost_cents')
+            .eq('reference_id', log.id)
+            .eq('reference_type', 'voice_agent_log')
+            .single()
+
+          if (txn) setCostCents(txn.billed_cost_cents)
+        }
       } catch (error) {
-        console.error('Error loading voice agent logs:', error)
+        console.error('Error loading voice agent log:', error)
       } finally {
         setLoading(false)
       }
     }
 
-    loadLogs()
+    loadLatest()
   }, [supabase, projectId, showroomId])
 
   if (loading) {
@@ -117,173 +95,70 @@ export function VoiceAgentLogCard({ projectId, showroomId }: VoiceAgentLogCardPr
     )
   }
 
-  if (logs.length === 0) {
+  if (!latestLog) {
     return (
       <p className="text-sm text-gray-400">No voice agent activity for this project.</p>
     )
   }
 
+  const log = latestLog
+
   return (
-    <div className="space-y-3">
-      {/* View Flow Debug button */}
-      <div className="flex justify-end">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setFlowSheetOpen(true)}
-          className="gap-2"
-        >
-          <GitBranch className="h-3.5 w-3.5" />
-          View Flow Debug
-        </Button>
+    <div className="space-y-2.5">
+      {/* Outcome */}
+      {log.outcome && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge className={`text-[10px] ${OUTCOME_COLORS[log.outcome as SimplifiedOutcome] || 'bg-gray-100 text-gray-800'}`}>
+            {OUTCOME_LABELS[log.outcome as SimplifiedOutcome] || log.outcome}
+          </Badge>
+        </div>
+      )}
+
+      {/* SMS */}
+      <div className="flex items-center gap-2 text-xs text-gray-600">
+        <MessageSquare className="h-3.5 w-3.5 text-gray-400" />
+        <span className="capitalize">{log.sms_status}</span>
+        {log.sms_sent_at && <span className="text-gray-400">{formatDate(log.sms_sent_at)}</span>}
       </div>
 
-      {/* Flow Debugger Sheet */}
-      <Sheet open={flowSheetOpen} onOpenChange={setFlowSheetOpen}>
-        <SheetContent side="right" className="w-[90vw] sm:w-[80vw] sm:max-w-[80vw]">
-          <SheetHeader>
-            <SheetTitle>Flow Debugger</SheetTitle>
-            <SheetDescription>
-              Visual timeline of the voice agent flow for this project.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex-1 overflow-auto mt-4">
-            {FlowDebuggerComponent ? (
-              <div className="h-[calc(100vh-140px)]">
-                <FlowDebuggerComponent
-                  projectId={projectId}
-                  showroomId={showroomId}
-                />
-              </div>
-            ) : (
-              <div className="h-[400px] border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center">
-                <div className="text-center text-gray-400">
-                  <GitBranch className="h-8 w-8 mx-auto mb-2" />
-                  <p className="text-sm font-medium">Flow Debugger</p>
-                  <p className="text-xs">Loading flow debugger...</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
+      {/* Call */}
+      <div className="flex items-center gap-2 text-xs text-gray-600">
+        <Phone className="h-3.5 w-3.5 text-gray-400" />
+        <Badge className={`text-[10px] ${CALL_STATUS_COLORS[log.call_status] || 'bg-gray-100 text-gray-800'}`}>
+          {log.call_status}
+        </Badge>
+        {log.call_scheduled_at && (log.call_status === 'scheduled' || log.flow_status === 'active') && (
+          <span className="text-gray-400">{formatDate(log.call_scheduled_at)}</span>
+        )}
+        {log.call_duration_seconds !== null && (
+          <span className="flex items-center gap-1 text-gray-400">
+            <Clock className="h-3 w-3" />
+            {formatDuration(log.call_duration_seconds)}
+          </span>
+        )}
+      </div>
 
-      {logs.map((log) => (
-        <div
-          key={log.id}
-          className="rounded-lg border p-4 space-y-3"
-        >
-          {/* Header row */}
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
-              Attempt {log.attempt_number}
-            </Badge>
-            {log.flow_status && (
-              <Badge
-                className={`text-xs ${FLOW_STATUS_COLORS[log.flow_status] || 'bg-gray-100 text-gray-800'}`}
-              >
-                Flow: {log.flow_status}
-              </Badge>
-            )}
-          </div>
-
-          {/* Distance info */}
-          {(log.distance_miles !== null || log.distance_zone) && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <MapPin className="h-4 w-4 text-gray-400" />
-              <span>
-                {log.distance_miles !== null
-                  ? `${log.distance_miles.toFixed(1)} mi`
-                  : ''}
-                {log.drive_time_minutes !== null
-                  ? ` / ${log.drive_time_minutes} min`
-                  : ''}
-                {log.distance_zone && (
-                  <>
-                    {' '}
-                    &mdash;{' '}
-                    <span className="capitalize font-medium">{log.distance_zone}</span>
-                  </>
-                )}
-                {log.customer_type_used && (
-                  <>
-                    {' / '}
-                    <span className="capitalize">{log.customer_type_used}</span>
-                  </>
-                )}
-              </span>
-            </div>
-          )}
-
-          {/* SMS status */}
-          <div className="flex items-center gap-2 text-sm">
-            <MessageSquare className="h-4 w-4 text-gray-400" />
-            <Badge
-              className={`text-xs ${SMS_STATUS_COLORS[log.sms_status] || 'bg-gray-100 text-gray-800'}`}
-            >
-              SMS: {log.sms_status}
-            </Badge>
-            {log.sms_sent_at && (
-              <span className="text-gray-500 text-xs">
-                {formatDate(log.sms_sent_at)}
-              </span>
-            )}
-          </div>
-
-          {/* Call status */}
-          <div className="flex items-center gap-2 text-sm">
-            <Phone className="h-4 w-4 text-gray-400" />
-            <Badge
-              className={`text-xs ${CALL_STATUS_COLORS[log.call_status] || 'bg-gray-100 text-gray-800'}`}
-            >
-              Call: {log.call_status}
-            </Badge>
-            {log.call_duration_seconds !== null && (
-              <span className="flex items-center gap-1 text-gray-500 text-xs">
-                <Clock className="h-3 w-3" />
-                {formatDuration(log.call_duration_seconds)}
-              </span>
-            )}
-          </div>
-
-          {/* Outcome */}
-          {log.outcome && (
-            <div className="flex items-center gap-2">
-              <Badge
-                className={`text-xs ${OUTCOME_COLORS[log.outcome as SimplifiedOutcome] || 'bg-gray-100 text-gray-800'}`}
-              >
-                {OUTCOME_LABELS[log.outcome as SimplifiedOutcome] || log.outcome}
-              </Badge>
-            </div>
-          )}
-
-          {/* Expandable sections */}
-          <Accordion type="single" collapsible>
-            {log.call_transcript && (
-              <AccordionItem value="transcript">
-                <AccordionTrigger className="text-xs text-gray-500 hover:no-underline py-2">
-                  Transcript
-                </AccordionTrigger>
-                <AccordionContent>
-                  <pre className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded max-h-60 overflow-y-auto">
-                    {log.call_transcript}
-                  </pre>
-                </AccordionContent>
-              </AccordionItem>
-            )}
-            {log.call_summary && (
-              <AccordionItem value="summary">
-                <AccordionTrigger className="text-xs text-gray-500 hover:no-underline py-2">
-                  Summary
-                </AccordionTrigger>
-                <AccordionContent>
-                  <p className="text-sm text-gray-600">{log.call_summary}</p>
-                </AccordionContent>
-              </AccordionItem>
-            )}
-          </Accordion>
+      {/* Distance */}
+      {log.distance_miles !== null && (
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <MapPin className="h-3.5 w-3.5 text-gray-400" />
+          <span>{log.distance_miles.toFixed(1)} mi</span>
+          {log.distance_zone && <span className="capitalize">({log.distance_zone})</span>}
         </div>
-      ))}
+      )}
+
+      {/* Cost */}
+      {costCents != null && (
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <DollarSign className="h-3.5 w-3.5 text-gray-400" />
+          <span>Cost: ${(costCents / 100).toFixed(2)}</span>
+        </div>
+      )}
+
+      {/* Summary */}
+      {log.call_summary && (
+        <p className="text-xs text-gray-500 italic leading-relaxed">{log.call_summary}</p>
+      )}
     </div>
   )
 }
